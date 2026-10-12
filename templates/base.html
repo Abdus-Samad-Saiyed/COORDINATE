@@ -1,401 +1,136 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1"
-    >
-
-    <title>
-        Campus Project
-    </title>
-
-    <link
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-        rel="stylesheet"
-    >
-
-    <style>
-
-        body {
-
-            background: #050B08;
-
-            color: white;
-
-            min-height: 100vh;
-
-            display: flex;
-            flex-direction: column;
-
-            overflow-x: hidden;
-        }
-
-        .main-content {
-
-            flex: 1;
-        }
-
-        .glass {
-
-            background: rgba(24, 24, 27, 0.55);
-
-            backdrop-filter: blur(16px);
-
-            border: 1px solid rgba(63, 63, 70, 0.5);
-
-            border-radius: 24px;
-        }
-
-        .green-accent {
-
-            color: #08B74F;
-        }
-
-        .btn-green {
-
-            background: #08B74F;
-
-            color: black;
-
-            border: none;
-
-            font-weight: 600;
-
-            border-radius: 999px;
-
-            padding: 10px 18px;
-        }
-
-        .btn-green:hover {
-
-            background: #0ec95a;
-
-            color: black;
-        }
-
-        .btn-dark-custom {
-
-            background: rgba(39, 39, 42, 0.8);
-
-            border: 1px solid rgba(82, 82, 91, 0.5);
-
-            color: white;
-
-            border-radius: 999px;
-        }
-
-        .btn-dark-custom:hover {
-
-            background: rgba(63, 63, 70, 0.8);
-
-            color: white;
-        }
-
-        .navbar-custom {
-
-            background: rgba(9, 9, 11, 0.65);
-
-            backdrop-filter: blur(16px);
-
-            border-bottom: 1px solid rgba(63, 63, 70, 0.5);
-        }
-
-        .footer-custom {
-
-            border-top: 1px solid rgba(63, 63, 70, 0.5);
-
-            color: rgb(161, 161, 170);
-
-            padding-top: 24px;
-
-            padding-bottom: 24px;
-
-            margin-top: 48px;
-        }
-
-        a {
-
-            text-decoration: none;
-        }
-
-        .form-control,
-        .form-select {
-
-            background: rgba(24, 24, 27, 0.8) !important;
-
-            border: 1px solid rgba(82, 82, 91, 0.5) !important;
-
-            color: white !important;
-
-            border-radius: 16px;
-
-            padding: 12px;
-        }
-
-        .form-control:focus,
-        .form-select:focus {
-
-            background: rgba(24, 24, 27, 0.95) !important;
-
-            color: white !important;
-
-            border-color: #08B74F !important;
-
-            box-shadow:
-                0 0 0 0.2rem rgba(8, 183, 79, 0.2) !important;
-        }
-
-        .form-control::placeholder {
-
-            color: rgb(161, 161, 170);
-        }
-
-        .form-label {
-
-            color: rgb(212, 212, 216);
-
-            font-weight: 500;
-        }
-
-        .text-muted {
-
-            color: rgb(161, 161, 170) !important;
-        }
-
-        hr {
-
-            border-color: rgba(82, 82, 91, 0.5);
-        }
-
-        select option {
-
-            background: #111111;
-
-            color: white;
-        }
-
-        ::-webkit-scrollbar {
-
-            height: 8px;
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-
-            background: rgba(24, 24, 27, 0.6);
-        }
-
-        ::-webkit-scrollbar-thumb {
-
-            background: rgba(82, 82, 91, 0.8);
-
-            border-radius: 999px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-
-            background: rgba(113, 113, 122, 0.9);
-        }
-
-    </style>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}COORDINATE — Campus Ride Sharing{% endblock %}</title>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5.3 & Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+
+    <!-- Custom Theme Styles -->
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+    {% block extra_head %}{% endblock %}
 </head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
-<body>
-
-    <nav
-        class="
-            navbar
-            navbar-expand-lg
-            navbar-dark
-            navbar-custom
-            sticky-top
-            py-3
-        "
-    >
-
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom sticky-top py-3">
         <div class="container">
-
-            <a
-                class="
-                    navbar-brand
-                    fw-bold
-                    fs-4
-                "
-                href="/"
-            >
-
-                <span class="green-accent">
-                    Campus
-                </span>
-
-                Project
-
+            <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'landing' %}{% endif %}">
+                <span class="feature-icon" style="width: 32px; height: 32px; font-size: 1rem;"><i class="bi bi-geo-alt-fill"></i></span>
+                <span><span class="green-accent">COORD</span>INATE</span>
             </a>
 
-            {% if user.is_authenticated %}
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain" aria-controls="navbarMain" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
 
-                <div
-                    class="
-                        d-flex
-                        align-items-center
-                        gap-2
-                        flex-wrap
-                    "
-                >
-
-                    <a
-                        href="/coordinate/"
-                        class="
-                            btn
-                            btn-dark-custom
-                        "
-                    >
-                        Coordinate
-                    </a>
-
-                    <a
-                        href="/profile/{{ user.enrollment_number }}/"
-                        class="
-                            btn
-                            btn-dark-custom
-                        "
-                    >
-                        Profile
-                    </a>
-
-                    {% if user.is_superuser %}
-
-                        <a
-                            href="/applications/"
-                            class="
-                                btn
-                                btn-green
-                            "
-                        >
-                            Applications
-                        </a>
-
-                        <a
-                            href="/admin/"
-                            class="
-                                btn
-                                btn-dark-custom
-                            "
-                        >
-                            Django Admin
-                        </a>
-
+            <div class="collapse navbar-collapse" id="navbarMain">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    {% if user.is_authenticated %}
+                        <li class="nav-item">
+                            <a class="nav-link text-white-50 {% if request.resolver_match.url_name == 'dashboard' %}active text-white fw-semibold{% endif %}" href="{% url 'dashboard' %}">
+                                <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white-50 {% if 'coordinate' in request.path %}active text-white fw-semibold{% endif %}" href="{% url 'ride_list' %}">
+                                <i class="bi bi-car-front-fill me-1"></i> Rides
+                            </a>
+                        </li>
                     {% endif %}
+                </ul>
 
-                    <form
-                        action="/logout/"
-                        method="POST"
-                        class="m-0"
-                    >
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    {% if user.is_authenticated %}
+                        <a href="{% url 'profile' user.enrollment_number %}" class="btn btn-dark-custom d-flex align-items-center gap-1">
+                            <i class="bi bi-person-circle"></i>
+                            <span>{{ user.enrollment_number }}</span>
+                        </a>
 
-                        {% csrf_token %}
+                        {% if user.is_superuser %}
+                            <a href="{% url 'application_list' %}" class="btn btn-outline-green position-relative">
+                                <i class="bi bi-card-checklist me-1"></i> Applications
+                            </a>
+                            <a href="{% url 'admin_analytics' %}" class="btn btn-dark-custom">
+                                <i class="bi bi-graph-up me-1"></i> Analytics
+                            </a>
+                            <a href="{% url 'admin:index' %}" class="btn btn-dark-custom">
+                                <i class="bi bi-shield-lock me-1"></i> Admin
+                            </a>
+                        {% endif %}
 
-                        <button
-                            type="submit"
-                            class="
-                                btn
-                                btn-danger
-                                rounded-pill
-                            "
-                        >
-                            Logout
-                        </button>
-
-                    </form>
-
+                        <form action="{% url 'logout' %}" method="POST" class="m-0 d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-dark-custom text-danger" title="Logout">
+                                <i class="bi bi-box-arrow-right"></i>
+                            </button>
+                        </form>
+                    {% else %}
+                        <a href="{% url 'login' %}" class="btn btn-dark-custom">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+                        </a>
+                        <a href="{% url 'apply_account' %}" class="btn btn-green">
+                            <i class="bi bi-person-plus-fill me-1"></i> Apply for Account
+                        </a>
+                    {% endif %}
                 </div>
-
-            {% else %}
-
-                <div
-                    class="
-                        d-flex
-                        gap-2
-                    "
-                >
-
-                    <a
-                        href="/login/"
-                        class="btn btn-green"
-                    >
-                        Login
-                    </a>
-
-                    <a
-                        href="/apply/"
-                        class="btn btn-dark-custom"
-                    >
-                        Apply
-                    </a>
-
-                </div>
-
-            {% endif %}
-
+            </div>
         </div>
-
     </nav>
 
-    <div class="main-content">
-
-        <div class="container py-5">
-
-            {% block content %}
-            {% endblock %}
-
-        </div>
-
+    <!-- Global Messages Container -->
+    <div class="container mt-3">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show d-flex align-items-center justify-content-between" role="alert">
+                    <div>
+                        {% if message.tags == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>{% endif %}
+                        {% if message.tags == 'danger' or message.tags == 'error' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>{% endif %}
+                        {% if message.tags == 'warning' %}<i class="bi bi-exclamation-circle-fill me-2"></i>{% endif %}
+                        {% if message.tags == 'info' %}<i class="bi bi-info-circle-fill me-2"></i>{% endif %}
+                        {{ message }}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
     </div>
 
+    <!-- Main Content Block -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
     <footer class="footer-custom">
-
         <div class="container">
-
-            <div
-                class="
-                    d-flex
-                    flex-column
-                    flex-md-row
-                    justify-content-between
-                    align-items-center
-                    gap-3
-                "
-            >
-
-                <div>
-
-                    <span class="green-accent">
-                        Campus Project
-                    </span>
-
-                    · NIT Srinagar
-
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="green-accent fw-bold">COORDINATE</span>
+                    <span>&middot;</span>
+                    <span>NIT Srinagar</span>
                 </div>
-
-                <div class="text-secondary">
-
-                    Trying to solve WhatsApp entropy
-                    before it achieves consciousness.
-
+                <div class="text-secondary text-center text-md-end">
+                    <span>Tired of coordinating cab shares in overflowing WhatsApp chats.</span>
                 </div>
-
             </div>
-
         </div>
-
     </footer>
 
+    <!-- Bootstrap Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_scripts %}{% endblock %}
 </body>
-
 </html>

@@ -1,108 +1,45 @@
+"""Forms for the accounts app."""
+
 from django import forms
 
 from .models import AccountApplication, User
 
 
 class AccountApplicationForm(forms.ModelForm):
+    """Public form for prospective students to apply for a verified account."""
 
     password = forms.CharField(
-        widget=forms.PasswordInput(
-            attrs={
-                'class': 'form-control'
-            }
-        )
+        label='Password',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Choose a password'}),
+    )
+    confirm_password = forms.CharField(
+        label='Confirm Password',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Repeat your password'}),
     )
 
     class Meta:
-
         model = AccountApplication
-
-        fields = [
-            'enrollment_number',
-            'full_name',
-            'phone_number',
-            'gender',
-            'password',
-        ]
-
+        fields = ['enrollment_number', 'full_name', 'phone_number', 'gender']
         widgets = {
-
-            'enrollment_number':
-                forms.TextInput(
-                    attrs={
-                        'class': 'form-control'
-                    }
-                ),
-
-            'full_name':
-                forms.TextInput(
-                    attrs={
-                        'class': 'form-control'
-                    }
-                ),
-
-            'phone_number':
-                forms.TextInput(
-                    attrs={
-                        'class': 'form-control'
-                    }
-                ),
-
-            'gender':
-                forms.Select(
-                    attrs={
-                        'class': 'form-select'
-                    }
-                ),
+            'enrollment_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g. 2024BCSE001',
+            }),
+            'full_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Your full name',
+            }),
+            'phone_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '+91 XXXXX XXXXX',
+            }),
+            'gender': forms.Select(attrs={'class': 'form-select'}),
         }
 
-    def clean_enrollment_number(self):
-
-        enrollment_number = (
-            self.cleaned_data['enrollment_number']
-            .strip()
-            .upper()
-        )
-
-        validator = User._meta.get_field(
-            'enrollment_number'
-        ).validators[0]
-
-        validator(enrollment_number)
-
-        if User.objects.filter(
-            enrollment_number=enrollment_number
-        ).exists():
-
-            raise forms.ValidationError(
-                'Account already exists.'
-            )
-
-        if AccountApplication.objects.filter(
-            enrollment_number=enrollment_number,
-            approved=False
-        ).exists():
-
-            raise forms.ValidationError(
-                'An application is already pending for this enrollment number.'
-            )
-
-        return enrollment_number
-
-    def clean_phone_number(self):
-
-        phone_number = self.cleaned_data['phone_number'].strip()
-
-        if not phone_number.replace('+', '', 1).isdigit():
-
-            raise forms.ValidationError(
-                'Enter a valid phone number.'
-            )
-
-        if len(phone_number) < 10:
-
-            raise forms.ValidationError(
-                'Phone number is too short.'
-            )
-
-        return phone_number
+    def clean(self):
+        cleaned = super().clean()
+        pw = cleaned.get('password')
+        cpw = cleaned.get('confirm_password')
+        if pw and cpw and pw != cpw:
+            self.add_error('confirm_password', 'Passwords do not match.')
+        return cleaned
