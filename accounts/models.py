@@ -144,7 +144,7 @@ class FriendRequest(models.Model):
                 name='unique_friend_request',
             ),
             models.CheckConstraint(
-                check=~models.Q(sender=models.F('receiver')),
+                condition=~models.Q(sender=models.F('receiver')),
                 name='no_self_friend_request',
             ),
         ]
@@ -174,7 +174,7 @@ class Friendship(models.Model):
                 name='unique_friendship',
             ),
             models.CheckConstraint(
-                check=~models.Q(user1=models.F('user2')),
+                condition=~models.Q(user1=models.F('user2')),
                 name='no_self_friendship',
             ),
         ]

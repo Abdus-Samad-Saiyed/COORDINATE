@@ -1,101 +1,70 @@
 {% extends 'base.html' %}
 
+{% block title %}Pending Applications — COORDINATE{% endblock %}
+
 {% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">Student Applications</h2>
+            <p class="text-secondary small mb-0">Pending verification and approval for campus access</p>
+        </div>
+        <a href="{% url 'admin_analytics' %}" class="btn btn-dark-custom">
+            <i class="bi bi-graph-up me-1"></i> View Analytics
+        </a>
+    </div>
 
-<h1
-    class="
-        fw-bold
-        mb-4
-    "
->
-
-    Pending
-    <span class="green-accent">
-        Applications
-    </span>
-
-</h1>
-
-<div class="row g-4">
-
-    {% for application in applications %}
-
-        <div class="col-lg-6">
-
-            <div class="glass p-4">
-
-                <h3 class="fw-bold">
-
-                    {{ application.full_name }}
-
-                </h3>
-
-                <p>
-
-                    <strong>
-                        Enrollment:
-                    </strong>
-
-                    {{ application.enrollment_number }}
-
-                </p>
-
-                <p>
-
-                    <strong>
-                        Gender:
-                    </strong>
-
-                    {{ application.gender }}
-
-                </p>
-
-                <p>
-
-                    <strong>
-                        Application ID:
-                    </strong>
-
-                    {{ application.application_number }}
-
-                </p>
-
-                <form
-                    method="POST"
-                    action="/approve/{{ application.id }}/"
-                >
-
-                    {% csrf_token %}
-
-                    <button
-                        type="submit"
-                        class="
-                            btn
-                            btn-green
-                            w-100
-                        "
-                    >
-
-                        Approve Account
-
-                    </button>
-
-                </form>
-
+    {% if applications %}
+        <div class="glass p-3 p-md-4">
+            <div class="table-responsive">
+                <table class="table table-dark table-hover align-middle mb-0" style="background: transparent;">
+                    <thead>
+                        <tr class="text-secondary small">
+                            <th>App No.</th>
+                            <th>Enrollment</th>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th>Gender</th>
+                            <th>Applied At</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="application-table-body">
+                        {% for app in applications %}
+                            <tr id="app-row-{{ app.id }}">
+                                <td><code>{{ app.application_number }}</code></td>
+                                <td><strong>{{ app.enrollment_number }}</strong></td>
+                                <td>{{ app.full_name }}</td>
+                                <td>{{ app.phone_number }}</td>
+                                <td><span class="badge bg-secondary">{{ app.get_gender_display }}</span></td>
+                                <td class="text-secondary small">{{ app.created_at|date:"M j, H:i" }}</td>
+                                <td class="text-end">
+                                    <form method="POST"
+                                          action="{% url 'approve_application' app.id %}"
+                                          hx-post="{% url 'approve_application' app.id %}"
+                                          hx-target="#app-row-{{ app.id }}"
+                                          hx-swap="outerHTML"
+                                          class="d-inline m-0">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-green btn-sm px-3">
+                                            <i class="bi bi-check-lg me-1"></i> Approve
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
-
         </div>
-
-    {% empty %}
-
-        <div class="glass p-4">
-
-            No pending applications.
-
+    {% else %}
+        <div class="glass p-5 text-center">
+            <div class="feature-icon mx-auto mb-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
+                <i class="bi bi-check2-all"></i>
+            </div>
+            <h4 class="fw-bold mb-2">No Applications Pending</h4>
+            <p class="text-secondary small mb-0">All student verification requests have been reviewed.</p>
         </div>
-
-    {% endfor %}
-
+    {% endif %}
 </div>
-
 {% endblock %}

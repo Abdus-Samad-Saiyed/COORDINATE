@@ -1,60 +1,40 @@
 {% extends 'base.html' %}
 
+{% block title %}Application Submitted — COORDINATE{% endblock %}
+
 {% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center align-items-center" style="min-height: 60vh;">
+        <div class="col-md-8 col-lg-6 text-center">
+            <div class="glass p-5">
+                <div class="feature-icon mx-auto mb-4" style="width: 64px; height: 64px; font-size: 2rem;">
+                    <i class="bi bi-check2-circle"></i>
+                </div>
+                <h2 class="fw-bold mb-2">Application Received!</h2>
+                <p class="text-secondary mb-4">
+                    Your verification request has been queued. An administrator will review your institute credentials. Once approved, you can log in using your enrollment number.
+                </p>
 
-<div
-    class="
-        row
-        justify-content-center
-    "
->
+                <div class="glass p-3 mb-4 text-start small border-secondary">
+                    <div class="d-flex align-items-center gap-2 text-warning mb-1">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <span class="fw-bold">Next Steps</span>
+                    </div>
+                    <p class="text-secondary mb-0">
+                        Keep your college ID card handy for verification during working hours at the computer centre / campus desk.
+                    </p>
+                </div>
 
-    <div class="col-lg-6">
-
-        <div class="glass p-5 text-center">
-
-            <h1
-                class="
-                    fw-bold
-                    green-accent
-                    mb-4
-                "
-            >
-
-                Application Submitted
-
-            </h1>
-
-            <p class="mb-4">
-
-                Your verification request
-                has been recorded.
-
-            </p>
-
-            <div
-                class="
-                    fs-2
-                    fw-bold
-                    mb-4
-                "
-            >
-
-                {{ application.application_number }}
-
+                <div class="d-flex gap-2 justify-content-center">
+                    <a href="{% url 'landing' %}" class="btn btn-dark-custom">
+                        <i class="bi bi-house me-1"></i> Return Home
+                    </a>
+                    <a href="{% url 'login' %}" class="btn btn-green">
+                        <i class="bi bi-box-arrow-in-right me-1"></i> Go to Sign In
+                    </a>
+                </div>
             </div>
-
-            <p class="text-secondary">
-
-                Present this application number
-                during physical verification.
-
-            </p>
-
         </div>
-
     </div>
-
 </div>
-
 {% endblock %}

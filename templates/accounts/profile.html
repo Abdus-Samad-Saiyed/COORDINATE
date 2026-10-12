@@ -1,291 +1,168 @@
 {% extends 'base.html' %}
 
+{% block title %}{{ profile_user.enrollment_number }} — Profile — COORDINATE{% endblock %}
+
 {% block content %}
+<div class="container py-4">
+    <div class="row g-4">
+        <!-- User Info Column -->
+        <div class="col-lg-4">
+            <div class="glass p-4 text-center">
+                <div class="feature-icon mx-auto mb-3" style="width: 72px; height: 72px; font-size: 2rem;">
+                    <i class="bi bi-person-fill"></i>
+                </div>
+                <h4 class="fw-bold mb-1">{{ profile_user.display_name }}</h4>
+                <div class="text-secondary small mb-3">
+                    <code>{{ profile_user.enrollment_number }}</code>
+                </div>
 
-<div class="mb-5">
+                <div class="d-flex justify-content-center gap-2 mb-4">
+                    {% if profile_user.verified %}
+                        <span class="badge bg-success-subtle text-success px-3 py-1 rounded-pill">
+                            <i class="bi bi-patch-check-fill me-1"></i> Verified Student
+                        </span>
+                    {% else %}
+                        <span class="badge bg-secondary-subtle text-secondary px-3 py-1 rounded-pill">Unverified</span>
+                    {% endif %}
 
-    <div
-        class="
-            d-flex
-            justify-content-between
-            align-items-start
-            flex-wrap
-            gap-3
-        "
-    >
+                    {% if profile_user.is_superuser %}
+                        <span class="badge bg-info-subtle text-info px-3 py-1 rounded-pill">Admin</span>
+                    {% endif %}
+                </div>
 
-        <div>
+                <hr class="my-3">
 
-            <h1
-                class="
-                    display-4
-                    fw-bold
-                "
-            >
+                <!-- Details List -->
+                <div class="text-start small d-flex flex-column gap-2 mb-4">
+                    <div class="d-flex justify-content-between">
+                        <span class="text-secondary">Degree</span>
+                        <span class="fw-semibold">{{ profile_user.degree|default:"Bachelors" }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-secondary">Department</span>
+                        <span class="fw-semibold">{{ profile_user.branch|default:"General" }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-secondary">Batch</span>
+                        <span class="fw-semibold">{{ profile_user.joining_year|default:"-" }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-secondary">Gender</span>
+                        <span class="fw-semibold">{{ profile_user.get_gender_display|default:"Unspecified" }}</span>
+                    </div>
+                    {% if is_self or is_friend %}
+                    <div class="d-flex justify-content-between">
+                        <span class="text-secondary">Phone</span>
+                        <span class="fw-semibold">{{ profile_user.phone_number }}</span>
+                    </div>
+                    {% endif %}
+                </div>
 
-                {{ profile_user.enrollment_number }}
-
-            </h1>
-
-            <div
-                class="
-                    d-flex
-                    gap-2
-                    flex-wrap
-                    mt-3
-                "
-            >
-
-                <span
-                    class="
-                        badge
-                        bg-success
-                        rounded-pill
-                        px-3
-                        py-2
-                    "
-                >
-
-                    {{ profile_user.degree }}
-
-                </span>
-
-                <span
-                    class="
-                        badge
-                        bg-dark
-                        rounded-pill
-                        px-3
-                        py-2
-                    "
-                >
-
-                    {{ profile_user.branch }}
-
-                </span>
-
-            </div>
-
-        </div>
-
-        {% if request.user != profile_user %}
-
-            <div>
-
-                {% if is_friend %}
-
-                    <button
-                        class="
-                            btn
-                            btn-success
-                            rounded-pill
-                        "
-                        disabled
-                    >
-
-                        Friends
-
-                    </button>
-
-                {% elif friend_request_sent %}
-
-                    <button
-                        class="
-                            btn
-                            btn-secondary
-                            rounded-pill
-                        "
-                        disabled
-                    >
-
-                        Request Sent
-
-                    </button>
-
-                {% elif incoming_request %}
-
-                    <form
-                        method="POST"
-                        action="/accept-request/{{ incoming_request.id }}/"
-                    >
-
-                        {% csrf_token %}
-
-                        <button
-                            type="submit"
-                            class="
-                                btn
-                                btn-green
-                            "
-                        >
-
-                            Accept Request
-
-                        </button>
-
-                    </form>
-
-                {% else %}
-
-                    <form
-                        method="POST"
-                        action="/friend-request/{{ profile_user.enrollment_number }}/"
-                    >
-
-                        {% csrf_token %}
-
-                        <button
-                            type="submit"
-                            class="
-                                btn
-                                btn-green
-                            "
-                        >
-
-                            Add Friend
-
-                        </button>
-
-                    </form>
-
+                <!-- Friendship Actions -->
+                {% if not is_self %}
+                    <div class="d-grid gap-2">
+                        {% if is_friend %}
+                            <button class="btn btn-dark-custom text-success" disabled>
+                                <i class="bi bi-people-fill me-1"></i> Connected Friends
+                            </button>
+                        {% elif incoming_request %}
+                            <form action="{% url 'accept_friend_request' incoming_request.id %}" method="POST">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-green w-100">
+                                    <i class="bi bi-person-check-fill me-1"></i> Accept Friend Request
+                                </button>
+                            </form>
+                        {% elif friend_request_sent %}
+                            <button class="btn btn-dark-custom text-secondary" disabled>
+                                <i class="bi bi-clock-history me-1"></i> Request Sent
+                            </button>
+                        {% else %}
+                            <form action="{% url 'send_friend_request' profile_user.enrollment_number %}" method="POST">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-green w-100">
+                                    <i class="bi bi-person-plus-fill me-1"></i> Add Campus Friend
+                                </button>
+                            </form>
+                        {% endif %}
+                    </div>
                 {% endif %}
-
             </div>
-
-        {% endif %}
-
-    </div>
-
-</div>
-
-<div class="row g-4">
-
-    <div class="col-lg-6">
-
-        <div class="glass p-4 h-100">
-
-            <h3
-                class="
-                    fw-bold
-                    mb-4
-                "
-            >
-
-                Reliability
-
-            </h3>
-
-            <div class="mb-3">
-
-                <div
-                    class="
-                        d-flex
-                        justify-content-between
-                    "
-                >
-
-                    <span>
-                        Completed Rides
-                    </span>
-
-                    <strong class="green-accent">
-
-                        {{ profile_user.rides_completed }}
-
-                    </strong>
-
-                </div>
-
-            </div>
-
-            <div class="mb-3">
-
-                <div
-                    class="
-                        d-flex
-                        justify-content-between
-                    "
-                >
-
-                    <span>
-                        Late Arrivals
-                    </span>
-
-                    <strong>
-
-                        {{ profile_user.late_count }}
-
-                    </strong>
-
-                </div>
-
-            </div>
-
-            <div>
-
-                <div
-                    class="
-                        d-flex
-                        justify-content-between
-                    "
-                >
-
-                    <span>
-                        No-Shows
-                    </span>
-
-                    <strong>
-
-                        {{ profile_user.no_show_count }}
-
-                    </strong>
-
-                </div>
-
-            </div>
-
         </div>
 
-    </div>
+        <!-- Reliability Stats & Peer Reviews Column -->
+        <div class="col-lg-8">
+            <div class="glass p-4 mb-4">
+                <h5 class="fw-bold mb-3"><i class="bi bi-shield-check green-accent me-2"></i>Punctuality & Reliability</h5>
+                <div class="row g-3 text-center mb-4">
+                    <div class="col-sm-4">
+                        <div class="glass p-3">
+                            <div class="stat-value">{{ profile_user.on_time_percentage }}%</div>
+                            <div class="stat-label">On-Time Rate</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="glass p-3">
+                            <div class="stat-value">{{ profile_user.rides_completed }}</div>
+                            <div class="stat-label">Rides Taken</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="glass p-3">
+                            <div class="stat-value text-danger">{{ profile_user.behavior_reports }}</div>
+                            <div class="stat-label">Reports</div>
+                        </div>
+                    </div>
+                </div>
 
-    <div class="col-lg-6">
-
-        <div class="glass p-4 h-100">
-
-            <h3
-                class="
-                    fw-bold
-                    mb-4
-                "
-            >
-
-                Contact
-
-            </h3>
-
-            <div
-                class="
-                    d-flex
-                    justify-content-between
-                "
-            >
-
-                <span>
-                    Phone Number
-                </span>
-
-                <strong class="green-accent">
-
-                    {{ profile_user.phone_number }}
-
-                </strong>
-
+                <div class="small">
+                    <div class="d-flex justify-content-between text-secondary mb-1">
+                        <span>Punctuality Indicator</span>
+                        <span>{{ profile_user.on_time_count }} on-time &middot; {{ profile_user.late_count }} late &middot; {{ profile_user.no_show_count }} no-shows</span>
+                    </div>
+                    <div class="reliability-bar-wrap">
+                        <div class="reliability-bar" style="width: {{ profile_user.on_time_percentage }}%;"></div>
+                    </div>
+                </div>
             </div>
 
+            <!-- Recent Reviews -->
+            <div class="glass p-4">
+                <h5 class="fw-bold mb-3"><i class="bi bi-chat-heart green-accent me-2"></i>Peer Reviews</h5>
+                {% if recent_reviews %}
+                    <div class="d-flex flex-column gap-3">
+                        {% for review in recent_reviews %}
+                            <div class="glass p-3 border-secondary">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="fw-semibold text-white">{{ review.reviewer.enrollment_number }}</span>
+                                        <span class="text-secondary small">&middot; {{ review.created_at|date:"M j, Y" }}</span>
+                                    </div>
+                                    <div class="star-rating">
+                                        {% for i in "12345" %}
+                                            {% if forloop.counter <= review.rating %}
+                                                <i class="bi bi-star-fill text-warning"></i>
+                                            {% else %}
+                                                <i class="bi bi-star star-empty"></i>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% if review.complaint %}
+                                    <p class="text-secondary small mb-0">{{ review.complaint }}</p>
+                                {% else %}
+                                    <p class="text-secondary small fst-italic mb-0">Satisfactory ride coordination.</p>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-4 text-secondary small">
+                        <i class="bi bi-stars d-block fs-3 mb-2"></i>
+                        No completed ride reviews for this student yet.
+                    </div>
+                {% endif %}
+            </div>
         </div>
-
     </div>
-
 </div>
-
 {% endblock %}

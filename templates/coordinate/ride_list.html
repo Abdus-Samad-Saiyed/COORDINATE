@@ -1,459 +1,182 @@
 {% extends 'base.html' %}
 
+{% block title %}Find Rides — COORDINATE{% endblock %}
+
 {% block content %}
-
-<div
-    class="
-        d-flex
-        justify-content-between
-        align-items-center
-        mb-4
-    "
->
-
-    <div>
-
-        <h1 class="fw-bold">
-            Coordinate
-        </h1>
-
-        <p class="text-secondary">
-            Shared rides for students.
-        </p>
-
+<div class="container py-4">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">Available Rides</h2>
+            <p class="text-secondary small mb-0">Discover student cabs or propose your own departure</p>
+        </div>
+        <div class="d-flex gap-2">
+            {% if my_ride %}
+                <form action="{% url 'terminate_ride' my_ride.id %}" method="POST" class="m-0" onsubmit="return confirm('Terminate and cancel your ride?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-danger">
+                        <i class="bi bi-x-circle-fill me-1"></i> Cancel My Ride
+                    </button>
+                </form>
+            {% elif not has_active_ride %}
+                <a href="{% url 'create_ride' %}" class="btn btn-green">
+                    <i class="bi bi-plus-lg me-1"></i> Propose New Ride
+                </a>
+            {% endif %}
+        </div>
     </div>
 
-    {% if my_ride %}
-
-        <form
-            method="POST"
-            action="/coordinate/terminate/{{ my_ride.id }}/"
-            class="m-0"
-        >
-
-            {% csrf_token %}
-
-            <button
-                type="submit"
-                class="
-                    btn
-                    btn-danger
-                    rounded-pill
-                "
-            >
-
-                Terminate Ride
-
-            </button>
-
-        </form>
-
-    {% elif not has_active_ride %}
-
-        <a
-            href="/coordinate/create/"
-            class="btn btn-green"
-        >
-            Create Ride
-        </a>
-
-    {% endif %}
-
-</div>
-
-<div class="mb-4">
-
-    <div
-        class="
-            d-flex
-            justify-content-between
-            align-items-center
-            flex-wrap
-            gap-3
-            mb-3
-        "
-    >
-
-        <h5 class="mb-0">
-
-            Nearby Dates
-
-        </h5>
-
-        <form method="GET">
-
-            <input
-                type="hidden"
-                name="route"
-                value="{{ selected_route }}"
-            >
-
-            <input
-                type="hidden"
-                name="visibility"
-                value="{{ selected_visibility }}"
-            >
-
-            <input
-                type="hidden"
-                name="time"
-                value="{{ selected_time }}"
-            >
-
-            <input
-                type="date"
-                name="date"
-                class="form-control"
-                value="{{ selected_date|default:'' }}"
-                onchange="this.form.submit()"
-            >
-
-        </form>
-
-    </div>
-
-    <div
-        class="
-            d-flex
-            overflow-auto
-            gap-2
-            pb-2
-        "
-    >
-
-        {% for date in date_options %}
-
-            <a
-                href="?date={{ date }}&route={{ selected_route }}&visibility={{ selected_visibility }}&time={{ selected_time }}"
-                class="
-                    btn
-                    flex-shrink-0
-                    {% if selected_date == date|stringformat:'s' %}
-                        btn-green
-                    {% else %}
-                        btn-dark-custom
-                    {% endif %}
-                "
-            >
-
-                {{ date|date:"M d" }}
-
-            </a>
-
-        {% endfor %}
-
-    </div>
-
-</div>
-
-<div class="glass p-4 mb-4">
-
-    <form method="GET">
-
-        <input
-            type="hidden"
-            name="date"
-            value="{{ selected_date }}"
-        >
-
-        <div class="row g-3">
-
-            <div class="col-md-4">
-
-                <label class="form-label">
-                    Route
-                </label>
-
-                <select
-                    name="route"
-                    class="form-select"
-                >
-
-                    <option value="">
-                        All
-                    </option>
-
-                    {% for value, label in route_choices %}
-
-                        <option
-                            value="{{ value }}"
-                            {% if selected_route == value %}
-                                selected
-                            {% endif %}
-                        >
-
-                            {{ label }}
-
-                        </option>
-
-                    {% endfor %}
-
-                </select>
-
-            </div>
-
-            <div class="col-md-3">
-
-                <label class="form-label">
-                    Visibility
-                </label>
-
-                <select
-                    name="visibility"
-                    class="form-select"
-                >
-
-                    <option value="">
-                        All
-                    </option>
-
-                    <option
-                        value="MIXED"
-                        {% if selected_visibility == 'MIXED' %}
-                            selected
-                        {% endif %}
-                    >
-                        Mixed
-                    </option>
-
-                    <option
-                        value="BOYS"
-                        {% if selected_visibility == 'BOYS' %}
-                            selected
-                        {% endif %}
-                    >
-                        Boys Only
-                    </option>
-
-                    <option
-                        value="GIRLS"
-                        {% if selected_visibility == 'GIRLS' %}
-                            selected
-                        {% endif %}
-                    >
-                        Girls Only
-                    </option>
-
-                    <option
-                        value="FRIENDS"
-                        {% if selected_visibility == 'FRIENDS' %}
-                            selected
-                        {% endif %}
-                    >
-                        Friends Only
-                    </option>
-
-                </select>
-
-            </div>
-
-            <div class="col-md-3">
-
-                <label class="form-label">
-                    Departure After
-                </label>
-
-                <input
-                    type="time"
-                    name="time"
-                    class="form-control"
-                    value="{{ selected_time }}"
-                >
-
-            </div>
-
-            <div
-                class="
-                    col-md-2
-                    d-flex
-                    align-items-end
-                "
-            >
-
-                <button
-                    type="submit"
-                    class="btn btn-green w-100"
-                >
-                    Apply
-                </button>
-
-            </div>
-
+    <!-- Date selector horizontal strip -->
+    <div class="glass p-3 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="small text-secondary fw-semibold text-uppercase">Select Departure Date</span>
+            <form method="GET" class="d-inline-flex gap-2">
+                <input type="date" name="date" value="{{ selected_date|date:'Y-m-d' }}" class="form-control form-control-sm py-1" onchange="this.form.submit()">
+                {% if selected_route %}<input type="hidden" name="route" value="{{ selected_route }}">{% endif %}
+                {% if selected_visibility %}<input type="hidden" name="visibility" value="{{ selected_visibility }}">{% endif %}
+                {% if selected_time %}<input type="hidden" name="time" value="{{ selected_time }}">{% endif %}
+            </form>
         </div>
 
-    </form>
+        <div class="date-strip">
+            {% for day in date_options %}
+                <a href="?date={{ day|date:'Y-m-d' }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if selected_time %}&time={{ selected_time }}{% endif %}"
+                   class="date-btn {% if day == selected_date %}active{% endif %}">
+                    {{ day|date:"D, M j" }}
+                </a>
+            {% endfor %}
+        </div>
+    </div>
 
-</div>
+    <!-- Filters Section -->
+    <div class="glass p-4 mb-4">
+        <form method="GET" class="row g-3 align-items-end">
+            <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
 
-{% if rides %}
-
-    <div class="row">
-
-        {% for ride in rides %}
-
-            <div class="col-lg-6 mb-4">
-
-                <div class="glass p-4 h-100">
-
-                    <div
-                        class="
-                            d-flex
-                            justify-content-between
-                            align-items-start
-                            mb-3
-                        "
-                    >
-
-                        <div>
-
-                            <h3 class="fw-bold">
-
-                                {{ ride.route_display }}
-
-                            </h3>
-
-                            <p class="text-secondary mb-0">
-
-                                {{ ride.departure_time }}
-
-                            </p>
-
-                        </div>
-
-                        <span
-                            class="
-                                badge
-                                bg-success
-                                rounded-pill
-                                px-3
-                                py-2
-                            "
-                        >
-
-                            {{ ride.visibility }}
-
-                        </span>
-
-                    </div>
-
-                    <hr>
-
-                    <div class="mb-3">
-
-                        <p class="mb-2">
-
-                            <strong>
-                                Participants:
-                            </strong>
-
-                            {{ ride.participant_count }}
-                            /
-                            {{ ride.total_spots }}
-
-                        </p>
-
-                        <p class="mb-2">
-
-                            <strong>
-                                Spots Left:
-                            </strong>
-
-                            {{ ride.spots_remaining }}
-
-                        </p>
-
-                        <p class="mb-0">
-
-                            <strong>
-                                Creator:
-                            </strong>
-
-                            <a
-                                class="green-accent"
-                                href="/profile/{{ ride.creator.enrollment_number }}/"
-                            >
-
-                                {{ ride.creator.enrollment_number }}
-
-                            </a>
-
-                        </p>
-
-                    </div>
-
-                    {% if ride.id in joined_rides %}
-
-                        <form
-                            method="POST"
-                            action="/coordinate/leave/{{ ride.id }}/"
-                        >
-
-                            {% csrf_token %}
-
-                            <button
-                                type="submit"
-                                class="btn btn-danger w-100 rounded-pill"
-                            >
-                                Leave Ride
-                            </button>
-
-                        </form>
-
-                    {% elif not has_active_ride %}
-
-                        <form
-                            method="POST"
-                            action="/coordinate/join/{{ ride.id }}/"
-                        >
-
-                            {% csrf_token %}
-
-                            <button
-                                type="submit"
-                                class="btn btn-green w-100"
-                            >
-                                Join Ride
-                            </button>
-
-                        </form>
-
-                    {% else %}
-
-                        <button
-                            class="
-                                btn
-                                btn-secondary
-                                w-100
-                                rounded-pill
-                            "
-                            disabled
-                        >
-                            Already In Ride
-                        </button>
-
-                    {% endif %}
-
-                </div>
-
+            <div class="col-md-4">
+                <label class="form-label">Route</label>
+                <select name="route" class="form-select">
+                    <option value="">All Routes</option>
+                    {% for key, label in route_choices %}
+                        <option value="{{ key }}" {% if selected_route == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
             </div>
 
-        {% endfor %}
+            <div class="col-md-3">
+                <label class="form-label">Visibility</label>
+                <select name="visibility" class="form-select">
+                    <option value="">All Visible to Me</option>
+                    {% for key, label in visibility_choices %}
+                        <option value="{{ key }}" {% if selected_visibility == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
+            <div class="col-md-3">
+                <label class="form-label">Departing After</label>
+                <input type="time" name="time" value="{{ selected_time }}" class="form-control">
+            </div>
+
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-green w-100">
+                    <i class="bi bi-funnel-fill me-1"></i> Filter
+                </button>
+            </div>
+        </form>
     </div>
 
-{% else %}
+    <!-- Ride Cards Grid -->
+    {% if rides %}
+        <div class="row g-4">
+            {% for ride in rides %}
+                <div class="col-lg-6">
+                    <div class="glass p-4 h-100 ride-card d-flex flex-column justify-content-between">
+                        <div>
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <span class="badge badge-status badge-{{ ride.visibility|lower }}">
+                                    {{ ride.get_visibility_display }}
+                                </span>
+                                <span class="badge badge-status {% if ride.status == 'OPEN' %}badge-open{% else %}badge-full{% endif %}">
+                                    {{ ride.get_status_display }}
+                                </span>
+                            </div>
 
-    <div class="glass p-4">
+                            <h4 class="fw-bold mb-2">{{ ride.route_display }}</h4>
 
-        <p class="mb-0 text-secondary">
+                            <div class="text-secondary small mb-3">
+                                <i class="bi bi-clock-fill green-accent me-1"></i>
+                                <strong>{{ ride.departure_time|date:"h:i A" }}</strong> &middot; {{ ride.departure_time|date:"l, M j" }}
+                            </div>
 
-            No rides found matching
-            current filters.
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between small text-secondary mb-1">
+                                    <span>Capacity</span>
+                                    <span><strong>{{ ride.participants_total }}</strong> / {{ ride.total_spots }} Occupied</span>
+                                </div>
+                                <div class="spots-bar-wrap">
+                                    <div class="spots-bar {% if ride.is_full %}spots-full{% endif %}" style="width: {% widthratio ride.participants_total ride.total_spots 100 %}%;"></div>
+                                </div>
+                            </div>
 
-        </p>
+                            <div class="small text-secondary mb-4">
+                                Organized by:
+                                <a href="{% url 'profile' ride.creator.enrollment_number %}" class="green-accent fw-semibold">
+                                    {{ ride.creator.enrollment_number }}
+                                </a>
+                                ({{ ride.creator.on_time_percentage }}% on-time)
+                            </div>
+                        </div>
 
-    </div>
+                        <div>
+                            <hr class="my-3">
+                            <div class="d-flex gap-2 align-items-center">
+                                {% if ride.id in joined_ride_ids %}
+                                    <a href="{% url 'ride_detail' ride.id %}" class="btn btn-green flex-grow-1">
+                                        <i class="bi bi-chat-dots-fill me-1"></i> Open Room
+                                    </a>
+                                {% endif %}
 
-{% endif %}
-
+                                <div class="{% if ride.id in joined_ride_ids %}w-auto{% else %}w-100{% endif %}">
+                                    {% if ride.id in joined_ride_ids %}
+                                        <form method="POST" action="{% url 'leave_ride' ride.id %}" class="m-0">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-danger">
+                                                <i class="bi bi-box-arrow-left"></i> Leave
+                                            </button>
+                                        </form>
+                                    {% elif not has_active_ride and ride.status == 'OPEN' %}
+                                        <form method="POST" action="{% url 'join_ride' ride.id %}" class="m-0">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-green w-100">
+                                                <i class="bi bi-person-plus-fill me-1"></i> Join Ride
+                                            </button>
+                                        </form>
+                                    {% elif ride.status == 'FULL' %}
+                                        <button class="btn btn-dark-custom w-100 text-warning" disabled>Ride Full</button>
+                                    {% else %}
+                                        <button class="btn btn-dark-custom w-100 text-secondary" disabled>Already In Ride</button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="glass p-5 text-center">
+            <div class="feature-icon mx-auto mb-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
+                <i class="bi bi-car-front"></i>
+            </div>
+            <h4 class="fw-bold mb-2">No Rides Found</h4>
+            <p class="text-secondary small mb-4">No rides scheduled for {{ selected_date|date:"F j, Y" }} matching your filters.</p>
+            {% if not has_active_ride %}
+                <a href="{% url 'create_ride' %}" class="btn btn-green">
+                    <i class="bi bi-plus-lg me-1"></i> Be the first to offer a ride
+                </a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
 {% endblock %}

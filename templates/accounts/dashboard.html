@@ -1,214 +1,164 @@
 {% extends 'base.html' %}
 
+{% block title %}Dashboard — COORDINATE{% endblock %}
+
 {% block content %}
-
-<div class="mb-5">
-
-    <h1
-        class="
-            display-4
-            fw-bold
-        "
-    >
-
-        Campus
-        <span class="green-accent">
-            Project
-        </span>
-
-    </h1>
-
-    <p class="text-secondary fs-5">
-
-        Unified campus utilities and
-        coordination systems.
-
-    </p>
-
-</div>
-
-{% if active_participation %}
-
-    <div
-        class="
-            glass
-            p-5
-            mb-5
-        "
-    >
-
-        <div
-            class="
-                d-flex
-                justify-content-between
-                align-items-start
-                flex-wrap
-                gap-3
-            "
-        >
-
-            <div>
-
-                <h2 class="fw-bold">
-
-                    Active Ride
-
-                </h2>
-
-                <p class="text-secondary">
-
-                    {{ active_participation.ride.route_display }}
-
-                </p>
-
-            </div>
-
-            <span
-                class="
-                    badge
-                    bg-success
-                    rounded-pill
-                    px-4
-                    py-3
-                "
-            >
-
-                {{ active_participation.ride.visibility }}
-
-            </span>
-
-        </div>
-
-        <hr>
-
-        <div class="row g-4 mb-4">
-
-            <div class="col-md-4">
-
-                <div class="glass p-3">
-
-                    <div class="text-secondary">
-
-                        Departure
-
-                    </div>
-
-                    <div class="fw-bold">
-
-                        {{ active_participation.ride.departure_time }}
-
-                    </div>
-
-                </div>
-
-            </div>
-
-            <div class="col-md-4">
-
-                <div class="glass p-3">
-
-                    <div class="text-secondary">
-
-                        Participants
-
-                    </div>
-
-                    <div
-                        class="
-                            fw-bold
-                            green-accent
-                        "
-                    >
-
-                        {{ active_participation.ride.participant_count }}
-                        /
-                        {{ active_participation.ride.total_spots }}
-
-                    </div>
-
-                </div>
-
-            </div>
-
-            <div class="col-md-4">
-
-                <div class="glass p-3">
-
-                    <div class="text-secondary">
-
-                        Creator
-
-                    </div>
-
-                    <div class="fw-bold">
-
-                        {{ active_participation.ride.creator.enrollment_number }}
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>
-
-        <a
-            href="/coordinate/ride/{{ active_participation.ride.id }}/"
-            class="
-                btn
-                btn-green
-            "
-        >
-
-            View Ride Details
-
-        </a>
-
-    </div>
-
-{% endif %}
-
-<div class="row g-4">
-
-    <div class="col-lg-6">
-
-        <div
-            class="
-                glass
-                p-4
-                h-100
-            "
-        >
-
-            <h2 class="fw-bold">
-
-                Coordinate
-
+<div class="container py-4">
+    <!-- Welcome Header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">
+                Hello, <span class="green-accent">{{ user.first_name|default:user.enrollment_number }}</span>
             </h2>
-
-            <p class="text-secondary">
-
-                Shared ride coordination
-                between students.
-
+            <p class="text-secondary small mb-0">
+                <i class="bi bi-mortarboard-fill me-1"></i> {{ user.degree }} in {{ user.branch }} &middot; Batch of {{ user.joining_year }}
             </p>
-
-            <a
-                href="/coordinate/"
-                class="
-                    btn
-                    btn-green
-                "
-            >
-
-                Open App
-
-            </a>
-
         </div>
-
+        <div class="d-flex gap-2">
+            <a href="{% url 'ride_list' %}" class="btn btn-dark-custom">
+                <i class="bi bi-search me-1"></i> Browse Rides
+            </a>
+            <a href="{% url 'create_ride' %}" class="btn btn-green">
+                <i class="bi bi-plus-circle-fill me-1"></i> Offer a Ride
+            </a>
+        </div>
     </div>
 
-</div>
+    <!-- Active Ride Banner if present -->
+    {% if active_participation %}
+        <div class="glass p-4 mb-4 glass-glow border-success">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-success-subtle text-success px-3 py-1 rounded-pill fw-semibold">
+                            <i class="bi bi-broadcast me-1"></i> CURRENT ACTIVE RIDE
+                        </span>
+                        <span class="badge badge-status badge-{{ active_participation.ride.visibility|lower }}">
+                            {{ active_participation.ride.get_visibility_display }}
+                        </span>
+                    </div>
+                    <h3 class="fw-bold mb-1">{{ active_participation.ride.route_display }}</h3>
+                    <p class="text-secondary small mb-0">
+                        <i class="bi bi-clock-fill me-1"></i> {{ active_participation.ride.departure_time|date:"l, F j — h:i A" }}
+                        &middot; Host: <strong>{{ active_participation.ride.creator.enrollment_number }}</strong>
+                    </p>
+                </div>
+                <div>
+                    <a href="{% url 'ride_detail' active_participation.ride.id %}" class="btn btn-green px-4">
+                        <i class="bi bi-box-arrow-up-right me-1"></i> View Live Room
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% endif %}
 
+    <!-- Overview Stats & Quick Actions Grid -->
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="glass p-4 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h6 class="fw-bold text-secondary text-uppercase mb-0">Reliability Score</h6>
+                    <span class="feature-icon" style="width: 36px; height: 36px; font-size: 1.1rem;"><i class="bi bi-shield-check"></i></span>
+                </div>
+                <div class="stat-value">{{ user.on_time_percentage }}%</div>
+                <div class="reliability-bar-wrap my-3">
+                    <div class="reliability-bar" style="width: {{ user.on_time_percentage }}%;"></div>
+                </div>
+                <p class="text-secondary small mb-0">
+                    Calculated from punctuality and attendance reports across {{ user.rides_completed }} completed ride{{ user.rides_completed|pluralize }}.
+                </p>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="glass p-4 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h6 class="fw-bold text-secondary text-uppercase mb-0">Rides Completed</h6>
+                    <span class="feature-icon" style="width: 36px; height: 36px; font-size: 1.1rem;"><i class="bi bi-car-front"></i></span>
+                </div>
+                <div class="stat-value">{{ user.rides_completed }}</div>
+                <p class="text-secondary small mt-3 mb-0">
+                    Thank you for contributing to lower individual travel costs and traffic congestion!
+                </p>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="glass p-4 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h6 class="fw-bold text-secondary text-uppercase mb-0">Safety & Status</h6>
+                    <span class="feature-icon" style="width: 36px; height: 36px; font-size: 1.1rem;"><i class="bi bi-patch-check"></i></span>
+                </div>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge bg-success-subtle text-success px-3 py-1 rounded-pill fw-semibold">
+                        <i class="bi bi-check-circle-fill me-1"></i> Verified ID
+                    </span>
+                    {% if user.behavior_reports > 0 %}
+                        <span class="badge bg-danger-subtle text-danger px-3 py-1 rounded-pill fw-semibold">
+                            {{ user.behavior_reports }} Report{{ user.behavior_reports|pluralize }}
+                        </span>
+                    {% else %}
+                        <span class="badge bg-dark text-secondary px-3 py-1 rounded-pill">0 Reports</span>
+                    {% endif %}
+                </div>
+                <p class="text-secondary small mt-3 mb-0">
+                    Your profile is completely verified and in good standing.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Shortcuts Card -->
+    <div class="glass p-4 mt-4">
+        <h5 class="fw-bold mb-3"><i class="bi bi-grid-fill green-accent me-2"></i>Campus Utilities</h5>
+        <div class="row g-3">
+            <div class="col-sm-6 col-lg-3">
+                <a href="{% url 'ride_list' %}" class="d-block text-decoration-none glass p-3 app-card h-100">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="feature-icon"><i class="bi bi-compass"></i></div>
+                        <div>
+                            <div class="fw-bold text-white">Find Rides</div>
+                            <div class="text-secondary small">Filter routes & departures</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <a href="{% url 'create_ride' %}" class="d-block text-decoration-none glass p-3 app-card h-100">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="feature-icon"><i class="bi bi-plus-lg"></i></div>
+                        <div>
+                            <div class="fw-bold text-white">Offer Ride</div>
+                            <div class="text-secondary small">Share your taxi/cab</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <a href="{% url 'profile' user.enrollment_number %}" class="d-block text-decoration-none glass p-3 app-card h-100">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="feature-icon"><i class="bi bi-person"></i></div>
+                        <div>
+                            <div class="fw-bold text-white">My Profile</div>
+                            <div class="text-secondary small">Reviews & campus friends</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            {% if user.is_superuser %}
+            <div class="col-sm-6 col-lg-3">
+                <a href="{% url 'admin_analytics' %}" class="d-block text-decoration-none glass p-3 app-card h-100">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="feature-icon"><i class="bi bi-graph-up"></i></div>
+                        <div>
+                            <div class="fw-bold text-white">Analytics</div>
+                            <div class="text-secondary small">Ride & safety stats</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
 {% endblock %}

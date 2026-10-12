@@ -1,379 +1,161 @@
 {% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ ride.route_display }} — Live Room — COORDINATE{% endblock %}
 
 {% block content %}
+<div class="container py-4">
+    <!-- Ride Header Info -->
+    <div class="glass p-4 mb-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge badge-status badge-{{ ride.visibility|lower }}">
+                        {{ ride.get_visibility_display }}
+                    </span>
+                    <span class="badge badge-status {% if ride.status == 'OPEN' %}badge-open{% elif ride.status == 'FULL' %}badge-full{% else %}badge-completed{% endif %}">
+                        {{ ride.get_status_display }}
+                    </span>
+                </div>
+                <h2 class="fw-bold mb-1">{{ ride.route_display }}</h2>
+                <p class="text-secondary small mb-0">
+                    <i class="bi bi-clock-fill green-accent me-1"></i> Departure:
+                    <strong>{{ ride.departure_time|date:"l, F j — h:i A" }}</strong>
+                </p>
+            </div>
 
-<div class="glass p-5 mb-4">
-
-    <div
-        class="
-            d-flex
-            justify-content-between
-            align-items-start
-            flex-wrap
-            gap-3
-        "
-    >
-
-        <div>
-
-            <h1
-                class="
-                    fw-bold
-                    mb-3
-                "
-            >
-
-                {{ ride.route_display }}
-
-            </h1>
-
-            <p class="text-secondary">
-
-                {{ ride.departure_time }}
-
-            </p>
-
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                {% if is_creator and ride.status != 'COMPLETED' %}
+                    <form action="{% url 'complete_ride' ride.id %}" method="POST" class="m-0" onsubmit="return confirm('Mark this ride as completed? This unlocks peer reviews.');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-green">
+                            <i class="bi bi-check2-all me-1"></i> Complete Ride
+                        </button>
+                    </form>
+                    <form action="{% url 'terminate_ride' ride.id %}" method="POST" class="m-0" onsubmit="return confirm('Cancel this ride for all passengers?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="bi bi-trash-fill"></i>
+                        </button>
+                    </form>
+                {% elif is_participant and ride.status != 'COMPLETED' and not is_creator %}
+                    <form action="{% url 'leave_ride' ride.id %}" method="POST" class="m-0" onsubmit="return confirm('Leave this ride?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="bi bi-box-arrow-left me-1"></i> Leave Ride
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
         </div>
-
-        <span
-            class="
-                badge
-                bg-success
-                rounded-pill
-                px-4
-                py-3
-            "
-        >
-
-            {{ ride.visibility }}
-
-        </span>
-
     </div>
-
-    <hr>
-
-    {% if is_creator and ride.status != 'COMPLETED' %}
-
-        <form
-            method="POST"
-            action="/coordinate/ride/{{ ride.id }}/complete/"
-            class="mb-4"
-        >
-
-            {% csrf_token %}
-
-            <button
-                type="submit"
-                class="
-                    btn
-                    btn-green
-                "
-            >
-
-                Mark Ride Completed
-
-            </button>
-
-        </form>
-
-    {% endif %}
 
     <div class="row g-4">
-
-        <div class="col-md-4">
-
-            <div class="glass p-3">
-
-                <div class="text-secondary">
-
-                    Participants
-
+        <!-- Participants Column -->
+        <div class="col-lg-5">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0">
+                        <i class="bi bi-people-fill green-accent me-2"></i>Passengers
+                    </h5>
+                    <span class="badge bg-dark border border-secondary text-secondary">
+                        {{ participants.count }} / {{ ride.total_spots }} Spots
+                    </span>
                 </div>
 
-                <div
-                    class="
-                        fs-3
-                        fw-bold
-                        green-accent
-                    "
-                >
+                <div class="d-flex flex-column gap-3">
+                    {% for p in participants %}
+                        <div class="glass p-3 participant-card border-secondary">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <div class="d-flex align-items-center gap-2">
+                                    <a href="{% url 'profile' p.user.enrollment_number %}" class="fw-bold text-white text-decoration-none">
+                                        {{ p.user.enrollment_number }}
+                                    </a>
+                                    {% if p.user == ride.creator %}
+                                        <span class="badge bg-success-subtle text-success small py-0">Host</span>
+                                    {% endif %}
+                                </div>
+                                <span class="small text-secondary">{{ p.user.on_time_percentage }}% on-time</span>
+                            </div>
 
-                    {{ ride.participant_count }}
-                    /
-                    {{ ride.total_spots }}
+                            <div class="d-flex justify-content-between align-items-center small text-secondary">
+                                <span><i class="bi bi-telephone-fill me-1"></i> {{ p.user.phone_number }}</span>
+                                <div class="d-flex gap-1 align-items-center">
+                                    {% if p.user_id in reviewable_user_ids %}
+                                        <a href="{% url 'review_user' ride.id p.user.id %}" class="btn btn-outline-green btn-sm py-0 px-2">
+                                            <i class="bi bi-star me-1"></i> Review
+                                        </a>
+                                    {% endif %}
 
-                </div>
-
-            </div>
-
-        </div>
-
-        <div class="col-md-4">
-
-            <div class="glass p-3">
-
-                <div class="text-secondary">
-
-                    Created By
-
-                </div>
-
-                <div class="fw-bold">
-
-                    {{ ride.creator.enrollment_number }}
-
-                </div>
-
-            </div>
-
-        </div>
-
-        <div class="col-md-4">
-
-            <div class="glass p-3">
-
-                <div class="text-secondary">
-
-                    Visibility
-
-                </div>
-
-                <div class="fw-bold">
-
-                    {{ ride.visibility }}
-
-                </div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-</div>
-
-<h2
-    class="
-        fw-bold
-        mb-4
-    "
->
-
-    Participants
-
-</h2>
-
-<div class="row g-4">
-
-    {% for participant in participants %}
-
-        <div class="col-lg-6">
-
-            <div class="glass p-4">
-
-                <div
-                    class="
-                        d-flex
-                        justify-content-between
-                        align-items-start
-                    "
-                >
-
-                    <div>
-
-                        <h4 class="fw-bold">
-
-                            <a
-                                class="green-accent"
-                                href="/profile/{{ participant.user.enrollment_number }}/"
-                            >
-
-                                {{ participant.user.enrollment_number }}
-
-                            </a>
-
-                        </h4>
-
-                        <p class="mb-2">
-
-                            {{ participant.user.phone_number }}
-
-                        </p>
-
-                        <p class="text-secondary mb-3">
-
-                            Reliability:
-                            {{ participant.user.on_time_percentage }}%
-
-                        </p>
-
-                        <div
-                            class="
-                                d-flex
-                                gap-2
-                                flex-wrap
-                            "
-                        >
-
-                            <a
-                                href="/profile/{{ participant.user.enrollment_number }}/"
-                                class="
-                                    btn
-                                    btn-dark-custom
-                                    btn-sm
-                                "
-                            >
-
-                                Profile
-
-                            </a>
-
-                            {% if participant.user != request.user %}
-
-                                <a
-                                    href="/coordinate/ride/{{ ride.id }}/review/{{ participant.user.id }}/"
-                                    class="
-                                        btn
-                                        btn-green
-                                        btn-sm
-                                    "
-                                >
-
-                                    Review
-
-                                </a>
-
-                            {% endif %}
-
+                                    {% if is_creator and p.user != request.user and ride.status != 'COMPLETED' %}
+                                        <form action="{% url 'kick_participant' ride.id p.id %}" method="POST" class="m-0" onsubmit="return confirm('Remove passenger from ride?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" title="Remove passenger">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
 
+        <!-- Real-Time Chat Column -->
+        <div class="col-lg-7">
+            <div class="glass p-4">
+                <div class="chat-container" id="ride-chat-box" data-ride-id="{{ ride.id }}" data-current-user="{{ request.user.enrollment_number }}">
+                    <div class="chat-header">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-chat-dots-fill green-accent"></i>
+                            <span>Ride Chat Room</span>
+                        </div>
+                        <span id="chat-status" class="chat-status chat-status-disconnected">Connecting...</span>
                     </div>
 
-                    {% if is_creator and participant.user != request.user %}
+                    <!-- Messages list -->
+                    <div class="chat-messages" id="chat-messages">
+                        {% if chat_messages %}
+                            {% for msg in chat_messages %}
+                                <div class="message-item {% if msg.author == request.user %}message-self{% else %}message-other{% endif %}">
+                                    <div class="message-author">{{ msg.author.enrollment_number }}</div>
+                                    <div class="message-bubble">{{ msg.content }}</div>
+                                    <div class="message-time">{{ msg.created_at|date:"M j, H:i" }}</div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center text-secondary small py-5" id="empty-chat-notice">
+                                <i class="bi bi-chat-quote d-block fs-3 mb-2"></i>
+                                No messages yet. Say hello and coordinate meetup point!
+                            </div>
+                        {% endif %}
+                    </div>
 
-                        <form
-                            method="POST"
-                            action="/coordinate/ride/{{ ride.id }}/kick/{{ participant.id }}/"
-                        >
-
-                            {% csrf_token %}
-
-                            <button
-                                type="submit"
-                                class="
-                                    btn
-                                    btn-danger
-                                    rounded-pill
-                                "
-                            >
-
-                                Kick
-
-                            </button>
-
-                        </form>
-
-                    {% endif %}
-
+                    <!-- Message input form -->
+                    <div class="chat-footer">
+                        {% if can_message %}
+                            <form id="chat-form" method="POST" action="{% url 'send_message' ride.id %}" class="d-flex gap-2 m-0">
+                                {% csrf_token %}
+                                <input type="text" id="chat-input" name="content" class="form-control" placeholder="Type message..." maxlength="1000" autocomplete="off" required>
+                                <button type="submit" class="btn btn-green px-3">
+                                    <i class="bi bi-send-fill"></i>
+                                </button>
+                            </form>
+                        {% else %}
+                            <div class="text-secondary small text-center py-1">
+                                Chat is closed for completed or departed rides.
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
-
             </div>
-
         </div>
-
-    {% endfor %}
-
-</div>
-
-<h2
-    class="
-        fw-bold
-        mt-5
-        mb-4
-    "
->
-
-    Ride Chat
-
-</h2>
-
-<div class="glass p-4">
-
-    <div class="mb-4">
-
-        {% for message in messages %}
-
-            <div class="mb-3">
-
-                <div class="fw-bold green-accent">
-
-                    {{ message.author.enrollment_number }}
-
-                </div>
-
-                <div>
-
-                    {{ message.content|linebreaksbr }}
-
-                </div>
-
-                <div class="text-secondary small">
-
-                    {{ message.created_at|date:"M d, H:i" }}
-
-                </div>
-
-            </div>
-
-        {% empty %}
-
-            <p class="text-secondary mb-0">
-
-                No messages yet.
-
-            </p>
-
-        {% endfor %}
-
     </div>
-
-    {% if can_message %}
-
-        <form
-            method="POST"
-            action="/coordinate/ride/{{ ride.id }}/message/"
-        >
-
-            {% csrf_token %}
-
-            {{ message_form.content }}
-
-            <button
-                type="submit"
-                class="
-                    btn
-                    btn-green
-                    mt-3
-                "
-            >
-
-                Send Message
-
-            </button>
-
-        </form>
-
-    {% else %}
-
-        <p class="text-secondary mb-0">
-
-            Chat is available only to current participants before departure.
-
-        </p>
-
-    {% endif %}
-
 </div>
+{% endblock %}
 
+{% block extra_scripts %}
+<script src="{% static 'js/chat.js' %}"></script>
 {% endblock %}
