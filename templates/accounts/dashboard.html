@@ -1,0 +1,214 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="mb-5">
+
+    <h1
+        class="
+            display-4
+            fw-bold
+        "
+    >
+
+        Campus
+        <span class="green-accent">
+            Project
+        </span>
+
+    </h1>
+
+    <p class="text-secondary fs-5">
+
+        Unified campus utilities and
+        coordination systems.
+
+    </p>
+
+</div>
+
+{% if active_participation %}
+
+    <div
+        class="
+            glass
+            p-5
+            mb-5
+        "
+    >
+
+        <div
+            class="
+                d-flex
+                justify-content-between
+                align-items-start
+                flex-wrap
+                gap-3
+            "
+        >
+
+            <div>
+
+                <h2 class="fw-bold">
+
+                    Active Ride
+
+                </h2>
+
+                <p class="text-secondary">
+
+                    {{ active_participation.ride.route_display }}
+
+                </p>
+
+            </div>
+
+            <span
+                class="
+                    badge
+                    bg-success
+                    rounded-pill
+                    px-4
+                    py-3
+                "
+            >
+
+                {{ active_participation.ride.visibility }}
+
+            </span>
+
+        </div>
+
+        <hr>
+
+        <div class="row g-4 mb-4">
+
+            <div class="col-md-4">
+
+                <div class="glass p-3">
+
+                    <div class="text-secondary">
+
+                        Departure
+
+                    </div>
+
+                    <div class="fw-bold">
+
+                        {{ active_participation.ride.departure_time }}
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-md-4">
+
+                <div class="glass p-3">
+
+                    <div class="text-secondary">
+
+                        Participants
+
+                    </div>
+
+                    <div
+                        class="
+                            fw-bold
+                            green-accent
+                        "
+                    >
+
+                        {{ active_participation.ride.participant_count }}
+                        /
+                        {{ active_participation.ride.total_spots }}
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-md-4">
+
+                <div class="glass p-3">
+
+                    <div class="text-secondary">
+
+                        Creator
+
+                    </div>
+
+                    <div class="fw-bold">
+
+                        {{ active_participation.ride.creator.enrollment_number }}
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <a
+            href="/coordinate/ride/{{ active_participation.ride.id }}/"
+            class="
+                btn
+                btn-green
+            "
+        >
+
+            View Ride Details
+
+        </a>
+
+    </div>
+
+{% endif %}
+
+<div class="row g-4">
+
+    <div class="col-lg-6">
+
+        <div
+            class="
+                glass
+                p-4
+                h-100
+            "
+        >
+
+            <h2 class="fw-bold">
+
+                Coordinate
+
+            </h2>
+
+            <p class="text-secondary">
+
+                Shared ride coordination
+                between students.
+
+            </p>
+
+            <a
+                href="/coordinate/"
+                class="
+                    btn
+                    btn-green
+                "
+            >
+
+                Open App
+
+            </a>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

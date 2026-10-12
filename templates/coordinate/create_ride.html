@@ -1,0 +1,234 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+
+    <div class="col-lg-8">
+
+        <div class="glass p-5">
+
+            <div class="mb-5">
+
+                <div
+                    class="
+                        d-flex
+                        justify-content-between
+                        align-items-center
+                        flex-wrap
+                        gap-3
+                    "
+                >
+
+                    <div>
+
+                        <h1
+                            class="
+                                display-5
+                                fw-bold
+                            "
+                        >
+
+                            Create
+                            <span class="green-accent">
+                                Ride
+                            </span>
+
+                        </h1>
+
+                        <p class="text-secondary">
+
+                            Coordinate shared transport
+                            with nearby students.
+
+                        </p>
+
+                    </div>
+
+                    <div
+                        class="
+                            badge
+                            bg-success
+                            px-4
+                            py-3
+                            rounded-pill
+                        "
+                    >
+
+                        NIT Srinagar Transport
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div
+                class="
+                    glass
+                    p-4
+                    mb-4
+                "
+            >
+
+                <h5 class="fw-bold mb-3">
+
+                    Standard Routes
+
+                </h5>
+
+                <div class="row g-3">
+
+                    <div class="col-md-6">
+
+                        <div class="p-3 glass">
+
+                            ✈️ Airport Transfers
+
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-6">
+
+                        <div class="p-3 glass">
+
+                            🚆 Railway Station Transfers
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <form method="POST">
+
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+
+                    <div class="alert alert-danger">
+
+                        {{ form.non_field_errors }}
+
+                    </div>
+
+                {% endif %}
+
+                <div class="row g-4">
+
+                    <div class="col-md-6">
+
+                        <label class="form-label">
+
+                            Route
+
+                        </label>
+
+                        {{ form.route }}
+
+                        {{ form.route.errors }}
+
+                    </div>
+
+                    <div class="col-md-6">
+
+                        <label class="form-label">
+
+                            Visibility
+
+                        </label>
+
+                        {{ form.visibility }}
+
+                        {{ form.visibility.errors }}
+
+                    </div>
+
+                    <div class="col-md-6">
+
+                        <label class="form-label">
+
+                            Custom From
+
+                        </label>
+
+                        {{ form.custom_from_location }}
+
+                        {{ form.custom_from_location.errors }}
+
+                    </div>
+
+                    <div class="col-md-6">
+
+                        <label class="form-label">
+
+                            Custom To
+
+                        </label>
+
+                        {{ form.custom_to_location }}
+
+                        {{ form.custom_to_location.errors }}
+
+                    </div>
+
+                    <div class="col-md-6">
+
+                        <label class="form-label">
+
+                            Departure Time
+
+                        </label>
+
+                        {{ form.departure_time }}
+
+                        {{ form.departure_time.errors }}
+
+                    </div>
+
+                    <div class="col-md-6">
+
+                        <label class="form-label">
+
+                            Total Spots
+
+                        </label>
+
+                        {{ form.total_spots }}
+
+                        {{ form.total_spots.errors }}
+
+                    </div>
+
+                </div>
+
+                <div class="mt-5">
+
+                    <button
+                        type="submit"
+                        class="
+                            btn
+                            btn-green
+                            w-100
+                            py-3
+                        "
+                    >
+
+                        Create Ride Request
+
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

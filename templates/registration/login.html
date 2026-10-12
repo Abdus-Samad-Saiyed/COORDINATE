@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div
+    class="
+        row
+        justify-content-center
+        align-items-center
+    "
+    style="min-height:70vh;"
+>
+
+    <div class="col-lg-5">
+
+        <div class="glass p-5">
+
+            <div class="mb-4">
+
+                <h1
+                    class="
+                        fw-bold
+                        display-5
+                    "
+                >
+
+                    Welcome Back
+
+                </h1>
+
+                <p class="text-secondary">
+
+                    Login using your
+                    verified student account.
+
+                </p>
+
+            </div>
+
+            <form method="POST">
+
+                {% csrf_token %}
+
+                <div class="mb-4">
+
+                    <label class="form-label">
+
+                        Enrollment Number
+
+                    </label>
+
+                    <input
+                        type="text"
+                        name="username"
+                        class="form-control"
+                    >
+
+                </div>
+
+                <div class="mb-4">
+
+                    <label class="form-label">
+
+                        Password
+
+                    </label>
+
+                    <input
+                        type="password"
+                        name="password"
+                        class="form-control"
+                    >
+
+                </div>
+
+                <button
+                    type="submit"
+                    class="
+                        btn
+                        btn-green
+                        w-100
+                    "
+                >
+
+                    Login
+
+                </button>
+
+            </form>
+
+            <hr>
+
+            <div class="text-center">
+
+                <p class="text-secondary">
+
+                    Don't have an account?
+
+                </p>
+
+                <a
+                    href="/apply/"
+                    class="green-accent"
+                >
+
+                    Apply for Verification
+
+                </a>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

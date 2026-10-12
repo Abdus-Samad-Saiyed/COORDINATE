@@ -1,0 +1,379 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="glass p-5 mb-4">
+
+    <div
+        class="
+            d-flex
+            justify-content-between
+            align-items-start
+            flex-wrap
+            gap-3
+        "
+    >
+
+        <div>
+
+            <h1
+                class="
+                    fw-bold
+                    mb-3
+                "
+            >
+
+                {{ ride.route_display }}
+
+            </h1>
+
+            <p class="text-secondary">
+
+                {{ ride.departure_time }}
+
+            </p>
+
+        </div>
+
+        <span
+            class="
+                badge
+                bg-success
+                rounded-pill
+                px-4
+                py-3
+            "
+        >
+
+            {{ ride.visibility }}
+
+        </span>
+
+    </div>
+
+    <hr>
+
+    {% if is_creator and ride.status != 'COMPLETED' %}
+
+        <form
+            method="POST"
+            action="/coordinate/ride/{{ ride.id }}/complete/"
+            class="mb-4"
+        >
+
+            {% csrf_token %}
+
+            <button
+                type="submit"
+                class="
+                    btn
+                    btn-green
+                "
+            >
+
+                Mark Ride Completed
+
+            </button>
+
+        </form>
+
+    {% endif %}
+
+    <div class="row g-4">
+
+        <div class="col-md-4">
+
+            <div class="glass p-3">
+
+                <div class="text-secondary">
+
+                    Participants
+
+                </div>
+
+                <div
+                    class="
+                        fs-3
+                        fw-bold
+                        green-accent
+                    "
+                >
+
+                    {{ ride.participant_count }}
+                    /
+                    {{ ride.total_spots }}
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="col-md-4">
+
+            <div class="glass p-3">
+
+                <div class="text-secondary">
+
+                    Created By
+
+                </div>
+
+                <div class="fw-bold">
+
+                    {{ ride.creator.enrollment_number }}
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="col-md-4">
+
+            <div class="glass p-3">
+
+                <div class="text-secondary">
+
+                    Visibility
+
+                </div>
+
+                <div class="fw-bold">
+
+                    {{ ride.visibility }}
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<h2
+    class="
+        fw-bold
+        mb-4
+    "
+>
+
+    Participants
+
+</h2>
+
+<div class="row g-4">
+
+    {% for participant in participants %}
+
+        <div class="col-lg-6">
+
+            <div class="glass p-4">
+
+                <div
+                    class="
+                        d-flex
+                        justify-content-between
+                        align-items-start
+                    "
+                >
+
+                    <div>
+
+                        <h4 class="fw-bold">
+
+                            <a
+                                class="green-accent"
+                                href="/profile/{{ participant.user.enrollment_number }}/"
+                            >
+
+                                {{ participant.user.enrollment_number }}
+
+                            </a>
+
+                        </h4>
+
+                        <p class="mb-2">
+
+                            {{ participant.user.phone_number }}
+
+                        </p>
+
+                        <p class="text-secondary mb-3">
+
+                            Reliability:
+                            {{ participant.user.on_time_percentage }}%
+
+                        </p>
+
+                        <div
+                            class="
+                                d-flex
+                                gap-2
+                                flex-wrap
+                            "
+                        >
+
+                            <a
+                                href="/profile/{{ participant.user.enrollment_number }}/"
+                                class="
+                                    btn
+                                    btn-dark-custom
+                                    btn-sm
+                                "
+                            >
+
+                                Profile
+
+                            </a>
+
+                            {% if participant.user != request.user %}
+
+                                <a
+                                    href="/coordinate/ride/{{ ride.id }}/review/{{ participant.user.id }}/"
+                                    class="
+                                        btn
+                                        btn-green
+                                        btn-sm
+                                    "
+                                >
+
+                                    Review
+
+                                </a>
+
+                            {% endif %}
+
+                        </div>
+
+                    </div>
+
+                    {% if is_creator and participant.user != request.user %}
+
+                        <form
+                            method="POST"
+                            action="/coordinate/ride/{{ ride.id }}/kick/{{ participant.id }}/"
+                        >
+
+                            {% csrf_token %}
+
+                            <button
+                                type="submit"
+                                class="
+                                    btn
+                                    btn-danger
+                                    rounded-pill
+                                "
+                            >
+
+                                Kick
+
+                            </button>
+
+                        </form>
+
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+        </div>
+
+    {% endfor %}
+
+</div>
+
+<h2
+    class="
+        fw-bold
+        mt-5
+        mb-4
+    "
+>
+
+    Ride Chat
+
+</h2>
+
+<div class="glass p-4">
+
+    <div class="mb-4">
+
+        {% for message in messages %}
+
+            <div class="mb-3">
+
+                <div class="fw-bold green-accent">
+
+                    {{ message.author.enrollment_number }}
+
+                </div>
+
+                <div>
+
+                    {{ message.content|linebreaksbr }}
+
+                </div>
+
+                <div class="text-secondary small">
+
+                    {{ message.created_at|date:"M d, H:i" }}
+
+                </div>
+
+            </div>
+
+        {% empty %}
+
+            <p class="text-secondary mb-0">
+
+                No messages yet.
+
+            </p>
+
+        {% endfor %}
+
+    </div>
+
+    {% if can_message %}
+
+        <form
+            method="POST"
+            action="/coordinate/ride/{{ ride.id }}/message/"
+        >
+
+            {% csrf_token %}
+
+            {{ message_form.content }}
+
+            <button
+                type="submit"
+                class="
+                    btn
+                    btn-green
+                    mt-3
+                "
+            >
+
+                Send Message
+
+            </button>
+
+        </form>
+
+    {% else %}
+
+        <p class="text-secondary mb-0">
+
+            Chat is available only to current participants before departure.
+
+        </p>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}

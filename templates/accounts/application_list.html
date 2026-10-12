@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h1
+    class="
+        fw-bold
+        mb-4
+    "
+>
+
+    Pending
+    <span class="green-accent">
+        Applications
+    </span>
+
+</h1>
+
+<div class="row g-4">
+
+    {% for application in applications %}
+
+        <div class="col-lg-6">
+
+            <div class="glass p-4">
+
+                <h3 class="fw-bold">
+
+                    {{ application.full_name }}
+
+                </h3>
+
+                <p>
+
+                    <strong>
+                        Enrollment:
+                    </strong>
+
+                    {{ application.enrollment_number }}
+
+                </p>
+
+                <p>
+
+                    <strong>
+                        Gender:
+                    </strong>
+
+                    {{ application.gender }}
+
+                </p>
+
+                <p>
+
+                    <strong>
+                        Application ID:
+                    </strong>
+
+                    {{ application.application_number }}
+
+                </p>
+
+                <form
+                    method="POST"
+                    action="/approve/{{ application.id }}/"
+                >
+
+                    {% csrf_token %}
+
+                    <button
+                        type="submit"
+                        class="
+                            btn
+                            btn-green
+                            w-100
+                        "
+                    >
+
+                        Approve Account
+
+                    </button>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    {% empty %}
+
+        <div class="glass p-4">
+
+            No pending applications.
+
+        </div>
+
+    {% endfor %}
+
+</div>
+
+{% endblock %}

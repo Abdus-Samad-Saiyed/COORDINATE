@@ -1,0 +1,459 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div
+    class="
+        d-flex
+        justify-content-between
+        align-items-center
+        mb-4
+    "
+>
+
+    <div>
+
+        <h1 class="fw-bold">
+            Coordinate
+        </h1>
+
+        <p class="text-secondary">
+            Shared rides for students.
+        </p>
+
+    </div>
+
+    {% if my_ride %}
+
+        <form
+            method="POST"
+            action="/coordinate/terminate/{{ my_ride.id }}/"
+            class="m-0"
+        >
+
+            {% csrf_token %}
+
+            <button
+                type="submit"
+                class="
+                    btn
+                    btn-danger
+                    rounded-pill
+                "
+            >
+
+                Terminate Ride
+
+            </button>
+
+        </form>
+
+    {% elif not has_active_ride %}
+
+        <a
+            href="/coordinate/create/"
+            class="btn btn-green"
+        >
+            Create Ride
+        </a>
+
+    {% endif %}
+
+</div>
+
+<div class="mb-4">
+
+    <div
+        class="
+            d-flex
+            justify-content-between
+            align-items-center
+            flex-wrap
+            gap-3
+            mb-3
+        "
+    >
+
+        <h5 class="mb-0">
+
+            Nearby Dates
+
+        </h5>
+
+        <form method="GET">
+
+            <input
+                type="hidden"
+                name="route"
+                value="{{ selected_route }}"
+            >
+
+            <input
+                type="hidden"
+                name="visibility"
+                value="{{ selected_visibility }}"
+            >
+
+            <input
+                type="hidden"
+                name="time"
+                value="{{ selected_time }}"
+            >
+
+            <input
+                type="date"
+                name="date"
+                class="form-control"
+                value="{{ selected_date|default:'' }}"
+                onchange="this.form.submit()"
+            >
+
+        </form>
+
+    </div>
+
+    <div
+        class="
+            d-flex
+            overflow-auto
+            gap-2
+            pb-2
+        "
+    >
+
+        {% for date in date_options %}
+
+            <a
+                href="?date={{ date }}&route={{ selected_route }}&visibility={{ selected_visibility }}&time={{ selected_time }}"
+                class="
+                    btn
+                    flex-shrink-0
+                    {% if selected_date == date|stringformat:'s' %}
+                        btn-green
+                    {% else %}
+                        btn-dark-custom
+                    {% endif %}
+                "
+            >
+
+                {{ date|date:"M d" }}
+
+            </a>
+
+        {% endfor %}
+
+    </div>
+
+</div>
+
+<div class="glass p-4 mb-4">
+
+    <form method="GET">
+
+        <input
+            type="hidden"
+            name="date"
+            value="{{ selected_date }}"
+        >
+
+        <div class="row g-3">
+
+            <div class="col-md-4">
+
+                <label class="form-label">
+                    Route
+                </label>
+
+                <select
+                    name="route"
+                    class="form-select"
+                >
+
+                    <option value="">
+                        All
+                    </option>
+
+                    {% for value, label in route_choices %}
+
+                        <option
+                            value="{{ value }}"
+                            {% if selected_route == value %}
+                                selected
+                            {% endif %}
+                        >
+
+                            {{ label }}
+
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+            <div class="col-md-3">
+
+                <label class="form-label">
+                    Visibility
+                </label>
+
+                <select
+                    name="visibility"
+                    class="form-select"
+                >
+
+                    <option value="">
+                        All
+                    </option>
+
+                    <option
+                        value="MIXED"
+                        {% if selected_visibility == 'MIXED' %}
+                            selected
+                        {% endif %}
+                    >
+                        Mixed
+                    </option>
+
+                    <option
+                        value="BOYS"
+                        {% if selected_visibility == 'BOYS' %}
+                            selected
+                        {% endif %}
+                    >
+                        Boys Only
+                    </option>
+
+                    <option
+                        value="GIRLS"
+                        {% if selected_visibility == 'GIRLS' %}
+                            selected
+                        {% endif %}
+                    >
+                        Girls Only
+                    </option>
+
+                    <option
+                        value="FRIENDS"
+                        {% if selected_visibility == 'FRIENDS' %}
+                            selected
+                        {% endif %}
+                    >
+                        Friends Only
+                    </option>
+
+                </select>
+
+            </div>
+
+            <div class="col-md-3">
+
+                <label class="form-label">
+                    Departure After
+                </label>
+
+                <input
+                    type="time"
+                    name="time"
+                    class="form-control"
+                    value="{{ selected_time }}"
+                >
+
+            </div>
+
+            <div
+                class="
+                    col-md-2
+                    d-flex
+                    align-items-end
+                "
+            >
+
+                <button
+                    type="submit"
+                    class="btn btn-green w-100"
+                >
+                    Apply
+                </button>
+
+            </div>
+
+        </div>
+
+    </form>
+
+</div>
+
+{% if rides %}
+
+    <div class="row">
+
+        {% for ride in rides %}
+
+            <div class="col-lg-6 mb-4">
+
+                <div class="glass p-4 h-100">
+
+                    <div
+                        class="
+                            d-flex
+                            justify-content-between
+                            align-items-start
+                            mb-3
+                        "
+                    >
+
+                        <div>
+
+                            <h3 class="fw-bold">
+
+                                {{ ride.route_display }}
+
+                            </h3>
+
+                            <p class="text-secondary mb-0">
+
+                                {{ ride.departure_time }}
+
+                            </p>
+
+                        </div>
+
+                        <span
+                            class="
+                                badge
+                                bg-success
+                                rounded-pill
+                                px-3
+                                py-2
+                            "
+                        >
+
+                            {{ ride.visibility }}
+
+                        </span>
+
+                    </div>
+
+                    <hr>
+
+                    <div class="mb-3">
+
+                        <p class="mb-2">
+
+                            <strong>
+                                Participants:
+                            </strong>
+
+                            {{ ride.participant_count }}
+                            /
+                            {{ ride.total_spots }}
+
+                        </p>
+
+                        <p class="mb-2">
+
+                            <strong>
+                                Spots Left:
+                            </strong>
+
+                            {{ ride.spots_remaining }}
+
+                        </p>
+
+                        <p class="mb-0">
+
+                            <strong>
+                                Creator:
+                            </strong>
+
+                            <a
+                                class="green-accent"
+                                href="/profile/{{ ride.creator.enrollment_number }}/"
+                            >
+
+                                {{ ride.creator.enrollment_number }}
+
+                            </a>
+
+                        </p>
+
+                    </div>
+
+                    {% if ride.id in joined_rides %}
+
+                        <form
+                            method="POST"
+                            action="/coordinate/leave/{{ ride.id }}/"
+                        >
+
+                            {% csrf_token %}
+
+                            <button
+                                type="submit"
+                                class="btn btn-danger w-100 rounded-pill"
+                            >
+                                Leave Ride
+                            </button>
+
+                        </form>
+
+                    {% elif not has_active_ride %}
+
+                        <form
+                            method="POST"
+                            action="/coordinate/join/{{ ride.id }}/"
+                        >
+
+                            {% csrf_token %}
+
+                            <button
+                                type="submit"
+                                class="btn btn-green w-100"
+                            >
+                                Join Ride
+                            </button>
+
+                        </form>
+
+                    {% else %}
+
+                        <button
+                            class="
+                                btn
+                                btn-secondary
+                                w-100
+                                rounded-pill
+                            "
+                            disabled
+                        >
+                            Already In Ride
+                        </button>
+
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+        {% endfor %}
+
+    </div>
+
+{% else %}
+
+    <div class="glass p-4">
+
+        <p class="mb-0 text-secondary">
+
+            No rides found matching
+            current filters.
+
+        </p>
+
+    </div>
+
+{% endif %}
+
+{% endblock %}

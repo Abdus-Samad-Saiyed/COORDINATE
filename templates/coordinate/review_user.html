@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+
+    <div class="col-lg-7">
+
+        <div class="glass p-5">
+
+            <h1
+                class="
+                    fw-bold
+                    mb-4
+                "
+            >
+
+                Review
+                <span class="green-accent">
+
+                    {{ reviewed_user.enrollment_number }}
+
+                </span>
+
+            </h1>
+
+            <p class="text-secondary mb-4">
+
+                Rate ride experience and
+                report issues if necessary.
+
+            </p>
+
+            <form method="POST">
+
+                {% csrf_token %}
+
+                <div class="mb-4">
+
+                    <label class="form-label">
+
+                        Rating
+
+                    </label>
+
+                    {{ form.rating }}
+
+                </div>
+
+                <div class="mb-4">
+
+                    <label class="form-label">
+
+                        Complaint / Report
+
+                    </label>
+
+                    {{ form.complaint }}
+
+                </div>
+
+                <button
+                    type="submit"
+                    class="
+                        btn
+                        btn-green
+                        w-100
+                    "
+                >
+
+                    Submit Review
+
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

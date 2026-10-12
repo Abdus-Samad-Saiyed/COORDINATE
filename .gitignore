@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.sqlite3
+db.sqlite3
+venv/
+.venv/
+.env
+superuser_password
+project_dump.txt
+dump_project.py

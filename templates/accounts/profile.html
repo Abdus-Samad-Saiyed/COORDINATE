@@ -1,0 +1,291 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="mb-5">
+
+    <div
+        class="
+            d-flex
+            justify-content-between
+            align-items-start
+            flex-wrap
+            gap-3
+        "
+    >
+
+        <div>
+
+            <h1
+                class="
+                    display-4
+                    fw-bold
+                "
+            >
+
+                {{ profile_user.enrollment_number }}
+
+            </h1>
+
+            <div
+                class="
+                    d-flex
+                    gap-2
+                    flex-wrap
+                    mt-3
+                "
+            >
+
+                <span
+                    class="
+                        badge
+                        bg-success
+                        rounded-pill
+                        px-3
+                        py-2
+                    "
+                >
+
+                    {{ profile_user.degree }}
+
+                </span>
+
+                <span
+                    class="
+                        badge
+                        bg-dark
+                        rounded-pill
+                        px-3
+                        py-2
+                    "
+                >
+
+                    {{ profile_user.branch }}
+
+                </span>
+
+            </div>
+
+        </div>
+
+        {% if request.user != profile_user %}
+
+            <div>
+
+                {% if is_friend %}
+
+                    <button
+                        class="
+                            btn
+                            btn-success
+                            rounded-pill
+                        "
+                        disabled
+                    >
+
+                        Friends
+
+                    </button>
+
+                {% elif friend_request_sent %}
+
+                    <button
+                        class="
+                            btn
+                            btn-secondary
+                            rounded-pill
+                        "
+                        disabled
+                    >
+
+                        Request Sent
+
+                    </button>
+
+                {% elif incoming_request %}
+
+                    <form
+                        method="POST"
+                        action="/accept-request/{{ incoming_request.id }}/"
+                    >
+
+                        {% csrf_token %}
+
+                        <button
+                            type="submit"
+                            class="
+                                btn
+                                btn-green
+                            "
+                        >
+
+                            Accept Request
+
+                        </button>
+
+                    </form>
+
+                {% else %}
+
+                    <form
+                        method="POST"
+                        action="/friend-request/{{ profile_user.enrollment_number }}/"
+                    >
+
+                        {% csrf_token %}
+
+                        <button
+                            type="submit"
+                            class="
+                                btn
+                                btn-green
+                            "
+                        >
+
+                            Add Friend
+
+                        </button>
+
+                    </form>
+
+                {% endif %}
+
+            </div>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+<div class="row g-4">
+
+    <div class="col-lg-6">
+
+        <div class="glass p-4 h-100">
+
+            <h3
+                class="
+                    fw-bold
+                    mb-4
+                "
+            >
+
+                Reliability
+
+            </h3>
+
+            <div class="mb-3">
+
+                <div
+                    class="
+                        d-flex
+                        justify-content-between
+                    "
+                >
+
+                    <span>
+                        Completed Rides
+                    </span>
+
+                    <strong class="green-accent">
+
+                        {{ profile_user.rides_completed }}
+
+                    </strong>
+
+                </div>
+
+            </div>
+
+            <div class="mb-3">
+
+                <div
+                    class="
+                        d-flex
+                        justify-content-between
+                    "
+                >
+
+                    <span>
+                        Late Arrivals
+                    </span>
+
+                    <strong>
+
+                        {{ profile_user.late_count }}
+
+                    </strong>
+
+                </div>
+
+            </div>
+
+            <div>
+
+                <div
+                    class="
+                        d-flex
+                        justify-content-between
+                    "
+                >
+
+                    <span>
+                        No-Shows
+                    </span>
+
+                    <strong>
+
+                        {{ profile_user.no_show_count }}
+
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="col-lg-6">
+
+        <div class="glass p-4 h-100">
+
+            <h3
+                class="
+                    fw-bold
+                    mb-4
+                "
+            >
+
+                Contact
+
+            </h3>
+
+            <div
+                class="
+                    d-flex
+                    justify-content-between
+                "
+            >
+
+                <span>
+                    Phone Number
+                </span>
+
+                <strong class="green-accent">
+
+                    {{ profile_user.phone_number }}
+
+                </strong>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
