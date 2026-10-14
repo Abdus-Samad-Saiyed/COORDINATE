@@ -89,7 +89,7 @@ def run_comprehensive_audit():
             "verified": True,
         }
     )
-    admin.set_password("AbSm72000@123")
+    admin.set_password("TestAdminPass@123")
     admin.first_name = "Abdus"
     admin.last_name = "Samad Saiyed"
     admin.is_staff = True

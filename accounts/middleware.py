@@ -16,6 +16,9 @@ class SingleSessionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if request.path_info.startswith('/api/'):
+            return self.get_response(request)
+
         if request.user.is_authenticated:
             expected_key = getattr(request.user, 'current_session_key', '')
             actual_key = request.session.session_key

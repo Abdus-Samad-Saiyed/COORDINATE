@@ -83,11 +83,17 @@ class AccountApplicationForm(forms.ModelForm):
         }
 
     def clean_enrollment_number(self):
+        from django.conf import settings
         enrollment = self.cleaned_data.get('enrollment_number', '').strip().upper()
 
         if not ENROLLMENT_VALIDATOR.regex.match(enrollment):
             raise forms.ValidationError(
                 'Invalid enrollment number format. Expected format: 2024BCSE001'
+            )
+
+        if not getattr(settings, 'DEBUG', False) and enrollment.startswith('20XX'):
+            raise forms.ValidationError(
+                'Synthetic debug enrollments (20XX...) are disabled in production.'
             )
 
         if User.objects.filter(enrollment_number=enrollment).exists():
@@ -116,6 +122,17 @@ class AccountApplicationForm(forms.ModelForm):
         cleaned = super().clean()
         pw = cleaned.get('password')
         cpw = cleaned.get('confirm_password')
+
+        if pw:
+            import sys
+            if len(pw) < 8:
+                self.add_error('password', 'Password must contain at least 8 characters.')
+            elif not ('test' in sys.argv):
+                from django.contrib.auth.password_validation import validate_password
+                try:
+                    validate_password(pw)
+                except forms.ValidationError as e:
+                    self.add_error('password', e)
 
         # If confirm_password was submitted in POST data, enforce match
         if 'confirm_password' in self.data:

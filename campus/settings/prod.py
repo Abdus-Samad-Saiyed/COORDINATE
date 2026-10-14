@@ -73,3 +73,13 @@ LOGGING = {
         'level': env('DJANGO_LOG_LEVEL', default='INFO'),
     },
 }
+
+# --- Static Storage -----------------------------------------------------------
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}

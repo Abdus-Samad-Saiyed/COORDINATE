@@ -19,7 +19,7 @@ def serialize_user(user: User, include_stats: bool = False) -> Dict[str, Any]:
         "degree": user.degree,
         "gender": user.gender,
         "joining_year": user.joining_year,
-        "is_verified": user.is_active,
+        "is_verified": user.verified,
     }
     if include_stats:
         data.update({
@@ -53,7 +53,7 @@ def serialize_ride(ride: RideRequest, request_user: Optional[User] = None) -> Di
         },
     }
     if request_user:
-        data["is_user_participant"] = ride.participants.filter(pk=request_user.pk).exists()
+        data["is_user_participant"] = ride.participants.filter(user=request_user).exists()
         data["is_user_creator"] = ride.creator_id == request_user.pk
     return data
 

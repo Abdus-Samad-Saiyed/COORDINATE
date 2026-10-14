@@ -110,7 +110,7 @@ class RideChatConsumer(AsyncWebsocketConsumer):
                 'message_id': message.id,
                 'author': self.user.enrollment_number,
                 'content': message.content,
-                'timestamp': message.created_at.strftime('%b %d, %H:%M'),
+                'timestamp': timezone.localtime(message.created_at).strftime('%b %d, %H:%M'),
             },
         )
 
@@ -144,6 +144,8 @@ class RideChatConsumer(AsyncWebsocketConsumer):
         }))
         if action in ['cancelled', 'completed', 'terminated']:
             await self.close(code=4001)
+        elif action == 'user_kicked' and event.get('user') == self.user.enrollment_number:
+            await self.close(code=4003)
 
     async def ride_terminated(self, event):
         """Teardown handler: closes WebSocket connection when ride ends."""

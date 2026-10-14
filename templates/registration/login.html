@@ -17,6 +17,9 @@
 
                 <form method="POST" action="{% url 'login' %}">
                     {% csrf_token %}
+                    {% if next %}
+                        <input type="hidden" name="next" value="{{ next }}">
+                    {% endif %}
 
                     <!-- Strict Institutional Disciplinary Warning Banner -->
                     <div class="alert alert-warning border border-warning-subtle py-2 px-3 mb-3 small d-flex align-items-start gap-2">

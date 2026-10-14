@@ -8,20 +8,27 @@ Implements web/API parity for core platform resources:
 """
 
 import datetime
+from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.sessions.models import Session
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.http import HttpRequest, JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from accounts.models import User
+from accounts.throttling import rate_limit
+from accounts.views import enforce_single_session_login
 from campus.services import get_all_services, get_service_by_slug
 from coordinate.models import RideParticipant, RideRequest
 from coordinate.views import (
     _are_friends,
     _parse_date,
     _parse_time,
+    _promote_next_waitlist_passenger,
     _user_can_join_ride,
     _user_can_see_ride,
     _user_has_active_ride,
@@ -82,7 +89,9 @@ def api_service_detail(request: HttpRequest, slug: str) -> JsonResponse:
 # Authentication
 # ---------------------------------------------------------------------------
 
+@csrf_exempt
 @require_POST
+@rate_limit(key_prefix='api_login', limit=10, period_seconds=60)
 def api_login(request: HttpRequest) -> JsonResponse:
     """Authenticate student credentials and return a session token."""
     body, err = parse_json_body(request)
@@ -107,10 +116,31 @@ def api_login(request: HttpRequest) -> JsonResponse:
             code="INVALID_CREDENTIALS",
         )
 
-    # Ensure a session is instantiated
+    # 2FA Enforcement for students with 2FA enabled
+    if user.two_factor_enabled and not (settings.DEBUG and user.is_debug_account):
+        otp_code = str(body.get("otp", "")).strip()
+        if not otp_code:
+            from accounts.two_factor import create_phone_otp
+            create_phone_otp(user, purpose="2FA")
+            return json_error(
+                "Two-factor authentication required. An OTP has been dispatched.",
+                status=403,
+                code="2FA_REQUIRED",
+                details={"two_factor_required": True},
+            )
+        from accounts.two_factor import verify_phone_otp
+        if not verify_phone_otp(user, otp_code, purpose="2FA"):
+            return json_error(
+                "Invalid or expired 2FA OTP code.",
+                status=401,
+                code="INVALID_2FA_OTP",
+            )
+
+    # Ensure a session is instantiated and single active session is enforced
     if not request.session.session_key:
         request.session.create()
     login(request, user)
+    enforce_single_session_login(request, user)
     request.session.save()
 
     token = request.session.session_key
@@ -124,9 +154,27 @@ def api_login(request: HttpRequest) -> JsonResponse:
     )
 
 
+@csrf_exempt
 @require_POST
 def api_logout(request: HttpRequest) -> JsonResponse:
     """Invalidate session and logout current user."""
+    auth_header = request.headers.get("Authorization", "") or request.META.get("HTTP_AUTHORIZATION", "")
+    token = None
+    if auth_header:
+        parts = auth_header.split()
+        if len(parts) == 2 and parts[0].lower() in ("bearer", "token"):
+            token = parts[1].strip()
+
+    if token:
+        try:
+            Session.objects.filter(session_key=token).delete()
+            user = get_api_user(request)
+            if user and user.current_session_key == token:
+                user.current_session_key = ""
+                user.save(update_fields=["current_session_key"])
+        except Exception:
+            pass
+
     logout(request)
     return json_success({"message": "Successfully logged out."})
 
@@ -268,6 +316,7 @@ def api_ride_detail(request: HttpRequest, ride_id: int) -> JsonResponse:
     return json_success({"ride": serialize_ride_detail(ride, request_user=user)})
 
 
+@csrf_exempt
 @require_POST
 @api_auth_required
 def api_ride_create(request: HttpRequest) -> JsonResponse:
@@ -341,9 +390,9 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
     if dep_time <= now:
         return json_error("Departure time must be in the future.", status=400, code="PAST_DEPARTURE")
 
-    max_horizon = now + datetime.timedelta(days=14)
+    max_horizon = now + datetime.timedelta(days=30)
     if dep_time > max_horizon:
-        return json_error("Departure cannot be scheduled more than 14 days in advance.", status=400, code="HORIZON_EXCEEDED")
+        return json_error("Departure cannot be scheduled more than 30 days in advance.", status=400, code="HORIZON_EXCEEDED")
 
     # Validate spots
     try:
@@ -380,6 +429,7 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
     return json_success({"ride": serialize_ride_detail(ride, request_user=user)}, status=201)
 
 
+@csrf_exempt
 @require_POST
 @api_auth_required
 def api_ride_join(request: HttpRequest, ride_id: int) -> JsonResponse:
@@ -421,6 +471,7 @@ def api_ride_join(request: HttpRequest, ride_id: int) -> JsonResponse:
     })
 
 
+@csrf_exempt
 @require_POST
 @api_auth_required
 def api_ride_leave(request: HttpRequest, ride_id: int) -> JsonResponse:
@@ -440,11 +491,15 @@ def api_ride_leave(request: HttpRequest, ride_id: int) -> JsonResponse:
         if ride.status in ["COMPLETED", "CANCELLED"]:
             return json_error("Cannot leave a completed or cancelled ride.", status=409, code="RIDE_CONCLUDED")
 
+        if ride.creator == user:
+            return json_error("Hosts cannot leave their own ride. Cancel or terminate the ride instead.", status=400, code="HOST_CANNOT_LEAVE")
+
         participant = RideParticipant.objects.filter(ride=ride, user=user).first()
         if not participant:
             return json_error("You are not a participant in this ride.", status=400, code="NOT_A_PARTICIPANT")
 
         participant.delete()
+        ride.left_users.add(user)
 
         remaining = RideParticipant.objects.filter(ride=ride).count()
         if remaining == 0:
@@ -456,6 +511,7 @@ def api_ride_leave(request: HttpRequest, ride_id: int) -> JsonResponse:
                 return json_success({"message": "Ride cancelled and cleared."})
         else:
             ride.sync_status()
+            _promote_next_waitlist_passenger(ride)
 
     ride.refresh_from_db()
     return json_success({

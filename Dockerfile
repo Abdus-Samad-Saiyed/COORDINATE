@@ -14,7 +14,7 @@ COPY . .
 
 ENV DJANGO_SETTINGS_MODULE=campus.settings.prod
 
-RUN python manage.py collectstatic --noinput
+RUN DJANGO_SECRET_KEY=dummy-build-key-for-collectstatic python manage.py collectstatic --noinput
 
 EXPOSE 8000
 

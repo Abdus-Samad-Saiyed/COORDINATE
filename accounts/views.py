@@ -15,20 +15,27 @@ URL summary:
 """
 
 import json
+import os
+import sys
 import uuid
 from datetime import timedelta
+from PIL import Image
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login as auth_login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.hashers import make_password
+from django.contrib.auth.password_validation import validate_password
 from django.contrib.sessions.models import Session
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from coordinate.models import RideParticipant, RideRequest
@@ -109,20 +116,34 @@ def enforce_single_session_login(request, user: User):
     user.save(update_fields=['current_session_key'])
 
 
-def custom_login_view(request):
-    """Enrollment-based authentication with single concurrent session & 2FA intercept."""
+def _safe_redirect_url(request, redirect_to, fallback='dashboard'):
+    """Ensure redirection target belongs to the current host and scheme."""
+    if redirect_to and url_has_allowed_host_and_scheme(
+        url=redirect_to,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect_to
+    return fallback
+
+
+@rate_limit(key_prefix='login', limit=10, period_seconds=60)
+def custom_login_view(request, extra_context=None):
+    """Enrollment-based authentication with single concurrent session & 2FA intercept.
+    Compatible with Django admin login redirection (admin.site.login = custom_login_view).
+    """
     if request.user.is_authenticated:
         return redirect('dashboard')
 
-    redirect_to = request.POST.get('next', request.GET.get('next', ''))
+    redirect_to = _safe_redirect_url(request, request.POST.get('next', request.GET.get('next', '')), fallback='')
 
     if request.method == 'POST':
         form = EnrollmentAuthenticationForm(request, data=request.POST)
         if form.is_valid():
             user = form.get_user()
 
-            # Synthetic branch debug accounts (20XX...) bypass 2FA and phone verification
-            if user.is_debug_account:
+            # Synthetic branch debug accounts (20XX...) bypass 2FA only when DEBUG=True or test runner
+            if user.is_debug_account and (settings.DEBUG or 'test' in sys.argv):
                 auth_login(request, user)
                 enforce_single_session_login(request, user)
                 log_audit_event(
@@ -136,6 +157,7 @@ def custom_login_view(request):
             if user.two_factor_enabled:
                 request.session['pre_2fa_user_id'] = user.id
                 request.session['pre_2fa_redirect'] = redirect_to
+                request.session['pre_2fa_time'] = timezone.now().timestamp()
                 otp, raw_code = create_phone_otp(user, purpose='2FA')
                 return redirect('two_factor_verify')
 
@@ -156,20 +178,32 @@ def custom_login_view(request):
     else:
         form = EnrollmentAuthenticationForm(request)
 
-    return render(request, 'registration/login.html', {
+    context = {
         'form': form,
         'next': redirect_to,
-    })
+    }
+    if extra_context:
+        context.update(extra_context)
+
+    return render(request, 'registration/login.html', context)
 
 
 def two_factor_verify(request):
     """Handle 2FA Phone SMS verification and Passkey bypass options."""
     user_id = request.session.get('pre_2fa_user_id')
-    if not user_id:
+    pre_2fa_time = request.session.get('pre_2fa_time')
+    now_ts = timezone.now().timestamp()
+
+    # Expire pre-2FA session state after 5 minutes (300 seconds)
+    if not user_id or not pre_2fa_time or (now_ts - pre_2fa_time) > 300:
+        request.session.pop('pre_2fa_user_id', None)
+        request.session.pop('pre_2fa_redirect', None)
+        request.session.pop('pre_2fa_time', None)
+        messages.error(request, "Authentication session expired. Please sign in again.")
         return redirect('login')
 
     user = get_object_or_404(User, id=user_id)
-    redirect_to = request.session.get('pre_2fa_redirect', 'dashboard')
+    redirect_to = _safe_redirect_url(request, request.session.get('pre_2fa_redirect', 'dashboard'))
 
     p = user.phone_number or ''
     masked_phone = f"{p[:3]} {'*' * max(0, len(p) - 6)} {p[-3:]}" if len(p) >= 6 else p
@@ -196,10 +230,9 @@ def two_factor_verify(request):
             otp_code = request.POST.get('otp_code', '').strip()
             success, msg = verify_phone_otp(user, submitted_code=otp_code, purpose='2FA')
             if success:
-                if 'pre_2fa_user_id' in request.session:
-                    del request.session['pre_2fa_user_id']
-                if 'pre_2fa_redirect' in request.session:
-                    del request.session['pre_2fa_redirect']
+                request.session.pop('pre_2fa_user_id', None)
+                request.session.pop('pre_2fa_redirect', None)
+                request.session.pop('pre_2fa_time', None)
 
                 auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
                 enforce_single_session_login(request, user)
@@ -260,12 +293,17 @@ def passkey_auth_challenge(request):
 def passkey_auth_verify(request):
     """Verify WebAuthn client assertion and bypass 2FA upon biometric / Windows Hello match."""
     user_id = request.session.get('pre_2fa_user_id')
-    if not user_id:
+    pre_2fa_time = request.session.get('pre_2fa_time')
+    now_ts = timezone.now().timestamp()
+
+    if not user_id or not pre_2fa_time or (now_ts - pre_2fa_time) > 300:
         return JsonResponse({'success': False, 'error': 'Session expired. Please sign in again.'}, status=401)
 
     user = get_object_or_404(User, id=user_id)
-    redirect_to = request.session.get('pre_2fa_redirect', 'dashboard')
-    challenge = request.session.get('passkey_challenge', '')
+    redirect_to = _safe_redirect_url(request, request.session.get('pre_2fa_redirect', '/dashboard/'), fallback='/dashboard/')
+    challenge = request.session.pop('passkey_challenge', '')
+    if not challenge:
+        return JsonResponse({'success': False, 'error': 'Challenge already consumed or missing. Please try again.'}, status=400)
 
     try:
         data = json.loads(request.body.decode('utf-8'))
@@ -274,10 +312,9 @@ def passkey_auth_verify(request):
 
         success, msg = verify_passkey_assertion(user, credential_id, client_data_json, challenge)
         if success:
-            if 'pre_2fa_user_id' in request.session:
-                del request.session['pre_2fa_user_id']
-            if 'passkey_challenge' in request.session:
-                del request.session['passkey_challenge']
+            request.session.pop('pre_2fa_user_id', None)
+            request.session.pop('pre_2fa_redirect', None)
+            request.session.pop('pre_2fa_time', None)
 
             auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
             enforce_single_session_login(request, user)
@@ -376,23 +413,15 @@ def send_signup_otp(request):
 @login_required
 @require_POST
 def send_security_otp(request):
-    """Dispatch phone and email OTP to currently logged-in student to authorize security edits."""
+    """Dispatch phone and email OTP to currently logged-in student to authorize security edits.
+    Strictly dispatches to the stored contact details of request.user; client overrides are ignored.
+    """
     user = request.user
     if user.is_debug_account:
         return JsonResponse({'success': True, 'message': 'Debug account: OTP bypassed.'})
 
-    phone_override = request.POST.get('phone_number') or ''
-    email_override = request.POST.get('email', '').strip().lower() or ''
-    if not phone_override or not email_override:
-        try:
-            body = json.loads(request.body.decode('utf-8'))
-            phone_override = phone_override or body.get('phone_number', '').strip()
-            email_override = email_override or body.get('email', '').strip().lower()
-        except Exception:
-            pass
-
-    target_phone = phone_override or user.phone_number
-    target_email = email_override or user.email
+    target_phone = user.phone_number
+    target_email = user.email
     if not target_phone and not target_email:
         return JsonResponse({'success': False, 'error': 'No registered contact (phone or email) found on account.'}, status=400)
 
@@ -427,7 +456,7 @@ def forgot_password_view(request):
             user = User.objects.filter(enrollment_number=enrollment, is_deleted=False).first()
             if not user:
                 messages.error(request, "No active student account found with that enrollment number.")
-            elif user.is_debug_account:
+            elif user.is_debug_account and getattr(settings, 'DEBUG', False):
                 messages.info(request, "This is a debug account. Password is 'Debug@123'.")
                 return redirect('login')
             else:
@@ -463,8 +492,11 @@ def forgot_password_view(request):
                     'enrollment_number': user.enrollment_number,
                 })
 
-            if len(new_password) < 6:
-                messages.error(request, "Password must be at least 6 characters.")
+            try:
+                validate_password(new_password, user)
+            except ValidationError as e:
+                for error in e.messages:
+                    messages.error(request, error)
                 return render(request, 'registration/forgot_password.html', {
                     'step': 'verify_otp',
                     'enrollment_number': user.enrollment_number,
@@ -473,14 +505,21 @@ def forgot_password_view(request):
             ok, msg = verify_phone_otp(user, submitted_code=otp_code, purpose='PASSWORD_RESET')
             if ok:
                 user.set_password(new_password)
+                # Revoke all active sessions for this user across all devices/API
+                for s in Session.objects.filter(expire_date__gt=timezone.now()):
+                    try:
+                        data = s.get_decoded()
+                        if str(data.get('_auth_user_id')) == str(user.id):
+                            s.delete()
+                    except Exception:
+                        pass
+                user.current_session_key = ''
                 user.save()
-                if user.current_session_key:
-                    Session.objects.filter(session_key=user.current_session_key).delete()
                 del request.session['reset_user_id']
                 log_audit_event(
                     event_type='SECURITY_SETTINGS_UPDATED',
                     actor_enrollment=user.enrollment_number,
-                    description='Password reset successfully via Phone OTP',
+                    description='Password reset successfully via Phone OTP; existing sessions revoked',
                 )
                 messages.success(request, "Your password has been reset successfully! Please sign in with your new password.")
                 return redirect('login')
@@ -636,11 +675,24 @@ def profile_view(request, enrollment_number):
                 return redirect('profile', enrollment_number=profile_user.enrollment_number)
 
         if password_changed:
+            current_password = request.POST.get('current_password', '').strip()
+            if current_password:
+                if not profile_user.check_password(current_password):
+                    messages.error(request, "Current password is incorrect.")
+                    return redirect('profile', enrollment_number=profile_user.enrollment_number)
+            elif not grace_active:
+                messages.error(request, "Current password is required and must be correct to set a new password.")
+                return redirect('profile', enrollment_number=profile_user.enrollment_number)
+
             if new_password != confirm_password:
                 messages.error(request, "New passwords do not match. Please re-enter.")
                 return redirect('profile', enrollment_number=profile_user.enrollment_number)
-            if len(new_password) < 6:
-                messages.error(request, "Password must be at least 6 characters.")
+
+            try:
+                validate_password(new_password, profile_user)
+            except ValidationError as e:
+                for error in e.messages:
+                    messages.error(request, error)
                 return redirect('profile', enrollment_number=profile_user.enrollment_number)
 
         # Non-debug accounts require OTP if security details changed and grace period expired
@@ -654,9 +706,32 @@ def profile_view(request, enrollment_number):
             request.session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=10)).isoformat()
             grace_active = True
 
-        # Profile photo upload
+        # Profile photo upload with strict validation
         if 'profile_photo' in request.FILES:
-            profile_user.profile_photo = request.FILES['profile_photo']
+            photo = request.FILES['profile_photo']
+            if photo.size > 5 * 1024 * 1024:
+                messages.error(request, "Profile photo file size exceeds 5MB limit.")
+                return redirect('profile', enrollment_number=profile_user.enrollment_number)
+
+            ext = os.path.splitext(photo.name)[1].lower()
+            if ext not in ('.jpg', '.jpeg', '.png', '.webp'):
+                messages.error(request, "Only JPG, PNG, and WebP image formats are allowed.")
+                return redirect('profile', enrollment_number=profile_user.enrollment_number)
+
+            try:
+                img = Image.open(photo)
+                img.verify()
+                photo.seek(0)
+                img = Image.open(photo)
+                if img.format.lower() not in ('jpeg', 'png', 'webp'):
+                    messages.error(request, "Invalid or unsupported image format.")
+                    return redirect('profile', enrollment_number=profile_user.enrollment_number)
+            except Exception:
+                messages.error(request, "Uploaded file is not a valid image.")
+                return redirect('profile', enrollment_number=profile_user.enrollment_number)
+
+            photo.name = f"{uuid.uuid4().hex}{ext}"
+            profile_user.profile_photo = photo
         # Phone number update
         if new_phone:
             profile_user.phone_number = new_phone
@@ -748,8 +823,8 @@ def user_search(request):
     """Search for students by enrollment number or name with privacy filtering."""
     query = request.GET.get('q', '').strip()
 
-    # Base queryset: verified students excluding oneself
-    students_qs = User.objects.filter(verified=True).exclude(id=request.user.id)
+    # Base queryset: verified active students excluding oneself and soft-deleted accounts
+    students_qs = User.objects.filter(verified=True, is_deleted=False, is_active=True).exclude(id=request.user.id)
     if not (request.user.is_staff or request.user.is_superuser):
         students_qs = students_qs.filter(hide_from_search=False)
 

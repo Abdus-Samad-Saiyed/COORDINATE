@@ -186,6 +186,8 @@ class RideHistoryAndRetentionTests(TestCase):
 
     def test_complete_ride_increments_attendance_and_stats(self):
         """RIDE-05: Marking ride complete increments rides_completed and on_time_count atomically."""
+        self.ride.departure_time = timezone.now() - datetime.timedelta(minutes=30)
+        self.ride.save(update_fields=['departure_time'])
         self.client.force_login(self.host)
         self.client.post(reverse('complete_ride', args=[self.ride.id]))
 

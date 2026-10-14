@@ -46,7 +46,7 @@ def json_error(
     return JsonResponse(payload, status=status)
 
 
-def get_api_user(request: HttpRequest) -> Optional[Any]:
+def get_api_user(request: HttpRequest, allow_cookie: bool = True) -> Optional[Any]:
     """Resolve user from Authorization header or standard session."""
     # 1. Check Authorization header: 'Bearer <token>' or 'Token <token>'
     auth_header = request.headers.get("Authorization", "") or request.META.get("HTTP_AUTHORIZATION", "")
@@ -67,24 +67,31 @@ def get_api_user(request: HttpRequest) -> Optional[Any]:
                 pass
         return None
 
-    # 2. Check standard cookie session authentication
-    if getattr(request, "user", None) and request.user.is_authenticated and request.user.is_active:
+    # 2. Check standard cookie session authentication only if allowed
+    if allow_cookie and getattr(request, "user", None) and request.user.is_authenticated and request.user.is_active:
         return request.user
 
     return None
 
 
-def api_auth_required(view_func: Callable) -> Callable:
-    """Decorator requiring valid user authentication for API endpoints."""
-    @wraps(view_func)
-    def wrapped_view(request: HttpRequest, *args, **kwargs):
-        user = get_api_user(request)
-        if not user:
-            return json_error("Authentication required.", status=401, code="AUTH_REQUIRED")
-        request.api_user = user
-        return view_func(request, *args, **kwargs)
+def api_auth_required(view_func: Optional[Callable] = None, *, allow_cookie: Optional[bool] = None) -> Callable:
+    """Decorator requiring valid user authentication for API endpoints.
+    For mutating requests (POST, PUT, DELETE, PATCH), allow_cookie defaults to False to prevent CSRF.
+    """
+    def decorator(fn):
+        @wraps(fn)
+        def wrapped_view(request: HttpRequest, *args, **kwargs):
+            can_use_cookie = allow_cookie if allow_cookie is not None else (request.method in ("GET", "HEAD", "OPTIONS"))
+            user = get_api_user(request, allow_cookie=can_use_cookie)
+            if not user:
+                return json_error("Authentication required.", status=401, code="AUTH_REQUIRED")
+            request.api_user = user
+            return fn(request, *args, **kwargs)
+        return wrapped_view
 
-    return wrapped_view
+    if view_func is not None:
+        return decorator(view_func)
+    return decorator
 
 
 def parse_json_body(request: HttpRequest) -> Tuple[Optional[Dict[str, Any]], Optional[JsonResponse]]:

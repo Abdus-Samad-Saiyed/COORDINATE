@@ -29,6 +29,9 @@ from campus.operations import (
 from campus.services import service_gateway_view
 from campus.views import about_view, contact_view, contributors_view, feedback_view, nominate_contributor, remove_contributor
 
+# Enforce platform 2FA and single-session on Django admin
+admin.site.login = custom_login_view
+
 urlpatterns = [
     # Django admin & Operational Dashboard
     path('admin/', admin.site.urls),
@@ -98,7 +101,8 @@ from django.conf import settings
 from django.urls import re_path
 from django.views.static import serve
 
-urlpatterns += [
-    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
-]
+if settings.DEBUG:
+    urlpatterns += [
+        re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+    ]
 

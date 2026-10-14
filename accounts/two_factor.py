@@ -16,11 +16,30 @@ from django.utils import timezone
 
 from .models import PasskeyCredential, PhoneOTP, User
 
+import re
+from django.db import transaction
+from django.db.models import F
+
 logger = logging.getLogger(__name__)
 
 OTP_EXPIRY_SECONDS = 300       # 5 minutes
 RESEND_COOLDOWN_SECONDS = 60   # 1 minute
 MAX_ATTEMPTS = 3
+
+
+def normalize_phone_number(phone: str) -> str:
+    """Normalize phone number to standard E.164 (+91XXXXXXXXXX) format."""
+    if not phone:
+        return ''
+    cleaned = re.sub(r'[\s\-\(\)]', '', phone.strip())
+    if cleaned.startswith('+'):
+        return cleaned
+    digits = re.sub(r'\D', '', cleaned)
+    if len(digits) == 10:
+        return f'+91{digits}'
+    elif len(digits) == 12 and digits.startswith('91'):
+        return f'+{digits}'
+    return f'+{digits}' if digits else cleaned
 
 
 def _get_salt() -> bytes:
@@ -39,8 +58,9 @@ def dispatch_sms(phone_number: str, message: str) -> bool:
     """
     Dispatch SMS verification message.
     If TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are set in settings, sends via Twilio API.
-    Always logs and prints clearly to server console for testing/development environments.
+    Masks code in production logs to prevent credential leakage.
     """
+    phone_number = normalize_phone_number(phone_number)
     twilio_sid = getattr(settings, 'TWILIO_ACCOUNT_SID', None)
     twilio_token = getattr(settings, 'TWILIO_AUTH_TOKEN', None)
     twilio_from = getattr(settings, 'TWILIO_PHONE_NUMBER', None)
@@ -62,11 +82,15 @@ def dispatch_sms(phone_number: str, message: str) -> bool:
                 if response.status in (200, 201):
                     logger.info("Real SMS sent successfully via Twilio to %s", phone_number)
                     return True
+                logger.error("Twilio returned non-success HTTP status %s", response.status)
+                return False
         except Exception as exc:
             logger.error("Failed to send real SMS via Twilio: %s", exc)
+            return False
 
-    logger.info("[SMS DISPATCH] To: %s | Message: %s", phone_number, message)
-    print(f"\n=======================================================\n[SMS DISPATCH] To: {phone_number}\nMessage: {message}\n=======================================================\n")
+    logger.info("[SMS DISPATCH] To: %s (dispatch requested)", phone_number)
+    if getattr(settings, 'DEBUG', False):
+        print(f"\n=======================================================\n[SMS DISPATCH] To: {phone_number}\nMessage: {message}\n=======================================================\n")
     return True
 
 
@@ -136,8 +160,9 @@ def dispatch_email_otp(email: str, code: str, purpose: str = '2FA', user: User =
         msg = EmailMultiAlternatives(subject, plain_content, from_email, [email])
         msg.attach_alternative(html_content, "text/html")
         msg.send(fail_silently=False)
-        logger.info("[EMAIL DISPATCH] To: %s | Purpose: %s | Code: %s", email, purpose, code)
-        print(f"\n=======================================================\n[EMAIL DISPATCH] To: {email}\nSubject: {subject}\nCode: {code}\n=======================================================\n")
+        logger.info("[EMAIL DISPATCH] To: %s | Purpose: %s", email, purpose)
+        if getattr(settings, 'DEBUG', False):
+            print(f"\n=======================================================\n[EMAIL DISPATCH] To: {email}\nSubject: {subject}\nCode: {code}\n=======================================================\n")
         return True
     except Exception as exc:
         logger.error("Failed to dispatch email OTP to %s: %s", email, exc)
@@ -156,14 +181,16 @@ def create_phone_otp(
     Invalidates any existing unused OTPs for the same target and purpose to prevent replay attacks.
     Returns (PhoneOTP instance, raw_code).
     """
-    target_phone = phone_number or (user.phone_number if user else None)
-    target_email = email or (user.email if user else None)
+    target_phone = normalize_phone_number(phone_number or (user.phone_number if user else None))
+    target_email = (email or (user.email if user else None) or '').strip().lower()
     if not target_phone and not target_email:
         raise ValueError("Phone number or email required to dispatch OTP.")
 
     # Invalidate prior active OTPs
     if user:
         PhoneOTP.objects.filter(user=user, purpose=purpose, is_used=False).update(is_used=True)
+    elif target_phone and target_email and purpose == 'SIGNUP':
+        PhoneOTP.objects.filter(phone_number=target_phone, email=target_email, purpose=purpose, is_used=False).update(is_used=True)
     elif target_phone:
         PhoneOTP.objects.filter(phone_number=target_phone, purpose=purpose, is_used=False).update(is_used=True)
     elif target_email:
@@ -186,7 +213,7 @@ def create_phone_otp(
     )
 
     ident = user.enrollment_number if user else (target_phone or target_email)
-    logger.info("OTP (%s) generated for %s: %s", purpose, ident, raw_code)
+    logger.info("OTP (%s) generated for %s", purpose, ident)
 
     # 1. Dispatch SMS
     if target_phone:
@@ -202,11 +229,13 @@ def create_phone_otp(
 
 def can_resend_otp(user: User = None, phone_number: str = None, email: str = None, purpose: str = '2FA') -> Tuple[bool, int]:
     """Check if the resend cooldown has elapsed for this target and purpose."""
-    target_phone = phone_number or (user.phone_number if user else None)
-    target_email = email or (user.email if user else None)
+    target_phone = normalize_phone_number(phone_number or (user.phone_number if user else None))
+    target_email = (email or (user.email if user else None) or '').strip().lower()
     qs = PhoneOTP.objects.filter(purpose=purpose)
     if user:
         qs = qs.filter(user=user)
+    elif target_phone and target_email and purpose == 'SIGNUP':
+        qs = qs.filter(phone_number=target_phone, email=target_email)
     elif target_phone:
         qs = qs.filter(phone_number=target_phone)
     elif target_email:
@@ -233,9 +262,8 @@ def verify_phone_otp(
     purpose: str = '2FA',
 ) -> Tuple[bool, str]:
     """
-    Verify submitted 6-digit OTP with strict attempt limits, timing attack immunity,
-    and single-use invalidation.
-    Supports either an authenticated user, phone_number, or email, keyed by purpose.
+    Verify submitted 6-digit OTP with atomic concurrency locks, strict attempt limits,
+    timing attack immunity, and single-use invalidation.
     """
     # Support legacy positional call: verify_phone_otp(user, submitted_code)
     if isinstance(phone_number, str) and len(phone_number) == 6 and phone_number.isdigit() and not submitted_code:
@@ -249,53 +277,60 @@ def verify_phone_otp(
     if not code.isdigit() or len(code) != 6:
         return False, "Verification code must be exactly 6 digits."
 
-    target_phone = phone_number or (user.phone_number if user else None)
-    target_email = email or (user.email if user else None)
-    qs = PhoneOTP.objects.filter(purpose=purpose, is_used=False)
-    if user:
-        qs = qs.filter(user=user)
-    elif target_phone and target_email:
-        from django.db.models import Q
-        qs = qs.filter(Q(phone_number=target_phone) | Q(email=target_email))
-    elif target_phone:
-        qs = qs.filter(phone_number=target_phone)
-    elif target_email:
-        qs = qs.filter(email=target_email)
-    else:
-        return False, "User, phone number, or email required to verify code."
+    target_phone = normalize_phone_number(phone_number or (user.phone_number if user else None))
+    target_email = (email or (user.email if user else None) or '').strip().lower()
 
-    otp = qs.order_by('-created_at').first()
-    if not otp:
-        return False, "No active verification code found. Please request a new one."
+    with transaction.atomic():
+        qs = PhoneOTP.objects.select_for_update().filter(purpose=purpose, is_used=False)
+        if user:
+            qs = qs.filter(user=user)
+        elif target_phone and target_email and purpose == 'SIGNUP':
+            # Bind both channels to prevent phone hijacking
+            qs = qs.filter(phone_number=target_phone, email=target_email)
+        elif target_phone and target_email:
+            from django.db.models import Q
+            qs = qs.filter(Q(phone_number=target_phone) | Q(email=target_email))
+        elif target_phone:
+            qs = qs.filter(phone_number=target_phone)
+        elif target_email:
+            qs = qs.filter(email=target_email)
+        else:
+            return False, "User, phone number, or email required to verify code."
 
-    # Check expiration
-    if timezone.now() > otp.expires_at:
-        otp.is_used = True
-        otp.save(update_fields=['is_used'])
-        return False, "Verification code has expired. Please request a new code."
+        otp = qs.order_by('-created_at').first()
+        if not otp:
+            return False, "No active verification code found. Please request a new one."
 
-    # Check remaining attempts
-    if otp.attempts_left <= 0:
-        otp.is_used = True
-        otp.save(update_fields=['is_used'])
-        return False, "Maximum verification attempts exceeded. Please request a new code."
+        # Check expiration
+        if timezone.now() > otp.expires_at:
+            otp.is_used = True
+            otp.save(update_fields=['is_used'])
+            return False, "Verification code has expired. Please request a new code."
 
-    # Constant-time comparison
-    computed_hash = hash_otp(code)
-    if hmac.compare_digest(otp.otp_hash, computed_hash):
-        otp.is_used = True
-        otp.save(update_fields=['is_used'])
-        return True, "Verification successful."
+        # Check remaining attempts
+        if otp.attempts_left <= 0:
+            otp.is_used = True
+            otp.save(update_fields=['is_used'])
+            return False, "Maximum verification attempts exceeded. Please request a new code."
 
-    # Failed attempt: decrement remaining attempts
-    otp.attempts_left -= 1
-    if otp.attempts_left <= 0:
-        otp.is_used = True
-        otp.save(update_fields=['attempts_left', 'is_used'])
-        return False, "Invalid verification code. Maximum attempts exceeded. Please request a new code."
+        # Constant-time comparison
+        computed_hash = hash_otp(code)
+        if hmac.compare_digest(otp.otp_hash, computed_hash):
+            otp.is_used = True
+            otp.save(update_fields=['is_used'])
+            return True, "Verification successful."
 
-    otp.save(update_fields=['attempts_left'])
-    return False, f"Invalid verification code. {otp.attempts_left} attempt(s) remaining."
+        # Failed attempt: atomically decrement remaining attempts
+        otp.attempts_left = F('attempts_left') - 1
+        otp.save(update_fields=['attempts_left'])
+        otp.refresh_from_db()
+
+        if otp.attempts_left <= 0:
+            otp.is_used = True
+            otp.save(update_fields=['is_used'])
+            return False, "Invalid verification code. Maximum attempts exceeded. Please request a new code."
+
+        return False, f"Invalid verification code. {otp.attempts_left} attempt(s) remaining."
 
 
 # ---------------------------------------------------------------------------
@@ -313,9 +348,12 @@ def verify_passkey_assertion(
     credential_id: str,
     client_data_json_b64: str,
     session_challenge: str,
+    signature: str = None,
+    authenticator_data_b64: str = None,
 ) -> Tuple[bool, str]:
     """
-    Validate WebAuthn client assertion against session challenge and user's registered keys.
+    Validate WebAuthn client assertion against session challenge, origin, type,
+    and user's registered keys.
     """
     if not credential_id or not client_data_json_b64 or not session_challenge:
         return False, "Missing cryptographic assertion payload."
@@ -330,6 +368,11 @@ def verify_passkey_assertion(
         padding = '=' * (-len(client_data_json_b64) % 4)
         raw_json = base64.urlsafe_b64decode(client_data_json_b64 + padding).decode('utf-8')
         client_data = json.loads(raw_json)
+
+        # Validate type
+        op_type = client_data.get('type')
+        if op_type and op_type != 'webauthn.get':
+            return False, f"Invalid WebAuthn operation type: '{op_type}'."
 
         # Verify challenge matches session
         received_challenge = client_data.get('challenge', '')

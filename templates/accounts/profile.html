@@ -326,6 +326,9 @@
                     </div>
                     <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 mb-3">
                         <label class="form-label small fw-semibold text-warning"><i class="bi bi-key-fill me-1"></i> Change Password</label>
+                        <div class="mb-2">
+                            <input type="password" name="current_password" class="form-control form-control-sm" placeholder="Current Password (required to change password)" autocomplete="current-password">
+                        </div>
                         <div class="row g-2 mb-1">
                             <div class="col-6">
                                 <input type="password" name="new_password" class="form-control form-control-sm" placeholder="New Password" autocomplete="new-password">
@@ -334,7 +337,7 @@
                                 <input type="password" name="confirm_password" class="form-control form-control-sm" placeholder="Confirm Password" autocomplete="new-password">
                             </div>
                         </div>
-                        <div class="form-text text-secondary small">Leave blank to retain your current password.</div>
+                        <div class="form-text text-secondary small">Leave blank to retain your current password. Current password is required to change it.</div>
                     </div>
 
                     {% if not profile_user.is_debug_account %}

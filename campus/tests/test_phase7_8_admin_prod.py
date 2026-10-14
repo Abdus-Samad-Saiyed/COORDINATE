@@ -308,10 +308,13 @@ class Phase8ProductionReadinessTests(TestCase):
         from unittest import mock
 
         # 1. With dev default key, prod settings must refuse to start
-        if "campus.settings.prod" in sys.modules:
-            del sys.modules["campus.settings.prod"]
-        with self.assertRaises(ValueError):
-            import campus.settings.prod  # noqa: F401
+        import campus.settings.base as base_settings
+        with mock.patch.dict(os.environ, {"DJANGO_SECRET_KEY": "insecure-dev-key-change-me"}):
+            importlib.reload(base_settings)
+            if "campus.settings.prod" in sys.modules:
+                del sys.modules["campus.settings.prod"]
+            with self.assertRaises(ValueError):
+                import campus.settings.prod  # noqa: F401
 
         # 2. With a strong production secret key, prod settings imports successfully
         with mock.patch.dict(os.environ, {"DJANGO_SECRET_KEY": "strong-production-key-for-testing-12345"}):

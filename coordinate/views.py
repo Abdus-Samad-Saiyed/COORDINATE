@@ -19,7 +19,7 @@ import datetime
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Prefetch, Q
+from django.db.models import Case, Count, F, Prefetch, Q, When
 from django.http import Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -170,34 +170,37 @@ def _broadcast_ride_teardown(ride, action: str):
 def _promote_next_waitlist_passenger(ride):
     """
     If ride has an open spot and waitlist is non-empty,
-    promotes earliest waitlisted student to RideParticipant atomically.
+    promotes earliest eligible waitlisted student to RideParticipant atomically.
     """
     if ride.status in ['COMPLETED', 'CANCELLED']:
         return None
 
     if ride.participant_count() < ride.total_spots:
         with transaction.atomic():
-            next_entry = (
+            waitlist_entries = (
                 RideWaitlist.objects
                 .select_for_update()
                 .filter(ride=ride)
                 .order_by('joined_at')
-                .first()
             )
-            if next_entry:
-                promoted_user = next_entry.user
-                next_entry.delete()
+            for entry in waitlist_entries:
+                candidate = entry.user
+                if _user_has_active_ride(candidate) or not _user_can_see_ride(candidate, ride) or ride.kicked_users.filter(id=candidate.id).exists():
+                    entry.delete()
+                    continue
+
+                entry.delete()
                 RideParticipant.objects.get_or_create(
                     ride=ride,
-                    user=promoted_user,
+                    user=candidate,
                 )
                 ride.sync_status()
 
                 # Post system chat announcement
                 RideMessage.objects.create(
                     ride=ride,
-                    author=promoted_user,
-                    content=f"🔔 Standby Promotion: {promoted_user.enrollment_number} was automatically moved from standby to confirmed passenger."
+                    author=candidate,
+                    content=f"🔔 Standby Promotion: {candidate.enrollment_number} was automatically moved from standby to confirmed passenger."
                 )
 
                 try:
@@ -208,14 +211,14 @@ def _promote_next_waitlist_passenger(ride):
                             {
                                 'type': 'system.notice',
                                 'action': 'waitlist_promoted',
-                                'user': promoted_user.enrollment_number,
-                                'content': f"🔔 Standby Promotion: {promoted_user.enrollment_number} joined the ride from standby.",
+                                'user': candidate.enrollment_number,
+                                'content': f"🔔 Standby Promotion: {candidate.enrollment_number} joined the ride from standby.",
                             }
                         )
                 except Exception:
                     pass
 
-                return promoted_user
+                return candidate
     return None
 
 
@@ -658,7 +661,12 @@ def leave_ride(request, ride_id):
             messages.error(request, 'Cannot leave a completed or cancelled ride.')
             return redirect('ride_detail', ride_id=ride.id)
 
-        RideParticipant.objects.filter(ride=ride, user=request.user).delete()
+        participant = RideParticipant.objects.filter(ride=ride, user=request.user).first()
+        if not participant:
+            messages.error(request, 'You are not a participant in this ride.')
+            return redirect('ride_detail', ride_id=ride.id)
+
+        participant.delete()
         ride.left_users.add(request.user)
 
         remaining = RideParticipant.objects.filter(ride=ride).count()
@@ -675,6 +683,13 @@ def leave_ride(request, ride_id):
             if request.htmx:
                 return HttpResponse(status=204)
             return redirect('ride_list')
+
+        # If host leaves but others remain, transfer host status to next passenger
+        if ride.creator == request.user:
+            next_host = RideParticipant.objects.filter(ride=ride).first()
+            if next_host:
+                ride.creator = next_host.user
+                ride.save(update_fields=['creator'])
 
         ride.sync_status()
         _promote_next_waitlist_passenger(ride)
@@ -846,12 +861,15 @@ def ride_detail(request, ride_id):
         .order_by('created_at')
     ) if is_creator else []
 
-    chat_messages = (
-        RideMessage.objects
-        .filter(ride=ride)
-        .select_related('author')
-        .order_by('created_at')
-    )
+    if is_participant or is_creator:
+        chat_messages = (
+            RideMessage.objects
+            .filter(ride=ride)
+            .select_related('author')
+            .order_by('created_at')
+        )
+    else:
+        chat_messages = RideMessage.objects.none()
 
     can_message = (
         is_participant
@@ -935,10 +953,26 @@ def kick_participant(request, ride_id, participant_id):
             return redirect('ride_detail', ride_id=ride.id)
 
         # RIDE-04: Record kick so removed user cannot rejoin and can be reviewed immediately
+        kicked_enrollment = participant.user.enrollment_number
         ride.kicked_users.add(participant.user)
         participant.delete()
         ride.sync_status()
         _promote_next_waitlist_passenger(ride)
+
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f'ride_{ride.id}',
+                    {
+                        'type': 'system.notice',
+                        'action': 'user_kicked',
+                        'user': kicked_enrollment,
+                        'content': f"🚫 {kicked_enrollment} was removed by host.",
+                    }
+                )
+        except Exception:
+            pass
 
     messages.success(request, f'{participant.user} has been removed from the ride.')
     return redirect('ride_detail', ride_id=ride.id)
@@ -947,12 +981,21 @@ def kick_participant(request, ride_id, participant_id):
 @login_required
 @require_POST
 def complete_ride(request, ride_id):
-    ride = get_object_or_404(RideRequest, id=ride_id, creator=request.user)
-
-    if ride.status == 'COMPLETED':
-        return redirect('ride_detail', ride_id=ride.id)
-
     with transaction.atomic():
+        ride = get_object_or_404(
+            RideRequest.objects.select_for_update(),
+            id=ride_id,
+            creator=request.user,
+        )
+
+        if ride.status in ['COMPLETED', 'CANCELLED']:
+            messages.error(request, f'Cannot complete a {ride.status.lower()} ride.')
+            return redirect('ride_detail', ride_id=ride.id)
+
+        if ride.departure_time > timezone.now():
+            messages.error(request, 'Cannot complete a ride before its departure time.')
+            return redirect('ride_detail', ride_id=ride.id)
+
         ride.status = 'COMPLETED'
         ride.save(update_fields=['status'])
         _broadcast_ride_teardown(ride, 'completed')
@@ -1033,12 +1076,20 @@ def review_user(request, ride_id, user_id):
             update_fields = []
             if review.grievance == 'LATE' or review.punctuality_rating <= 2:
                 reviewed_user.late_count = F('late_count') + 1
-                update_fields.append('late_count')
+                reviewed_user.on_time_count = Case(
+                    When(on_time_count__gt=0, then=F('on_time_count') - 1),
+                    default=0,
+                )
+                update_fields.extend(['late_count', 'on_time_count'])
             elif review.grievance == 'NO_SHOW':
                 reviewed_user.no_show_count = F('no_show_count') + 1
-                update_fields.append('no_show_count')
+                reviewed_user.on_time_count = Case(
+                    When(on_time_count__gt=0, then=F('on_time_count') - 1),
+                    default=0,
+                )
+                update_fields.extend(['no_show_count', 'on_time_count'])
 
-            if review.grievance != 'NONE' or (review.complaint and review.complaint.strip()):
+            if review.grievance in ['RUDE', 'SAFETY', 'CUSTOM'] or review.rating <= 2:
                 reviewed_user.behavior_reports = F('behavior_reports') + 1
                 update_fields.append('behavior_reports')
 

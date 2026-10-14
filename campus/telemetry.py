@@ -85,8 +85,8 @@ def get_traffic_telemetry():
     """Retrieve operational server traffic metrics across time intervals."""
     from accounts.models import AuditEvent, User
 
-    now = timezone.now()
-    today_date = now.date()
+    now = timezone.localtime()
+    today_date = timezone.localdate()
     today_key = f"nexus_reqs_day_{now.strftime('%Y%m%d')}"
     hour_key = f"nexus_reqs_hour_{now.strftime('%Y%m%d%H')}"
 
@@ -94,15 +94,11 @@ def get_traffic_telemetry():
     recorded_today = cache.get(today_key, 0)
     recorded_hour = cache.get(hour_key, 0)
 
-    # Realistic active platform base baseline for campus operations telemetry
-    base_seed_today = 3840
-    base_seed_total = 112500
-
-    requests_today = base_seed_today + recorded_today
-    requests_last_hour = max(180, 180 + recorded_hour)
-    requests_7d = requests_today * 7 + (recorded_total // 2)
-    requests_30d = base_seed_total + recorded_total
-    avg_daily_requests = round(requests_30d / 30)
+    requests_today = recorded_today
+    requests_last_hour = recorded_hour
+    requests_7d = cache.get('nexus_telemetry_7d_count', recorded_today)
+    requests_30d = recorded_total
+    avg_daily_requests = round(requests_30d / 30) if requests_30d > 0 else 0
 
     # Users signed in today
     try:
@@ -110,15 +106,15 @@ def get_traffic_telemetry():
         audit_logins_today = AuditEvent.objects.filter(
             event_type__in=['LOGIN', '2FA_VERIFY'],
             timestamp__date=today_date,
-        ).values('user').distinct().count()
-        users_signin_today = max(active_today_users, audit_logins_today, 42)
+        ).values('actor_enrollment').distinct().count()
+        users_signin_today = max(active_today_users, audit_logins_today)
     except Exception:
-        users_signin_today = 42
+        users_signin_today = 0
 
     tot_lat = cache.get(KEY_TOTAL_LATENCY_MS, 0.0)
-    avg_latency = round(tot_lat / recorded_total, 1) if recorded_total > 0 else 24.8
+    avg_latency = round(tot_lat / recorded_total, 1) if recorded_total > 0 else 0.0
 
-    peak_rps = max(142, cache.get(KEY_PEAK_RPS, 0))
+    peak_rps = cache.get(KEY_PEAK_RPS, 0)
     uptime_seconds = int(time.time() - _START_TIME)
 
     return {
@@ -132,5 +128,5 @@ def get_traffic_telemetry():
         'avg_latency_ms': avg_latency,
         'peak_rps': peak_rps,
         'uptime_seconds': uptime_seconds,
-        'uptime_display': f"{max(1, uptime_seconds // 3600)}h {(uptime_seconds % 3600) // 60}m",
+        'uptime_display': f"{max(0, uptime_seconds // 3600)}h {(uptime_seconds % 3600) // 60}m",
     }

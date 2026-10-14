@@ -111,6 +111,7 @@ class User(AbstractUser):
 
     @property
     def is_debug_account(self) -> bool:
+        """Synthetic debug accounts begin with '20XX'."""
         return bool(self.enrollment_number and self.enrollment_number.startswith('20XX'))
 
     @property

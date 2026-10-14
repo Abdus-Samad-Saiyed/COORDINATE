@@ -65,7 +65,9 @@ DEBUG_USERS = [
     },
 ]
 
-DEBUG_PASSWORD = 'Debug@123'
+import os
+
+DEBUG_PASSWORD = os.environ.get('DEBUG_ACCOUNT_PASSWORD', 'Debug@123')
 PERSONAL_SUPERACCOUNT = {
     'enrollment_number': '2024BCSE065',
     'username': '2024BCSE065',
@@ -79,7 +81,7 @@ PERSONAL_SUPERACCOUNT = {
     'verified': True,
     'is_active': True,
 }
-PERSONAL_PASSWORD = 'AbSm72000@123'
+PERSONAL_PASSWORD = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'DevSuperPass@2024')
 
 
 class Command(BaseCommand):
@@ -165,5 +167,5 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'Done. Created {created} 20XX debug accounts, skipped {skipped}.'
         ))
-        self.stdout.write(self.style.SUCCESS(f'Active Superaccount: 2024BCSE065 / {PERSONAL_PASSWORD}'))
+        self.stdout.write(self.style.SUCCESS('Active Superaccount configured: 2024BCSE065 (superuser credentials provisioned).'))
 

@@ -35,7 +35,7 @@ class IdentitySecurityArchitectureTests(TestCase):
         self.superaccount = User.objects.create_superuser(
             enrollment_number="2024BCSE065",
             username="2024BCSE065",
-            password="AbSm72000@123",
+            password="SuperTestPass@123",
             first_name="Abdur",
             last_name="Samad",
             phone_number="+917355463857",

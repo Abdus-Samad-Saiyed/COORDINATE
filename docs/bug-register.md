@@ -82,3 +82,14 @@
 | **PERF-01** | P2/3| N+1 query optimization | `annotate(participants_total=Count('participants'))` implemented on ride list. | **ALREADY FIXED** | 8 |
 | **DOC-01** | P3 | Comprehensive documentation | Exhaustive architecture and mobile API scaffolding documentation added to `docs/`. | **FIXED** | Every |
 | **LIC-01** | P1 | Missing MIT license file | `LICENSE` file created at root with standard MIT text and proper attribution to Abdus Samad Saiyed. | **FIXED** | 1 |
+| **SEC-10** | P0 | Staff account takeover via admin desk | `admin_update_phone` and `admin_resolve_physical_verification` locked to superuser-only; targeting superusers strictly blocked; PVR replay blocked; audit logs masked. | **FIXED** | 7 |
+| **SEC-11** | P0 | Open redirect via unvalidated `next` parameter | Added `url_has_allowed_host_and_scheme` validation across `custom_login_view`, `two_factor_verify`, and `passkey_auth_verify`; preserved `next` input in `login.html`. | **FIXED** | 2 |
+| **SEC-12** | P0 | Stored XSS & unvalidated profile-photo upload | Added Pillow format verification, 5MB file-size cap, file extension whitelisting, UUID renaming, and gated `/media/` serving under `DEBUG`. | **FIXED** | 2, 8 |
+| **SEC-13** | P0 | Admin login bypassing 2FA and single session | Routed `admin.site.login = custom_login_view`, forcing staff/superusers through 2FA, rate-limiting, and single-session enforcement. | **FIXED** | 2, 7 |
+| **SEC-14** | P0 | Synthetic debug accounts active in production | Gated `20XX...` debug account 2FA/OTP bypass behind `settings.DEBUG`; rejected `20XX...` applications when `DEBUG=False`. | **FIXED** | 1, 2 |
+| **SEC-15** | P1 | OTP atomicity & signup phone/email binding | Wrapped `verify_phone_otp` in `transaction.atomic()` with `select_for_update()` and `F('attempts_left') - 1`; bound signup verification to both phone and email; normalized E.164. | **FIXED** | 2 |
+| **SEC-16** | P0 | Security OTP client-controlled overrides | Removed `phone_override`/`email_override` in `send_security_otp`; strictly dispatched to authenticated user's registered phone and email. | **FIXED** | 2 |
+| **API-02** | P1 | REST API CSRF, Q NameError, & serialization | Added `@csrf_exempt` to Bearer token endpoints, imported `Q`, fixed `serialize_ride` participant checking, fixed `is_verified` user field, added 2FA and token revocation on logout. | **FIXED** | 6 |
+| **RIDE-06** | P1 | Ride leave ownership & complete concurrency | Enforced participant verification on leave; transferred host ownership if host leaves; locked `complete_ride` against cancelled/future rides; guarded review harassment counters. | **FIXED** | 3 |
+| **TEL-01** | P2 | Fictional hardcoded telemetry numbers | Removed fake seed constants (`3840`, `112500`, `180`, `42`); bound operational telemetry to live cache counters, database queries, and `timezone.localtime()`. | **FIXED** | 7 |
+
