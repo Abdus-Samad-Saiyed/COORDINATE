@@ -1030,9 +1030,20 @@ def review_user(request, ride_id, user_id):
             review.reviewed_user = reviewed_user
             review.save()
 
+            update_fields = []
+            if review.grievance == 'LATE' or review.punctuality_rating <= 2:
+                reviewed_user.late_count = F('late_count') + 1
+                update_fields.append('late_count')
+            elif review.grievance == 'NO_SHOW':
+                reviewed_user.no_show_count = F('no_show_count') + 1
+                update_fields.append('no_show_count')
+
             if review.grievance != 'NONE' or (review.complaint and review.complaint.strip()):
                 reviewed_user.behavior_reports = F('behavior_reports') + 1
-                reviewed_user.save(update_fields=['behavior_reports'])
+                update_fields.append('behavior_reports')
+
+            if update_fields:
+                reviewed_user.save(update_fields=update_fields)
 
             messages.success(request, 'Review submitted successfully.')
             return redirect('ride_detail', ride_id=ride.id)
