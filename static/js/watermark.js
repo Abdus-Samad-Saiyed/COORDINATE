@@ -209,26 +209,29 @@
     document.documentElement.setAttribute('data-theme', selected);
     localStorage.setItem('nexus_theme', selected);
 
-    const icon = document.getElementById('theme-toggle-icon');
-    if (icon) {
+    const icons = document.querySelectorAll('#theme-toggle-icon, .theme-toggle-icon');
+    icons.forEach(icon => {
       if (selected === 'light') {
-        icon.className = 'bi bi-moon-stars-fill text-primary';
+        icon.className = 'bi bi-moon-stars-fill text-primary theme-toggle-icon';
       } else {
-        icon.className = 'bi bi-sun-fill text-warning';
+        icon.className = 'bi bi-sun-fill text-warning theme-toggle-icon';
       }
-    }
+    });
 
     // If custom accent is active, recalculate theme-dependent backgrounds
-    if (localStorage.getItem('nexus_accent') === 'custom') {
+    const currentAccent = localStorage.getItem('nexus_accent') || 'emerald';
+    if (currentAccent === 'custom') {
       const storedHex = localStorage.getItem('nexus_custom_hex') || '#08B74F';
       window.setNexusCustomHex(storedHex, true);
+    } else {
+      applyNexusAccent(currentAccent);
     }
   }
 
   // ------------------------------------------------------------------
-  // Eccentric Theme Switcher with 3-Attempt Resistance Easter Egg
+  // Eccentric Theme Switcher with 4-Attempt Resistance Easter Egg
   // ------------------------------------------------------------------
-  function showEccentricToast(message, icon = 'bi-exclamation-diamond-fill', duration = 4500) {
+  function showEccentricToast(message, icon = 'bi-exclamation-diamond-fill', duration = 4000) {
     let toast = document.getElementById('eccentric-toast');
     if (!toast) {
       toast = document.createElement('div');
@@ -280,12 +283,20 @@
   window.toggleNexusTheme = function () {
     const current = document.documentElement.getAttribute('data-bs-theme') || 'dark';
 
+    // Animate wobble on theme toggle button(s)
+    const btns = document.querySelectorAll('#theme-toggle-btn, .theme-toggle-btn');
+    btns.forEach(btn => {
+      btn.classList.remove('theme-wobble');
+      void btn.offsetWidth;
+      btn.classList.add('theme-wobble');
+    });
+
     if (current === 'light') {
       // Switching back to dark mode is always welcomed and immediate
       lightModeAttempts = 0;
       sessionStorage.setItem('nexus_light_attempts', '0');
       applyNexusTheme('dark');
-      showEccentricToast('Welcome back to sanity. 🌙', 'bi-moon-stars-fill', 3500);
+      showEccentricToast('Welcome back to sanity!', 'bi-moon-stars-fill', 3500);
       return;
     }
 
@@ -294,35 +305,17 @@
     sessionStorage.setItem('nexus_light_attempts', lightModeAttempts.toString());
 
     if (lightModeAttempts === 1) {
-      // Strike 1: Force enter Zen mode & scatter boxes
-      if (typeof window.toggleForegroundScatter === 'function') {
-        const body = document.body;
-        if (!body.classList.contains('foreground-scattered')) {
-          window.toggleForegroundScatter();
-        }
-      }
-      showEccentricToast("Really? You want that? No one wants that. Embrace the dark side.", 'bi-shield-slash-fill', 5000);
+      showEccentricToast("Really dude!?", 'bi-question-diamond-fill', 3800);
     } else if (lightModeAttempts === 2) {
-      // Strike 2: Re-scatter foreground and escalate exasperation
-      if (typeof window.toggleForegroundScatter === 'function') {
-        const body = document.body;
-        if (!body.classList.contains('foreground-scattered')) {
-          window.toggleForegroundScatter();
-        }
-      }
-      showEccentricToast("Don't do this to yourself. Stop it weirdo, or embrace the dark side. You asked for it...", 'bi-exclamation-triangle-fill', 5500);
+      showEccentricToast("Embrace the dark side!", 'bi-moon-stars-fill', 3800);
+    } else if (lightModeAttempts === 3) {
+      showEccentricToast("Don't do that weirdo!", 'bi-emoji-dizzy-fill', 3800);
     } else {
-      // Strike 3: Surrender, bring elements back, switch to light mode
+      // 4th attempt: Let them go into light mode
       lightModeAttempts = 0;
       sessionStorage.setItem('nexus_light_attempts', '0');
-      if (typeof window.toggleForegroundScatter === 'function') {
-        const body = document.body;
-        if (body.classList.contains('foreground-scattered')) {
-          window.toggleForegroundScatter();
-        }
-      }
       applyNexusTheme('light');
-      showEccentricToast("Suit yourself weirdo. Live with your choices. 🙄", 'bi-brightness-high-fill', 5000);
+      showEccentricToast("You asked for it; now live with your choices!", 'bi-sun-fill', 4500);
     }
   };
 

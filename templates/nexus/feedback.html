@@ -44,7 +44,7 @@
                     <!-- Feedback Type Selector -->
                     <div>
                         <label class="form-label text-secondary small fw-semibold text-uppercase">Submission Category</label>
-                        <select id="feedbackType" name="feedback_type" class="form-select bg-dark text-white border-secondary" required>
+                        <select id="feedbackType" name="feedback_type" class="form-select" required>
                             <option value="BUG" {% if request.GET.type == 'BUG' or feedback_type == 'BUG' %}selected{% endif %}>
                                 🐞 Bug Report (Layout issue, error, unexpected behavior)
                             </option>
@@ -67,7 +67,7 @@
                                id="feedbackTitle"
                                name="title"
                                value="{{ title|default:'' }}"
-                               class="form-control bg-dark text-white border-secondary"
+                               class="form-control"
                                placeholder="e.g. Ride list date stepper resets on refresh, or Proposal for hostel print module"
                                maxlength="200"
                                required>
@@ -78,7 +78,7 @@
                         <label class="form-label text-secondary small fw-semibold text-uppercase">Detailed Description</label>
                         <textarea id="feedbackDesc"
                                   name="description"
-                                  class="form-control bg-dark text-white border-secondary"
+                                  class="form-control"
                                   rows="6"
                                   placeholder="Describe the issue or proposal clearly. For bugs, include steps to reproduce..."
                                   required>{{ description|default:'' }}</textarea>
@@ -91,7 +91,7 @@
                                    id="submitterName"
                                    name="submitter_name"
                                    value="{% if user.is_authenticated %}{{ user.get_full_name }}{% else %}{{ submitter_name|default:'' }}{% endif %}"
-                                   class="form-control bg-dark text-white border-secondary"
+                                   class="form-control"
                                    placeholder="Your name or alias">
                         </div>
                         <div class="col-md-6">
@@ -99,7 +99,7 @@
                             <input type="text"
                                    name="submitter_contact"
                                    value="{% if user.is_authenticated %}{{ user.enrollment_number }}{% else %}{{ submitter_contact|default:'' }}{% endif %}"
-                                   class="form-control bg-dark text-white border-secondary"
+                                   class="form-control"
                                    placeholder="Enrollment no. or mobile">
                         </div>
                     </div>

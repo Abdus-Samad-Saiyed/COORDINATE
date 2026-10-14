@@ -19,8 +19,8 @@
     <script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
 
     <!-- Custom Theme & Watermark Styles -->
-    <link rel="stylesheet" href="{% static 'css/main.css' %}?v=2.8.0">
-    <link rel="stylesheet" href="{% static 'css/watermark.css' %}?v=2.8.0">
+    <link rel="stylesheet" href="{% static 'css/main.css' %}?v=2.9.0">
+    <link rel="stylesheet" href="{% static 'css/watermark.css' %}?v=2.9.0">
     <script>
         (function() {
             try {
@@ -308,13 +308,20 @@
                 <span>CAMPUS <span class="green-accent">NEXUS</span></span>
             </a>
 
+            <!-- Mobile Hamburger Toggle -->
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain" aria-controls="navbarMain" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
             <div class="collapse navbar-collapse" id="navbarMain">
+                <!-- Primary Nav Navigation Links -->
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3 gap-lg-1">
                     {% if user.is_authenticated %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active fw-semibold{% endif %}" href="{% url 'dashboard' %}">
+                                <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                            </a>
+                        </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.resolver_match.url_name == 'ride_list' %}active fw-semibold{% endif %}" href="{% url 'ride_list' %}">
                                 <i class="bi bi-car-front-fill me-1"></i> Browse Rides
@@ -330,11 +337,6 @@
                                 <i class="bi bi-chat-left-dots-fill me-1"></i> Messages
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active fw-semibold{% endif %}" href="{% url 'dashboard' %}">
-                                <i class="bi bi-speedometer2 me-1"></i> Dashboard
-                            </a>
-                        </li>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="bi bi-compass me-1"></i> Explore
@@ -345,7 +347,7 @@
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'contributors' %}"><i class="bi bi-people me-2 text-info"></i>Contributors</a></li>
                                 <li><a class="dropdown-item" href="{% url 'about' %}"><i class="bi bi-info-circle me-2 text-secondary"></i>About Nexus</a></li>
-                                <li><a class="dropdown-item" href="{% url 'contact' %}"><i class="bi bi-envelope me-2 text-warning"></i>Contact</a></li>
+                                <li><a class="dropdown-item" href="{% url 'contact' %}"><i class="bi bi-envelope me-2 text-warning"></i>Contact Desk</a></li>
                             </ul>
                         </li>
                     {% else %}
@@ -372,26 +374,31 @@
                     {% endif %}
                 </ul>
 
-                <div class="d-flex align-items-center gap-2 flex-wrap">
+                <!-- Right Utility Bar & User Controls -->
+                <div class="d-flex align-items-center gap-2 ms-lg-auto pt-2 pt-lg-0">
+                    <!-- Direct Dedicated Theme Toggle Button -->
+                    <button class="btn btn-icon-nav theme-toggle-btn" id="theme-toggle-btn" type="button" onclick="window.toggleNexusTheme()" title="Switch Light/Dark Mode" aria-label="Toggle theme">
+                        <i class="bi bi-sun-fill text-warning theme-toggle-icon" id="theme-toggle-icon"></i>
+                    </button>
+
                     <!-- Direct Zen Clock Reveal Button -->
                     <button class="zen-nav-btn" type="button" onclick="window.toggleForegroundScatter()" title="Reveal Clock (Zen Mode)">
                         <i class="bi bi-clock-history"></i>
                         <span class="d-none d-md-inline">Zen Mode</span>
                     </button>
 
-                    <!-- Unified Visual Effects & Canvas Settings Dropdown -->
+                    <!-- Visual Effects & Custom Accents Dropdown -->
                     <div class="dropdown">
-                        <button class="btn btn-dark-custom btn-sm dropdown-toggle d-flex align-items-center gap-1 py-1 px-2" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Visual Effects & Display Configuration">
+                        <button class="btn btn-icon-nav" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Visual Controls & Custom Accents">
                             <i class="bi bi-palette2 green-accent"></i>
-                            <span class="d-none d-lg-inline small">Effects</span>
                         </button>
                         <div class="dropdown-menu dropdown-menu-end shadow p-3" style="min-width: 320px;">
-                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary">
                                 <h6 class="mb-0 text-uppercase small fw-bold">
                                     <i class="bi bi-sliders me-1 green-accent"></i> Visual Controls
                                 </h6>
-                                <button type="button" class="btn btn-sm btn-dark-custom py-0 px-2" onclick="window.toggleNexusTheme()" title="Switch Light/Dark Mode">
-                                    <i class="bi bi-sun-fill text-warning" id="theme-toggle-icon"></i>
+                                <button type="button" class="btn btn-sm btn-icon-nav" onclick="window.toggleNexusTheme()" title="Switch Light/Dark Mode">
+                                    <i class="bi bi-sun-fill text-warning theme-toggle-icon"></i>
                                 </button>
                             </div>
 
@@ -528,45 +535,103 @@
                     </div>
 
                     {% if user.is_authenticated %}
-                        <a href="{% url 'profile' user.enrollment_number %}" class="btn btn-dark-custom btn-sm d-flex align-items-center gap-2 py-1 px-2" title="My Profile">
-                            {% if user.profile_photo %}
-                                <img src="{{ user.profile_photo.url }}" alt="{{ user.enrollment_number }}" class="rounded-circle object-fit-cover" style="width: 20px; height: 20px;" onerror="this.onerror=null; this.src=''; this.parentElement.innerHTML='<i class=\'bi bi-person-circle\'></i><span>{{ user.enrollment_number }}</span>';">
-                            {% else %}
-                                <i class="bi bi-person-circle"></i>
-                            {% endif %}
-                            <span class="small">{{ user.enrollment_number }}</span>
-                        </a>
-
-                        {% if user.is_staff or user.is_superuser %}
-                            <div class="dropdown">
-                                <button class="btn btn-outline-green btn-sm dropdown-toggle d-flex align-items-center gap-1 py-1 px-2" type="button" data-bs-toggle="dropdown">
-                                    <i class="bi bi-shield-lock-fill"></i>
-                                    <span class="d-none d-md-inline small">Governance</span>
-                                </button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow">
-                                    <li><a class="dropdown-item" href="{% url 'operational_dashboard' %}"><i class="bi bi-speedometer me-2 text-success"></i>Operations Overview</a></li>
-                                    {% if user.is_superuser %}
-                                        <li><a class="dropdown-item" href="{% url 'manage_superusers' %}"><i class="bi bi-shield-shaded me-2 text-danger"></i>Superuser Control</a></li>
-                                    {% endif %}
-                                    <li><a class="dropdown-item" href="{% url 'application_list' %}"><i class="bi bi-card-checklist me-2 text-info"></i>Pending Applications</a></li>
-                                    <li><a class="dropdown-item" href="{% url 'admin_analytics' %}"><i class="bi bi-graph-up me-2 text-warning"></i>Ride Analytics</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{% url 'admin:index' %}" target="_blank"><i class="bi bi-database-lock me-2 text-secondary"></i>Django Admin</a></li>
-                                </ul>
-                            </div>
-                        {% endif %}
-
-                        <form action="{% url 'logout' %}" method="POST" class="m-0 d-inline">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-dark-custom btn-sm text-danger py-1 px-2" title="Logout">
-                                <i class="bi bi-box-arrow-right"></i>
+                        <!-- Consolidated User Profile & Governance Dropdown -->
+                        <div class="dropdown">
+                            <button class="btn btn-user-menu dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                {% if user.profile_photo %}
+                                    <img src="{{ user.profile_photo.url }}" alt="{{ user.enrollment_number }}" class="rounded-circle object-fit-cover user-avatar-nav" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='inline-flex';">
+                                    <span class="user-avatar-placeholder" style="display:none;"><i class="bi bi-person-fill"></i></span>
+                                {% else %}
+                                    <span class="user-avatar-placeholder"><i class="bi bi-person-fill"></i></span>
+                                {% endif %}
+                                <span class="d-none d-sm-inline font-mono small fw-semibold">{{ user.enrollment_number }}</span>
+                                {% if user.is_superuser %}
+                                    <span class="badge bg-danger-subtle text-danger py-0 px-1 d-none d-md-inline" style="font-size: 0.62rem;">SUPER</span>
+                                {% elif user.is_staff %}
+                                    <span class="badge bg-success-subtle green-accent py-0 px-1 d-none d-md-inline" style="font-size: 0.62rem;">STAFF</span>
+                                {% endif %}
                             </button>
-                        </form>
+                            <ul class="dropdown-menu dropdown-menu-end shadow-lg py-2" style="min-width: 240px;">
+                                <li class="px-3 py-2 border-bottom border-secondary mb-1">
+                                    <div class="fw-bold text-truncate">{{ user.get_full_name|default:user.enrollment_number }}</div>
+                                    <div class="small text-secondary font-mono">{{ user.enrollment_number }}</div>
+                                    {% if user.is_superuser %}
+                                        <span class="badge bg-danger-subtle text-danger mt-1" style="font-size: 0.65rem;">Superuser Authority</span>
+                                    {% elif user.is_staff %}
+                                        <span class="badge bg-success-subtle green-accent mt-1" style="font-size: 0.65rem;">Institute Staff</span>
+                                    {% endif %}
+                                </li>
+                                <li>
+                                    <a class="dropdown-item py-2" href="{% url 'profile' user.enrollment_number %}">
+                                        <i class="bi bi-person-circle me-2 text-primary"></i>My Profile
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item py-2" href="{% url 'dashboard' %}">
+                                        <i class="bi bi-speedometer2 me-2 text-success"></i>Dashboard
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item py-2" href="{% url 'my_rides' %}">
+                                        <i class="bi bi-clock-history me-2 text-info"></i>My Rides
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item py-2" href="{% url 'messages_inbox' %}">
+                                        <i class="bi bi-chat-left-dots me-2 text-warning"></i>Messages
+                                    </a>
+                                </li>
+
+                                {% if user.is_staff or user.is_superuser %}
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li class="dropdown-header small text-uppercase fw-bold text-secondary px-3 py-1">
+                                        <i class="bi bi-shield-lock-fill green-accent me-1"></i> Governance
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-1" href="{% url 'operational_dashboard' %}">
+                                            <i class="bi bi-speedometer me-2 text-success"></i>Operations Overview
+                                        </a>
+                                    </li>
+                                    {% if user.is_superuser %}
+                                        <li>
+                                            <a class="dropdown-item py-1" href="{% url 'manage_superusers' %}">
+                                                <i class="bi bi-shield-shaded me-2 text-danger"></i>Superuser Control
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                    <li>
+                                        <a class="dropdown-item py-1" href="{% url 'application_list' %}">
+                                            <i class="bi bi-card-checklist me-2 text-info"></i>Pending Applications
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-1" href="{% url 'admin_analytics' %}">
+                                            <i class="bi bi-graph-up me-2 text-warning"></i>Ride Analytics
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-1" href="{% url 'admin:index' %}" target="_blank">
+                                            <i class="bi bi-database-lock me-2 text-secondary"></i>Django Admin
+                                        </a>
+                                    </li>
+                                {% endif %}
+
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <form action="{% url 'logout' %}" method="POST" class="m-0 p-0">
+                                        {% csrf_token %}
+                                        <button type="submit" class="dropdown-item py-2 text-danger d-flex align-items-center">
+                                            <i class="bi bi-box-arrow-right me-2"></i>Sign Out
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </div>
                     {% else %}
-                        <a href="{% url 'login' %}" class="btn btn-dark-custom btn-sm">
+                        <a href="{% url 'login' %}" class="btn btn-dark-custom btn-sm px-3">
                             <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
                         </a>
-                        <a href="{% url 'apply_account' %}" class="btn btn-green btn-sm">
+                        <a href="{% url 'apply_account' %}" class="btn btn-green btn-sm px-3">
                             <i class="bi bi-person-plus-fill me-1"></i> Apply
                         </a>
                     {% endif %}
@@ -638,7 +703,7 @@
     <!-- Bootstrap Bundle JS with Subresource Integrity (SRI) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <!-- Clockwork Watermark Engine -->
-    <script src="{% static 'js/watermark.js' %}?v=2.8.0"></script>
+    <script src="{% static 'js/watermark.js' %}?v=2.9.0"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

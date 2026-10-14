@@ -372,7 +372,7 @@
                         <!-- Offending Passenger -->
                         <div class="col-md-6">
                             <label class="form-label small fw-semibold text-secondary">Reported Passenger / Subject</label>
-                            <select name="reported_user" id="reportedUserSelect" class="form-select bg-dark text-white border-secondary">
+                            <select name="reported_user" id="reportedUserSelect" class="form-select">
                                 <option value="">Entire Ride / Host Coordination</option>
                                 {% for p in participants %}
                                     {% if p.user != request.user %}
@@ -387,7 +387,7 @@
                         <!-- Misconduct Category -->
                         <div class="col-md-6">
                             <label class="form-label small fw-semibold text-secondary">Misconduct Classification</label>
-                            <select name="category" class="form-select bg-dark text-white border-secondary" required>
+                            <select name="category" class="form-select" required>
                                 <option value="HARASSMENT">Harassment or Intimidation</option>
                                 <option value="INAPPROPRIATE_LANGUAGE">Inappropriate or Abusive Language</option>
                                 <option value="UNSAFE_BEHAVIOR">Unsafe Travel or Reckless Conduct</option>
@@ -400,16 +400,16 @@
                         <!-- Incident Statement -->
                         <div class="col-12">
                             <label class="form-label small fw-semibold text-secondary">Detailed Incident Statement</label>
-                            <textarea name="statement" class="form-control bg-dark text-white border-secondary" rows="4"
+                            <textarea name="statement" class="form-control" rows="4"
                                       placeholder="Provide an objective, factual description of what occurred, where, and when..." required></textarea>
                             <div class="form-text text-secondary small">Your statement will be submitted to the Proctorial Board verbatim under your enrollment number ({{ request.user.enrollment_number }}).</div>
                         </div>
 
                         <!-- Chat Log Evidence Checkbox -->
                         <div class="col-12">
-                            <div class="form-check p-3 rounded border border-secondary bg-black bg-opacity-40">
+                            <div class="form-check p-3 rounded border border-secondary">
                                 <input class="form-check-input" type="checkbox" name="include_chat_log" id="includeChatLogCheck" checked>
-                                <label class="form-check-label small text-white" for="includeChatLogCheck">
+                                <label class="form-check-label small" for="includeChatLogCheck">
                                     <strong>Include timestamped in-ride chat transcript as evidentiary log</strong>
                                 </label>
                                 <div class="text-secondary small mt-1">

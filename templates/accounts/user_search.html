@@ -28,13 +28,13 @@
         <form method="GET" action="{% url 'user_search' %}" class="row g-2 align-items-center">
             <div class="col-md-9 col-lg-10">
                 <div class="input-group">
-                    <span class="input-group-text bg-dark border-secondary text-secondary">
+                    <span class="input-group-text">
                         <i class="bi bi-search"></i>
                     </span>
                     <input type="text"
                            name="q"
                            value="{{ query }}"
-                           class="form-control bg-dark text-white border-secondary"
+                           class="form-control"
                            placeholder="Search by enrollment number (e.g. 2024BCSE), name, or branch..."
                            autofocus>
                 </div>
