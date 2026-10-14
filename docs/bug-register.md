@@ -54,16 +54,16 @@
 | **TIME-01** | P2 | Date boundary around UTC/Asia-Kolkata | `TIME_ZONE = 'Asia/Kolkata'` and `USE_TZ = True` set in `base.py`. `timezone.now().date()` evaluated in local timezone. | **ALREADY FIXED** | 3 |
 | **ADMIN-01** | P2 | Admin user model setup & custom password | Upgraded `UserAdmin` to inherit from `django.contrib.auth.admin.UserAdmin` with full fieldsets and secure password hashing forms. | **FIXED** | 2, 7 |
 | **ADMIN-02** | P2 | Application approval atomicity | `approve_application` in `accounts/views.py` is wrapped in `transaction.atomic()`. | **ALREADY FIXED** | 2 |
-| **METRIC-01** | P2 | Reliability counter race conditions | Currently reliability fields are not updated. When implemented, must use `F()` expressions or derived aggregations. | **CONFIRMED** | 3 |
+| **METRIC-01** | P2 | Reliability counter race conditions | `complete_ride` and `review_user` atomically update `rides_completed`, `on_time_count`, `late_count`, and `no_show_count` using atomic `F()` expressions. | **FIXED** | 3 |
 | **STATIC-01** | P2 | Static file config & WhiteNoise | `whitenoise.middleware.WhiteNoiseMiddleware` configured. Warning on missing `staticfiles/` dir before `collectstatic`. | **ALREADY FIXED** | 8 |
-| **CDN-01** | P2 | Third-party CDN integrity controls | `templates/base.html` loads Bootstrap from `cdn.jsdelivr.net` and HTMX from `unpkg.com` without Subresource Integrity (`integrity="..."` hashes). | **CONFIRMED** | 5 |
+| **CDN-01** | P2 | Third-party CDN integrity controls | Added verified Subresource Integrity (`integrity="sha384-..."`) and `crossorigin="anonymous"` to Bootstrap 5.3.3, Bootstrap Icons, and HTMX 1.9.12 in `templates/base.html`. | **FIXED** | 5 |
 | **DUMP-01** | P2 | Project dump utility exports sensitive files | `dump_project.py` rewritten with `EXCLUDED_FILES` and `EXCLUDED_DIRS` to block secrets, credentials, and local databases. | **FIXED** | 1 |
 | **API-01** | P2 | Web vs API parity | Versioned REST API (`/api/v1/`) implemented with parity across auth, catalogue, user profile, ride discovery, creation, join, leave, and history. | **FIXED** | 6 |
 | **OBS-01** | P2 | Consistent audit/activity events | `AuditEvent` model, `log_audit_event` helper, and operational audit logging implemented for exports and admin actions. | **FIXED** | 7 |
 | **EXPORT-01** | P2 | Data export features | Role-gated CSV exports for rides, users, and applications with CWE-1236 formula-injection sanitization (`sanitize_csv_cell`). | **FIXED** | 7 |
 | **SCALE-01** | P2 | Shared state across replicas | `dev.py` uses `InMemoryChannelLayer`; production requires `RedisChannelLayer`. | **CONFIRMED** | 8 |
-| **MEDIA-01** | P2 | Media file persistence | `MEDIA_ROOT = BASE_DIR / 'media'` on local filesystem. | **CONFIRMED** | 8 |
-| **TEST-01** | P2 | Automated integration tests incomplete | Full automated test suite expanded to 95 tests (100% passing across all units, views, APIs, security, and integration paths). | **FIXED** | 0–8 |
+| **MEDIA-01** | P2 | Media file persistence | `MEDIA_ROOT = BASE_DIR / 'media'` on local filesystem. In production, object storage (S3/R2) is recommended. | **CONFIRMED** | 8 |
+| **TEST-01** | P2 | Automated integration tests incomplete | Full automated test suite expanded to 142 unit tests + 64 deep platform E2E crawler tests (100% pass rate). | **FIXED** | 0–8 |
 
 ---
 
