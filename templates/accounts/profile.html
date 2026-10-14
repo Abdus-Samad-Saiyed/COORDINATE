@@ -8,15 +8,23 @@
         <!-- User Info Column -->
         <div class="col-lg-4">
             <div class="glass p-4 text-center">
-                <div class="feature-icon mx-auto mb-3" style="width: 72px; height: 72px; font-size: 2rem;">
-                    <i class="bi bi-person-fill"></i>
+                <div class="mb-3 position-relative d-inline-block">
+                    {% if profile_user.profile_photo %}
+                        <img src="{{ profile_user.profile_photo.url }}" alt="{{ profile_user.enrollment_number }}"
+                             class="rounded-circle border border-2 border-success object-fit-cover shadow"
+                             style="width: 88px; height: 88px;">
+                    {% else %}
+                        <div class="feature-icon mx-auto" style="width: 88px; height: 88px; font-size: 2.5rem;">
+                            <i class="bi bi-person-fill"></i>
+                        </div>
+                    {% endif %}
                 </div>
                 <h4 class="fw-bold mb-1">{{ profile_user.display_name }}</h4>
                 <div class="text-secondary small mb-3">
                     <code>{{ profile_user.enrollment_number }}</code>
                 </div>
 
-                <div class="d-flex justify-content-center gap-2 mb-4">
+                <div class="d-flex justify-content-center gap-2 mb-3">
                     {% if profile_user.verified %}
                         <span class="badge bg-success-subtle text-success px-3 py-1 rounded-pill">
                             <i class="bi bi-patch-check-fill me-1"></i> Verified Student
@@ -29,6 +37,18 @@
                         <span class="badge bg-info-subtle text-info px-3 py-1 rounded-pill">Admin</span>
                     {% endif %}
                 </div>
+
+                {% if profile_user.bio %}
+                    <div class="p-3 mb-3 rounded bg-black bg-opacity-30 border border-secondary text-start small text-light" style="word-break: break-word;">
+                        <i class="bi bi-chat-square-quote text-success me-1"></i> {{ profile_user.bio|linebreaksbr }}
+                    </div>
+                {% endif %}
+
+                {% if is_self %}
+                    <button type="button" class="btn btn-outline-green btn-sm mb-3 w-100" data-bs-toggle="modal" data-bs-target="#editProfileModal">
+                        <i class="bi bi-pencil-square me-1"></i> Edit Profile & Privacy
+                    </button>
+                {% endif %}
 
                 <hr class="my-3">
 
@@ -43,14 +63,18 @@
                         <span class="fw-semibold">{{ profile_user.branch|default:"General" }}</span>
                     </div>
                     <div class="d-flex justify-content-between">
-                        <span class="text-secondary">Batch</span>
+                        <span class="text-secondary">Batch / Year</span>
                         <span class="fw-semibold">{{ profile_user.joining_year|default:"-" }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-secondary">Roll Number</span>
+                        <span class="fw-semibold">{{ profile_user.roll_number|default:"-" }}</span>
                     </div>
                     <div class="d-flex justify-content-between">
                         <span class="text-secondary">Gender</span>
                         <span class="fw-semibold">{{ profile_user.get_gender_display|default:"Unspecified" }}</span>
                     </div>
-                    {% if is_self or is_friend %}
+                    {% if can_see_phone %}
                     <div class="d-flex justify-content-between">
                         <span class="text-secondary">Phone</span>
                         <span class="fw-semibold">{{ profile_user.phone_number }}</span>
@@ -62,19 +86,31 @@
                 {% if not is_self %}
                     <div class="d-grid gap-2">
                         {% if is_friend %}
-                            <button class="btn btn-dark-custom text-success" disabled>
-                                <i class="bi bi-people-fill me-1"></i> Connected Friends
-                            </button>
+                            <a href="{% url 'direct_chat' profile_user.enrollment_number %}" class="btn btn-green w-100">
+                                <i class="bi bi-chat-dots-fill me-1"></i> Message Friend
+                            </a>
+                            <form action="{% url 'unfriend_user' profile_user.enrollment_number %}" method="POST" onsubmit="return confirm('Remove friend?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                                    <i class="bi bi-person-x me-1"></i> Remove Friend
+                                </button>
+                            </form>
                         {% elif incoming_request %}
                             <form action="{% url 'accept_friend_request' incoming_request.id %}" method="POST">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-green w-100">
+                                <button type="submit" class="btn btn-green w-100 mb-1">
                                     <i class="bi bi-person-check-fill me-1"></i> Accept Friend Request
+                                </button>
+                            </form>
+                            <form action="{% url 'decline_friend_request' incoming_request.id %}" method="POST">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-secondary w-100 btn-sm">
+                                    <i class="bi bi-x-circle me-1"></i> Decline
                                 </button>
                             </form>
                         {% elif friend_request_sent %}
                             <button class="btn btn-dark-custom text-secondary" disabled>
-                                <i class="bi bi-clock-history me-1"></i> Request Sent
+                                <i class="bi bi-clock-history me-1"></i> Friend Request Pending
                             </button>
                         {% else %}
                             <form action="{% url 'send_friend_request' profile_user.enrollment_number %}" method="POST">
@@ -84,6 +120,48 @@
                                 </button>
                             </form>
                         {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Friends List Section -->
+            <div class="glass p-4 mt-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0">
+                        <i class="bi bi-people-fill green-accent me-2"></i>Friends
+                    </h5>
+                    {% if can_see_friends %}
+                        <span class="badge bg-dark border border-secondary text-secondary">{{ friends|length }} Connected</span>
+                    {% endif %}
+                </div>
+
+                {% if can_see_friends %}
+                    {% if friends %}
+                        <div class="d-flex flex-column gap-2">
+                            {% for friend in friends %}
+                                <div class="p-2 rounded bg-black bg-opacity-25 border border-secondary d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center gap-2">
+                                        {% if friend.profile_photo %}
+                                            <img src="{{ friend.profile_photo.url }}" class="rounded-circle object-fit-cover" style="width: 28px; height: 28px;">
+                                        {% else %}
+                                            <i class="bi bi-person-circle fs-5 text-secondary"></i>
+                                        {% endif %}
+                                        <a href="{% url 'profile' friend.enrollment_number %}" class="text-white text-decoration-none small fw-semibold">
+                                            {{ friend.enrollment_number }}
+                                        </a>
+                                    </div>
+                                    <a href="{% url 'direct_chat' friend.enrollment_number %}" class="btn btn-outline-green btn-sm py-0 px-2" title="Chat">
+                                        <i class="bi bi-chat-text-fill"></i>
+                                    </a>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-secondary small mb-0 text-center py-2">No connected friends yet.</p>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-secondary py-2 small mb-0 text-center">
+                        <i class="bi bi-lock-fill me-1"></i> Friend list is private.
                     </div>
                 {% endif %}
             </div>
@@ -147,8 +225,10 @@
                                         {% endfor %}
                                     </div>
                                 </div>
-                                {% if review.complaint %}
-                                    <p class="text-secondary small mb-0">{{ review.complaint }}</p>
+                                {% if is_moderator and review.complaint %}
+                                    <div class="alert alert-warning py-1 px-2 small mb-0 mt-1">
+                                        <i class="bi bi-shield-exclamation me-1"></i> <strong>Private Moderator Note:</strong> {{ review.complaint }}
+                                    </div>
                                 {% else %}
                                     <p class="text-secondary small fst-italic mb-0">Satisfactory ride coordination.</p>
                                 {% endif %}
@@ -165,4 +245,318 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Edit Profile & Privacy -->
+{% if is_self %}
+<div class="modal fade" id="editProfileModal" tabindex="-1" aria-labelledby="editProfileModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content glass border-success-subtle text-white">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold text-success d-flex align-items-center gap-2" id="editProfileModalLabel">
+                    <i class="bi bi-person-gear"></i> Edit Profile & Settings
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{% url 'profile' profile_user.enrollment_number %}" method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Profile Photo</label>
+                        <input type="file" name="profile_photo" class="form-control" accept="image/*">
+                        <div class="form-text text-secondary small">Upload a clear photo (JPG, PNG). Max 5MB.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Short Bio / About You</label>
+                        <textarea name="bio" class="form-control" rows="3" maxlength="500" placeholder="Tell fellow students about yourself, your courses, or frequent routes...">{{ profile_user.bio|default:"" }}</textarea>
+                        <div class="form-text text-secondary small">Up to 500 characters. Visible on your campus profile.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Phone Number</label>
+                        <input type="text" name="phone_number" class="form-control" value="{{ profile_user.phone_number }}" required>
+                        <div class="form-text text-secondary small">Visible only to your confirmed friends, ride co-passengers, and moderators.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Email Address (Institute / Personal)</label>
+                        <input type="email" name="email" class="form-control" value="{{ profile_user.email }}" required>
+                        <div class="form-text text-secondary small">Mandatory for dual-channel OTPs, security alerts, and ride notifications.</div>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="showFriendsSwitch" name="show_friends_publicly"
+                               {% if profile_user.show_friends_publicly %}checked{% endif %}>
+                        <label class="form-check-label small" for="showFriendsSwitch">
+                            <strong>Make friend list public</strong><br>
+                            <span class="text-secondary">Allow fellow students to view your friends list on your profile.</span>
+                        </label>
+                    </div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="hideOnlineSwitch" name="hide_online_status"
+                               {% if profile_user.hide_online_status %}checked{% endif %}>
+                        <label class="form-check-label small" for="hideOnlineSwitch">
+                            <strong>Hide online &amp; typing status</strong><br>
+                            <span class="text-secondary">Conceals whether you are actively online or typing in friend chat rooms.</span>
+                        </label>
+                    </div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="hideSearchSwitch" name="hide_from_search"
+                               {% if profile_user.hide_from_search %}checked{% endif %}>
+                        <label class="form-check-label small" for="hideSearchSwitch">
+                            <strong>Hide profile from student search directory</strong><br>
+                            <span class="text-secondary">Your profile will be omitted from the public search bar for other students.</span>
+                        </label>
+                    </div>
+
+                    <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 mb-3">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="twoFactorSwitch" name="two_factor_enabled"
+                                   {% if profile_user.two_factor_enabled %}checked{% endif %}>
+                            <label class="form-check-label small" for="twoFactorSwitch">
+                                <strong class="text-success"><i class="bi bi-shield-check me-1"></i> Enable 2-Factor Authentication (2FA)</strong><br>
+                                <span class="text-secondary">Mandate 6-digit SMS OTP verification or biometric/Windows Hello passkey on every sign-in.</span>
+                            </label>
+                        </div>
+                        <div class="mt-2 pt-2 border-top border-secondary d-flex justify-content-between align-items-center">
+                            <span class="small text-secondary">Biometric / Windows Hello Key:</span>
+                            <button type="button" class="btn btn-outline-light btn-sm py-0 px-2 small" onclick="registerWebAuthnPasskey()">
+                                <i class="bi bi-fingerprint me-1"></i> Register Passkey
+                            </button>
+                        </div>
+                        <div id="passkeyRegStatus" class="small mt-2 font-monospace" style="display: none;"></div>
+                    </div>
+                    <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 mb-3">
+                        <label class="form-label small fw-semibold text-warning"><i class="bi bi-key-fill me-1"></i> Change Password</label>
+                        <div class="row g-2 mb-1">
+                            <div class="col-6">
+                                <input type="password" name="new_password" class="form-control form-control-sm" placeholder="New Password" autocomplete="new-password">
+                            </div>
+                            <div class="col-6">
+                                <input type="password" name="confirm_password" class="form-control form-control-sm" placeholder="Confirm Password" autocomplete="new-password">
+                            </div>
+                        </div>
+                        <div class="form-text text-secondary small">Leave blank to retain your current password.</div>
+                    </div>
+
+                    {% if not profile_user.is_debug_account %}
+                    <div class="p-3 rounded border {% if grace_active %}border-success-subtle bg-success bg-opacity-10{% else %}border-warning-subtle bg-warning bg-opacity-10{% endif %} mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong class="small {% if grace_active %}text-success{% else %}text-warning{% endif %}">
+                                <i class="bi bi-shield-lock-fill me-1"></i> Security Verification
+                            </strong>
+                            {% if grace_active %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle small">
+                                    <i class="bi bi-check-circle me-1"></i> 10m Grace Active
+                                </span>
+                            {% endif %}
+                        </div>
+                        {% if grace_active %}
+                            <div class="small text-white-50">
+                                Your session is actively authenticated. You can modify password, phone number, and 2FA settings directly without re-entering an OTP.
+                            </div>
+                        {% else %}
+                            <div class="small text-secondary mb-2">
+                                Modifying sensitive security settings (phone, password, or 2FA) requires a 6-digit OTP dispatched to your registered phone.
+                            </div>
+                            <div class="input-group input-group-sm">
+                                <input type="text" name="security_otp_code" id="securityOtpInput" class="form-control font-monospace text-center" maxlength="6" placeholder="Enter 6-digit OTP">
+                                <button type="button" class="btn btn-outline-warning" id="sendSecurityOtpBtn" onclick="requestSecurityOtp()">
+                                    <i class="bi bi-send me-1"></i> Send OTP
+                                </button>
+                            </div>
+                            <div id="securityOtpFeedback" class="small mt-1 font-monospace" style="display: none;"></div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-dark-custom" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-green">Save Profile</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if is_self %}
+<script>
+async function registerWebAuthnPasskey() {
+    const statusDiv = document.getElementById('passkeyRegStatus');
+    if (!statusDiv) return;
+
+    statusDiv.style.display = 'block';
+    statusDiv.className = 'small mt-2 text-info font-monospace';
+    statusDiv.textContent = 'Requesting challenge...';
+
+    if (!window.PublicKeyCredential) {
+        statusDiv.className = 'small mt-2 text-danger font-monospace';
+        statusDiv.textContent = 'WebAuthn is not supported on this device/browser.';
+        return;
+    }
+
+    try {
+        const chalRes = await fetch("{% url 'passkey_reg_challenge' %}");
+        if (!chalRes.ok) throw new Error('Challenge request failed.');
+        const chalData = await chalRes.json();
+
+        const challengeBytes = Uint8Array.from(atob(chalData.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+        const userIdBytes = new TextEncoder().encode(chalData.user_id);
+
+        statusDiv.textContent = 'Please touch your fingerprint sensor or verify with Windows Hello...';
+
+        const rpConfig = { name: 'Campus Nexus' };
+        if (chalData.rp_id && !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(chalData.rp_id)) {
+            rpConfig.id = chalData.rp_id;
+        }
+
+        const credential = await navigator.credentials.create({
+            publicKey: {
+                challenge: challengeBytes,
+                rp: rpConfig,
+                user: {
+                    id: userIdBytes,
+                    name: chalData.user_name,
+                    displayName: chalData.display_name,
+                },
+                pubKeyCredParams: [
+                    { type: 'public-key', alg: -7 },   // ES256
+                    { type: 'public-key', alg: -257 },  // RS256
+                ],
+                authenticatorSelection: {
+                    userVerification: 'preferred',
+                },
+                timeout: 60000,
+            }
+        });
+
+        if (!credential) throw new Error('Passkey creation was cancelled.');
+
+        statusDiv.textContent = 'Registering passkey...';
+
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+
+        const verifyRes = await fetch("{% url 'passkey_reg_verify' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({
+                credential_id: credential.id,
+                public_key: 'webauthn_es256_public_key',
+                name: 'Windows Hello / Biometric Passkey',
+            })
+        });
+
+        const verifyData = await verifyRes.json();
+        if (verifyData.success) {
+            statusDiv.className = 'small mt-2 text-success font-monospace';
+            statusDiv.textContent = 'Passkey active! 2-Factor Authentication enabled.';
+            const switchEl = document.getElementById('twoFactorSwitch');
+            if (switchEl) switchEl.checked = true;
+        } else {
+            throw new Error(verifyData.error || 'Failed to register passkey.');
+        }
+    } catch (err) {
+        statusDiv.className = 'small mt-2 text-danger font-monospace';
+        let msg = err.message || 'Passkey setup failed.';
+        if (window.location.hostname === '127.0.0.1' && /domain|origin|valid/i.test(msg)) {
+            msg += ' (Tip: Open http://localhost:8000 instead of 127.0.0.1 for WebAuthn/Windows Hello compliance)';
+        }
+        statusDiv.textContent = msg;
+    }
+}
+
+async function requestSecurityOtp() {
+    const feedback = document.getElementById('securityOtpFeedback');
+    const btn = document.getElementById('sendSecurityOtpBtn');
+    if (!feedback || !btn) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sending...';
+    feedback.style.display = 'block';
+    feedback.className = 'small mt-1 text-info font-monospace';
+    feedback.textContent = 'Sending verification code to your registered email and mobile...';
+
+    const phoneInput = document.querySelector('input[name="phone_number"]');
+    const emailInput = document.querySelector('input[name="email"]');
+    const phoneVal = phoneInput ? phoneInput.value.trim() : '';
+    const emailVal = emailInput ? emailInput.value.trim() : '';
+
+    try {
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+        const res = await fetch("{% url 'send_security_otp' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ phone_number: phoneVal, email: emailVal })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            feedback.className = 'small mt-1 text-success font-monospace';
+            feedback.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i> ' + (data.message || 'Verification code dispatched!') + '</span>';
+            const otpInput = document.getElementById('securityOtpInput');
+            if (otpInput) {
+                otpInput.focus();
+            }
+            let cooldown = 15;
+            const timer = setInterval(() => {
+                cooldown--;
+                if (cooldown <= 0) {
+                    clearInterval(timer);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-send me-1"></i> Resend OTP';
+                } else {
+                    btn.innerHTML = `<i class="bi bi-clock me-1"></i> Wait ${cooldown}s`;
+                }
+            }, 1000);
+        } else {
+            throw new Error(data.error || 'Failed to send verification code.');
+        }
+    } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i> Send OTP';
+        feedback.className = 'small mt-1 text-danger font-monospace';
+        feedback.textContent = err.message || 'Request failed. Please try again.';
+    }
+}
+
+// Ensure security OTP is entered before form submission if security settings changed
+document.addEventListener('DOMContentLoaded', function () {
+    const editForm = document.querySelector('#editProfileModal form');
+    if (editForm) {
+        editForm.addEventListener('submit', function (e) {
+            const otpInput = document.getElementById('securityOtpInput');
+            if (otpInput && !otpInput.value.trim()) {
+                const pwdInput = editForm.querySelector('input[name="new_password"]');
+                const phoneInput = editForm.querySelector('input[name="phone_number"]');
+                const emailInput = editForm.querySelector('input[name="email"]');
+                const twoFactorSwitch = document.getElementById('twoFactorSwitch');
+
+                const hasPwd = pwdInput && pwdInput.value.trim().length > 0;
+                const origPhone = "{{ profile_user.phone_number }}";
+                const hasPhoneChange = phoneInput && phoneInput.value.trim() !== origPhone;
+                const origEmail = "{{ profile_user.email }}";
+                const hasEmailChange = emailInput && emailInput.value.trim().toLowerCase() !== origEmail.toLowerCase();
+                const orig2fa = {% if profile_user.two_factor_enabled %}true{% else %}false{% endif %};
+                const has2faChange = twoFactorSwitch && twoFactorSwitch.checked !== orig2fa;
+
+                if (hasPwd || hasPhoneChange || hasEmailChange || has2faChange) {
+                    e.preventDefault();
+                    const feedback = document.getElementById('securityOtpFeedback');
+                    if (feedback) {
+                        feedback.style.display = 'block';
+                        feedback.className = 'small mt-1 text-warning font-monospace';
+                        feedback.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Please click <strong>Send OTP</strong> and enter the 6-digit code dispatched to your email/phone before saving.';
+                    }
+                    otpInput.focus();
+                }
+            }
+        });
+    }
+});
+</script>
+{% endif %}
 {% endblock %}

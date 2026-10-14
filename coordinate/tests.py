@@ -4,13 +4,14 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import Friendship, User
+from accounts.models import Contributor, Friendship, User
 
 from .models import (
+    RideJoinRequest,
     RideMessage,
     RideParticipant,
     RideRequest,
-    RideReview
+    RideReview,
 )
 
 
@@ -46,11 +47,11 @@ class RideWorkflowTests(TestCase):
 
         return timezone.now() + timedelta(days=days)
 
-    def create_ride(self, total_spots=2, visibility='MIXED'):
+    def create_ride(self, total_spots=2, visibility='MIXED', route='NIT_TO_AIRPORT'):
 
         ride = RideRequest.objects.create(
             creator=self.creator,
-            route='NIT_TO_AIRPORT',
+            route=route,
             visibility=visibility,
             departure_time=self.future_time(),
             total_spots=total_spots
@@ -180,8 +181,23 @@ class RideWorkflowTests(TestCase):
 
         self.client.force_login(self.other)
 
+        # Duplicate join requests create only 1 pending request
         self.client.post(reverse('join_ride', args=[ride.id]))
         self.client.post(reverse('join_ride', args=[ride.id]))
+
+        self.assertEqual(
+            RideJoinRequest.objects.filter(
+                ride=ride,
+                user=self.other,
+                status='PENDING'
+            ).count(),
+            1
+        )
+
+        # Host approves the join request
+        join_req = RideJoinRequest.objects.get(ride=ride, user=self.other)
+        self.client.force_login(self.creator)
+        self.client.post(reverse('approve_join_request', args=[ride.id, join_req.id]))
 
         self.assertEqual(
             RideParticipant.objects.filter(
@@ -204,10 +220,18 @@ class RideWorkflowTests(TestCase):
             user=self.girl
         )
 
+        # Student with active ride cannot request second ride
+        self.client.force_login(self.other)
         self.client.post(reverse('join_ride', args=[second_ride.id]))
 
         self.assertFalse(
             RideParticipant.objects.filter(
+                ride=second_ride,
+                user=self.other
+            ).exists()
+        )
+        self.assertFalse(
+            RideJoinRequest.objects.filter(
                 ride=second_ride,
                 user=self.other
             ).exists()
@@ -380,9 +404,196 @@ class RideWorkflowTests(TestCase):
         self.client.force_login(self.other)
         self.client.post(reverse('join_ride', args=[ride.id]))
 
+        # Host approves the join request
+        join_req = RideJoinRequest.objects.get(ride=ride, user=self.other)
+        self.assertEqual(join_req.status, 'PENDING')
+        self.client.force_login(self.creator)
+        self.client.post(reverse('approve_join_request', args=[ride.id, join_req.id]))
+
         self.assertTrue(
             RideParticipant.objects.filter(
                 ride=ride,
                 user=self.other
             ).exists()
         )
+
+    def test_ride_join_request_approval_and_decline_workflow(self):
+        ride = self.create_ride(total_spots=3)
+
+        # Student requests to join
+        self.client.force_login(self.other)
+        resp = self.client.post(reverse('join_ride', args=[ride.id]))
+        self.assertRedirects(resp, reverse('ride_list'))
+
+        join_req = RideJoinRequest.objects.get(ride=ride, user=self.other)
+        self.assertEqual(join_req.status, 'PENDING')
+        self.assertFalse(RideParticipant.objects.filter(ride=ride, user=self.other).exists())
+
+        # Non-creator cannot decline or approve
+        outsider = User.objects.create_user(
+            username='OutsiderJoin',
+            enrollment_number='2024BCSE099',
+            gender='M',
+            phone_number='9999999988',
+            password='password123'
+        )
+        self.client.force_login(outsider)
+        self.assertIn(
+            self.client.post(reverse('approve_join_request', args=[ride.id, join_req.id])).status_code,
+            [403, 404]
+        )
+
+        # Host declines the request
+        self.client.force_login(self.creator)
+        self.client.post(reverse('decline_join_request', args=[ride.id, join_req.id]))
+        join_req.refresh_from_db()
+        self.assertEqual(join_req.status, 'DECLINED')
+        self.assertFalse(RideParticipant.objects.filter(ride=ride, user=self.other).exists())
+
+        # Student cancels a new request
+        self.client.force_login(self.other)
+        self.client.post(reverse('join_ride', args=[ride.id]))
+        self.assertTrue(RideJoinRequest.objects.filter(ride=ride, user=self.other, status='PENDING').exists())
+        self.client.post(reverse('cancel_join_request', args=[ride.id]))
+        self.assertFalse(RideJoinRequest.objects.filter(ride=ride, user=self.other, status='PENDING').exists())
+
+        # Host approves a final request
+        self.client.post(reverse('join_ride', args=[ride.id]))
+        final_req = RideJoinRequest.objects.get(ride=ride, user=self.other, status='PENDING')
+        self.client.force_login(self.creator)
+        self.client.post(reverse('approve_join_request', args=[ride.id, final_req.id]))
+        final_req.refresh_from_db()
+        self.assertEqual(final_req.status, 'APPROVED')
+        self.assertTrue(RideParticipant.objects.filter(ride=ride, user=self.other).exists())
+
+    def test_immediate_grievance_review_for_kicked_and_left_passengers(self):
+        ride = self.create_ride(total_spots=3)
+        RideParticipant.objects.create(ride=ride, user=self.other)
+
+        # Host kicks participant while ride is OPEN
+        self.client.force_login(self.creator)
+        other_part = RideParticipant.objects.get(ride=ride, user=self.other)
+        self.client.post(reverse('kick_participant', args=[ride.id, other_part.id]))
+        ride.refresh_from_db()
+        self.assertIn(self.other, ride.kicked_users.all())
+
+        # Host can review immediately with grievance without waiting for ride COMPLETED
+        self.assertEqual(ride.status, 'OPEN')
+        rev_resp = self.client.post(
+            reverse('review_user', args=[ride.id, self.other.id]),
+            {
+                'rating': '2',
+                'punctuality_rating': '1',
+                'communication_rating': '2',
+                'reliability_rating': '1',
+                'grievance': 'LATE',
+                'complaint': 'Arrived 25 minutes late without heads-up.',
+            }
+        )
+        self.assertRedirects(rev_resp, reverse('ride_detail', args=[ride.id]))
+        self.assertTrue(RideReview.objects.filter(ride=ride, reviewed_user=self.other, grievance='LATE').exists())
+
+        # Second student leaves voluntarily
+        voluntary_user = User.objects.create_user(
+            username='VoluntaryLeaver',
+            enrollment_number='2024BCSE088',
+            gender='M',
+            phone_number='9999999987',
+            password='password123'
+        )
+        RideParticipant.objects.create(ride=ride, user=voluntary_user)
+        self.client.force_login(voluntary_user)
+        self.client.post(reverse('leave_ride', args=[ride.id]))
+        ride.refresh_from_db()
+        self.assertIn(voluntary_user, ride.left_users.all())
+
+        # Host reviews departed user immediately with NO_SHOW grievance
+        self.client.force_login(self.creator)
+        self.client.post(
+            reverse('review_user', args=[ride.id, voluntary_user.id]),
+            {
+                'rating': '1',
+                'punctuality_rating': '1',
+                'communication_rating': '1',
+                'reliability_rating': '1',
+                'grievance': 'NO_SHOW',
+                'complaint': 'Left ride 5 minutes before departure.',
+            }
+        )
+        self.assertTrue(RideReview.objects.filter(ride=ride, reviewed_user=voluntary_user, grievance='NO_SHOW').exists())
+
+    def test_ride_density_telemetry_and_ordering(self):
+        self.client.force_login(self.creator)
+
+        # Create multiple rides across different dates
+        r1 = self.create_ride(total_spots=2, route='NIT_TO_AIRPORT')
+        r2 = RideRequest.objects.create(
+            creator=self.creator,
+            route='LAL_CHOWK_TO_NIT',
+            visibility='MIXED',
+            departure_time=timezone.now() + timedelta(days=2),
+            total_spots=4
+        )
+        RideParticipant.objects.create(ride=r2, user=self.creator)
+
+        # Check ride list defaults to all upcoming rides (un-filtered)
+        resp = self.client.get(reverse('ride_list'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('density_data', resp.context)
+        self.assertEqual(len(resp.context['density_data']), 14)
+
+        # Check order_by parameters
+        for order_param in ['time_asc', 'time_desc', 'spots_desc', 'created_desc']:
+            order_resp = self.client.get(reverse('ride_list') + f'?order_by={order_param}')
+            self.assertEqual(order_resp.status_code, 200)
+
+        # Check queue_only filter
+        q_resp = self.client.get(reverse('ride_list') + '?queue_only=1')
+        self.assertEqual(q_resp.status_code, 200)
+
+        # Check date filter application and verify reset button URL is clean (no bare ampersand 404)
+        today_str = timezone.now().strftime('%Y-%m-%d')
+        date_filtered_resp = self.client.get(reverse('ride_list') + f'?date_from={today_str}&date_to={today_str}')
+        self.assertEqual(date_filtered_resp.status_code, 200)
+        self.assertTrue(date_filtered_resp.context['has_date_filter'])
+        self.assertContains(date_filtered_resp, 'View All Dates (Reset Date Filter)')
+        self.assertNotContains(date_filtered_resp, '/coordinate/&order_by')
+        self.assertContains(date_filtered_resp, '/coordinate/?order_by')
+
+    def test_contributor_nomination_peer_workflow(self):
+        # Ordinary non-admin user cannot nominate or add
+        self.client.force_login(self.other)
+        nom_resp = self.client.post(
+            reverse('nominate_contributor'),
+            {
+                'name': 'Other Nominee',
+                'enrollment_number': self.creator.enrollment_number,
+                'role': 'Core Maintainer',
+                'bio': 'Built routing algorithm.',
+            }
+        )
+        self.assertRedirects(nom_resp, reverse('contributors'))
+        self.assertFalse(Contributor.objects.filter(name='Other Nominee').exists())
+
+        # Admin can add contributor
+        self.creator.is_staff = True
+        self.creator.save()
+        self.client.force_login(self.creator)
+        success_nom = self.client.post(
+            reverse('nominate_contributor'),
+            {
+                'name': 'Test Other Contributor',
+                'enrollment_number': self.other.enrollment_number,
+                'role': 'Full-stack Contributor',
+                'bio': 'Implemented real-time chat telemetry.',
+                'github_url': 'https://github.com/other',
+            }
+        )
+        self.assertRedirects(success_nom, reverse('contributors'))
+        contrib = Contributor.objects.filter(user=self.other, nominated_by=self.creator).first()
+        self.assertIsNotNone(contrib)
+
+        # Admin can remove contributor
+        remove_resp = self.client.post(reverse('remove_contributor', args=[contrib.id]))
+        self.assertRedirects(remove_resp, reverse('contributors'))
+        self.assertFalse(Contributor.objects.filter(id=contrib.id).exists())

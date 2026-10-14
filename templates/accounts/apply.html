@@ -4,9 +4,10 @@
 
 {% block content %}
 <div class="container py-5">
-    <div class="row justify-content-center">
+    <div class="row g-4 justify-content-center">
+        <!-- Application Form Column -->
         <div class="col-lg-7">
-            <div class="glass p-4 p-md-5">
+            <div class="glass p-4 p-md-5 h-100">
                 <div class="mb-4">
                     <span class="badge bg-success-subtle text-success px-3 py-1 rounded-pill fw-semibold mb-2">
                         STUDENT REGISTRATION
@@ -45,20 +46,44 @@
                         {% endif %}
                     </div>
 
+                    <div class="mb-3">
+                        <label for="{{ form.gender.id_for_label }}" class="form-label">Gender</label>
+                        {{ form.gender }}
+                        {% if form.gender.errors %}
+                            <div class="text-danger small mt-1">{{ form.gender.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="{{ form.email.id_for_label }}" class="form-label">Institute / Personal Email *</label>
+                        {{ form.email }}
+                        <div class="form-text text-secondary small">Verification OTP will be dispatched to both your email inbox and phone.</div>
+                        {% if form.email.errors %}
+                            <div class="text-danger small mt-1">{{ form.email.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
                     <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label for="{{ form.phone_number.id_for_label }}" class="form-label">WhatsApp / Phone Number</label>
-                            {{ form.phone_number }}
+                        <div class="col-md-7">
+                            <label for="{{ form.phone_number.id_for_label }}" class="form-label">WhatsApp / Phone Number *</label>
+                            <div class="input-group">
+                                {{ form.phone_number }}
+                                <button type="button" class="btn btn-outline-success" id="sendSignupOtpBtn" onclick="requestSignupOtp()">
+                                    <i class="bi bi-send me-1"></i> Send OTP
+                                </button>
+                            </div>
+                            <div id="signupOtpFeedback" class="small mt-1 font-monospace" style="display: none;"></div>
                             {% if form.phone_number.errors %}
                                 <div class="text-danger small mt-1">{{ form.phone_number.errors.0 }}</div>
                             {% endif %}
                         </div>
-                        <div class="col-md-6">
-                            <label for="{{ form.gender.id_for_label }}" class="form-label">Gender</label>
-                            {{ form.gender }}
-                            {% if form.gender.errors %}
-                                <div class="text-danger small mt-1">{{ form.gender.errors.0 }}</div>
-                            {% endif %}
+                        <div class="col-md-5">
+                            <label class="form-label">6-Digit Verification Code *</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-shield-check"></i></span>
+                                <input type="text" name="phone_otp" id="phoneOtpInput" class="form-control font-monospace text-center" maxlength="6" placeholder="000000" required>
+                            </div>
+                            <div class="form-text text-secondary small">Enter OTP received on email or SMS.</div>
                         </div>
                     </div>
 
@@ -92,6 +117,125 @@
                 </div>
             </div>
         </div>
+
+        <!-- Designated Application Approvers Column -->
+        <div class="col-lg-5">
+            <div class="glass p-4 p-md-5 h-100 d-flex flex-column">
+                <div class="mb-3">
+                    <div class="feature-icon mb-3" style="width: 48px; height: 48px; font-size: 1.25rem;">
+                        <i class="bi bi-person-check-fill"></i>
+                    </div>
+                    <h3 class="fw-bold fs-5 mb-1">Designated Application Approvers</h3>
+                    <p class="text-secondary small">
+                        To maintain campus safety and authentic student verification, your application is reviewed and vetted by the following designated institute administrators:
+                    </p>
+                </div>
+
+                <div class="d-flex flex-column gap-3 mb-4 flex-grow-1">
+                    {% for admin in designated_admins %}
+                        <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-success-subtle text-success d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px; font-size: 1.2rem;">
+                                {% if admin.profile_photo %}
+                                    <img src="{{ admin.profile_photo.url }}" alt="{{ admin.display_name }}" class="rounded-circle" style="width: 44px; height: 44px; object-fit: cover;" onerror="this.onerror=null; this.src=''; this.parentElement.innerHTML='<i class=\'bi bi-shield-lock-fill\'></i>';">
+                                {% else %}
+                                    <i class="bi bi-shield-lock-fill"></i>
+                                {% endif %}
+                            </div>
+                            <div class="flex-grow-1 min-w-0">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <strong class="text-white text-truncate">{{ admin.display_name }}</strong>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle small py-0 px-2">Superuser</span>
+                                </div>
+                                <div class="text-secondary small font-monospace">
+                                    {{ admin.enrollment_number }} &bull; {{ admin.branch|default:'CSE' }} ({{ admin.degree|default:'Bachelors' }})
+                                </div>
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 text-secondary small">
+                            <i class="bi bi-info-circle me-1"></i> Institute administrators are registered on the central system.
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <div class="p-3 rounded border border-secondary bg-black bg-opacity-40 small text-secondary">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <i class="bi bi-patch-check-fill text-success"></i>
+                        <strong class="text-white">Verification Protocol</strong>
+                    </div>
+                    <p class="mb-0 text-white-50 small">
+                        Applications are cross-checked against departmental roll lists. If your verification is pending for over 24 hours, contact the designated administrators or visit the Proctorial Board desk.
+                    </p>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+
+<script>
+async function requestSignupOtp() {
+    const feedback = document.getElementById('signupOtpFeedback');
+    const btn = document.getElementById('sendSignupOtpBtn');
+    const phoneInput = document.getElementById('{{ form.phone_number.id_for_label }}');
+    const emailInput = document.getElementById('{{ form.email.id_for_label }}');
+    if (!feedback || !btn || !phoneInput) return;
+
+    const phone = phoneInput.value.trim();
+    const emailVal = emailInput ? emailInput.value.trim() : '';
+
+    if (!phone || phone.length < 10) {
+        feedback.style.display = 'block';
+        feedback.className = 'small mt-1 text-danger font-monospace';
+        feedback.textContent = 'Please enter a valid phone number before requesting OTP.';
+        phoneInput.focus();
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sending...';
+    feedback.style.display = 'block';
+    feedback.className = 'small mt-1 text-info font-monospace';
+    feedback.textContent = 'Dispatching 6-digit verification code to your email and phone...';
+
+    try {
+        const formData = new FormData();
+        formData.append('phone_number', phone);
+        if (emailVal) {
+            formData.append('email', emailVal);
+        }
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        const res = await fetch("{% url 'send_signup_otp' %}", {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            feedback.className = 'small mt-1 text-success font-monospace';
+            feedback.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i> ' + (data.message || 'Verification code dispatched!') + '</span>';
+            const otpInput = document.getElementById('phoneOtpInput');
+            if (otpInput) otpInput.focus();
+
+            let cooldown = 60;
+            const timer = setInterval(() => {
+                cooldown--;
+                if (cooldown <= 0) {
+                    clearInterval(timer);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-send me-1"></i> Resend OTP';
+                } else {
+                    btn.innerHTML = `<i class="bi bi-clock me-1"></i> Wait ${cooldown}s`;
+                }
+            }, 1000);
+        } else {
+            throw new Error(data.error || 'Failed to dispatch verification code.');
+        }
+    } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i> Send OTP';
+        feedback.className = 'small mt-1 text-danger font-monospace';
+        feedback.textContent = err.message || 'Request failed. Please try again.';
+    }
+}
+</script>
 {% endblock %}

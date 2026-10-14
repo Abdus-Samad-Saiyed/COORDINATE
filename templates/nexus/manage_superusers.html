@@ -1,0 +1,252 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Superuser & Access Governance — Campus Nexus Operations{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Breadcrumb & Navigation -->
+    <div class="d-flex align-items-center gap-2 mb-3 small text-secondary">
+        <a href="{% url 'dashboard' %}" class="text-secondary text-decoration-none">Dashboard</a>
+        <span>&rsaquo;</span>
+        <a href="{% url 'operational_dashboard' %}" class="text-secondary text-decoration-none">Operations</a>
+        <span>&rsaquo;</span>
+        <span class="text-white fw-semibold">Superuser Management</span>
+    </div>
+
+    <!-- Header Section -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-1 rounded-pill small fw-semibold mb-2">
+                <i class="bi bi-shield-shaded me-1"></i> Highly Privileged Governance
+            </span>
+            <h2 class="fw-bold mb-1">Superuser & <span class="green-accent">Access Control</span></h2>
+            <p class="text-secondary small mb-0">
+                Grant or revoke administrative superuser privileges with immutable audit logging and lockout protection.
+            </p>
+        </div>
+
+        <div class="d-flex gap-2">
+            <a href="{% url 'operational_dashboard' %}" class="btn btn-dark-custom">
+                <i class="bi bi-arrow-left me-1"></i> Back to Operations
+            </a>
+            <a href="{% url 'admin:index' %}" class="btn btn-dark-custom" target="_blank">
+                <i class="bi bi-shield-lock me-1"></i> Django Admin
+            </a>
+        </div>
+    </div>
+
+    <!-- Key Metrics & Safeguards Banner -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-4">
+            <div class="glass p-3 h-100">
+                <div class="text-secondary small fw-semibold text-uppercase mb-1">Active Superusers</div>
+                <div class="stat-value text-success">{{ active_superusers_count }}</div>
+                <div class="text-secondary small mt-2">
+                    <i class="bi bi-shield-check me-1 text-success"></i> Full platform & root control
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-4">
+            <div class="glass p-3 h-100">
+                <div class="text-secondary small fw-semibold text-uppercase mb-1">Staff Operators</div>
+                <div class="stat-value text-info">{{ staff_members.count }}</div>
+                <div class="text-secondary small mt-2">
+                    <i class="bi bi-person-badge me-1"></i> Moderation & application review
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-12 col-lg-4">
+            <div class="glass p-3 h-100 border-warning-subtle">
+                <div class="text-warning small fw-semibold text-uppercase mb-1">
+                    <i class="bi bi-shield-lock-fill me-1"></i> Anti-Lockout Invariant
+                </div>
+                <div class="small text-white mt-1">
+                    System prevents revocation of the last active superuser under all circumstances to ensure permanent administrative accessibility.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Working Grid: Directory & Promotion Form -->
+    <div class="row g-4 mb-4">
+        <!-- Superusers Directory Column -->
+        <div class="col-lg-7">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0">
+                        <i class="bi bi-people-fill green-accent me-2"></i>Current Superusers
+                    </h5>
+                    <span class="badge bg-dark border border-secondary text-secondary">
+                        {{ superusers.count }} User{{ superusers.count|pluralize }}
+                    </span>
+                </div>
+                <p class="text-secondary small mb-3">
+                    Accounts with unchecked administrative capabilities across all database models, settings, and logs.
+                </p>
+
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0" style="background: transparent;">
+                        <thead>
+                            <tr class="text-secondary small">
+                                <th>Enrollment</th>
+                                <th>Name / Branch</th>
+                                <th>Last Login</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for su in superusers %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-1">
+                                            <strong>{{ su.enrollment_number }}</strong>
+                                            {% if su == request.user %}
+                                                <span class="badge bg-success-subtle text-success small py-0">You</span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-white">{{ su.get_full_name|default:su.enrollment_number }}</div>
+                                        <div class="text-secondary small">{{ su.branch }} ({{ su.degree }})</div>
+                                    </td>
+                                    <td class="text-secondary small">
+                                        {{ su.last_login|date:"M j, H:i"|default:"Never" }}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if active_superusers_count <= 1 and su.is_active %}
+                                            <button class="btn btn-dark-custom btn-sm py-1 px-2 text-muted" disabled title="Sole superuser cannot be removed">
+                                                <i class="bi bi-lock-fill"></i> Protected
+                                            </button>
+                                        {% else %}
+                                            <form method="POST" action="{% url 'manage_superusers' %}" class="d-inline m-0"
+                                                  onsubmit="return confirm('Revoke superuser privileges from {{ su.enrollment_number }} ({% if su == request.user %}YOUR ACCOUNT{% else %}{{ su.get_full_name }}{% endif %})?');">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="revoke">
+                                                <input type="hidden" name="enrollment_number" value="{{ su.enrollment_number }}">
+                                                <button type="submit" class="btn btn-outline-danger btn-sm py-1 px-2" title="Revoke superuser status">
+                                                    <i class="bi bi-shield-slash me-1"></i> Revoke
+                                                </button>
+                                            </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-secondary small py-3">
+                                        No superusers detected.
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Promote New Superuser Column -->
+        <div class="col-lg-5">
+            <div class="glass p-4 h-100">
+                <h5 class="fw-bold mb-3">
+                    <i class="bi bi-person-plus-fill green-accent me-2"></i>Grant Superuser Privileges
+                </h5>
+                <p class="text-secondary small mb-3">
+                    Promote a verified student or existing staff member to Platform Superuser. This grants complete system control.
+                </p>
+
+                <form method="POST" action="{% url 'manage_superusers' %}" class="d-flex flex-column gap-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="promote">
+
+                    <div>
+                        <label class="form-label text-secondary small fw-semibold">Enrollment Number</label>
+                        <input type="text"
+                               name="enrollment_number"
+                               class="form-control"
+                               placeholder="e.g. 2024BCSE002"
+                               list="verifiedStudentsList"
+                               autocomplete="off"
+                               required>
+                        <datalist id="verifiedStudentsList">
+                            {% for cand in verified_candidates %}
+                                <option value="{{ cand.enrollment_number }}">{{ cand.get_full_name }} &middot; {{ cand.branch }}</option>
+                            {% endfor %}
+                        </datalist>
+                        <div class="form-text text-secondary" style="font-size: 0.75rem;">
+                            Type or select from verified students. Case-insensitive (will normalize to uppercase).
+                        </div>
+                    </div>
+
+                    <div class="p-3 rounded border border-warning-subtle bg-black bg-opacity-40 small text-white-50">
+                        <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                        <strong>Granting superuser access permits:</strong>
+                        <ul class="mb-0 mt-1 ps-3">
+                            <li>Unrestricted database access via Django Admin</li>
+                            <li>Approval and rejection of student credentials</li>
+                            <li>Execution of CSV data exports</li>
+                            <li>Management of other superuser accounts</li>
+                        </ul>
+                    </div>
+
+                    <button type="submit" class="btn btn-green mt-2" onclick="return confirm('Confirm granting permanent superuser privileges to this user?');">
+                        <i class="bi bi-shield-plus me-1"></i> Grant Superuser Access
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privileged Audit Trail Row -->
+    <div class="glass p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">
+                <i class="bi bi-journal-text green-accent me-2"></i>Privileged Access Audit Trail
+            </h5>
+            <span class="badge bg-dark border border-secondary text-secondary">Immutable Log</span>
+        </div>
+        <p class="text-secondary small mb-3">
+            Every promotion and revocation of superuser status is logged with actor enrollment and target timestamps.
+        </p>
+
+        {% if privileged_audits %}
+            <div class="table-responsive">
+                <table class="table table-dark table-sm table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead>
+                        <tr class="text-secondary">
+                            <th>Timestamp</th>
+                            <th>Action Type</th>
+                            <th>Actor</th>
+                            <th>Target</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in privileged_audits %}
+                            <tr>
+                                <td class="text-white-50">{{ log.timestamp|date:"M j, Y — H:i:s" }}</td>
+                                <td>
+                                    {% if log.event_type == 'SUPERUSER_PROMOTED' %}
+                                        <span class="badge bg-success-subtle text-success">SUPERUSER PROMOTED</span>
+                                    {% else %}
+                                        <span class="badge bg-danger-subtle text-danger">SUPERUSER REVOKED</span>
+                                    {% endif %}
+                                </td>
+                                <td class="fw-semibold text-white">{{ log.actor_enrollment }}</td>
+                                <td class="fw-semibold text-info">{{ log.target_id }}</td>
+                                <td class="text-secondary">{{ log.description }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="p-4 text-center text-secondary small">
+                <i class="bi bi-shield-check fs-3 d-block mb-2 text-success"></i>
+                No privilege modifications recorded yet. All actions will appear here in real-time.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

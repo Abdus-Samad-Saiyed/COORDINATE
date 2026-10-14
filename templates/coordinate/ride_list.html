@@ -26,33 +26,140 @@
         </div>
     </div>
 
-    <!-- Date selector horizontal strip -->
-    <div class="glass p-3 mb-4">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <span class="small text-secondary fw-semibold text-uppercase">Select Departure Date</span>
-            <form method="GET" class="d-inline-flex gap-2">
-                <input type="date" name="date" value="{{ selected_date|date:'Y-m-d' }}" class="form-control form-control-sm py-1" onchange="this.form.submit()">
-                {% if selected_route %}<input type="hidden" name="route" value="{{ selected_route }}">{% endif %}
-                {% if selected_visibility %}<input type="hidden" name="visibility" value="{{ selected_visibility }}">{% endif %}
-                {% if selected_time %}<input type="hidden" name="time" value="{{ selected_time }}">{% endif %}
-            </form>
+    <!-- Ride Density Graph Across Dates (Next 14 Days) -->
+    <div class="glass p-4 mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success-subtle text-success border border-success-subtle small text-uppercase fw-semibold">
+                        <i class="bi bi-bar-chart-fill me-1"></i> Ride Density Telemetry
+                    </span>
+                    <span class="text-secondary small">Upcoming 14-day schedule distribution</span>
+                </div>
+            </div>
+            {% if has_date_filter %}
+                <a href="{% url 'ride_list' %}?order_by={{ order_by|default:'time_asc' }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if queue_only %}&queue_only=1{% endif %}" class="btn btn-outline-secondary btn-sm py-1 px-3">
+                    <i class="bi bi-eye me-1"></i> View All Dates (Reset Date Filter)
+                </a>
+            {% else %}
+                <span class="badge bg-dark border border-secondary text-secondary small">Showing All Upcoming Rides (Unfiltered)</span>
+            {% endif %}
         </div>
 
-        <div class="date-strip">
-            {% for day in date_options %}
-                <a href="?date={{ day|date:'Y-m-d' }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if selected_time %}&time={{ selected_time }}{% endif %}"
-                   class="date-btn {% if day == selected_date %}active{% endif %}">
-                    {{ day|date:"D, M j" }}
+        <!-- Visual Bar Chart -->
+        <div class="d-flex align-items-end justify-content-between gap-1 gap-md-2 pt-3 pb-2 px-2 rounded bg-black bg-opacity-40 border border-secondary" style="height: 150px; overflow-x: auto;">
+            {% for bar in density_data %}
+                <a href="?date_from={{ bar.date_str }}&date_to={{ bar.date_str }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if order_by %}&order_by={{ order_by }}{% endif %}{% if queue_only %}&queue_only=1{% endif %}"
+                   class="d-flex flex-column align-items-center justify-content-end text-decoration-none flex-grow-1 h-100 position-relative"
+                   style="min-width: 38px;"
+                   title="{{ bar.day_name }}, {{ bar.date_str }}: {{ bar.count }} ride(s)">
+                    
+                    <!-- Count Badge -->
+                    <span class="badge {% if bar.count > 0 %}bg-success text-white{% else %}text-muted{% endif %} mb-1" style="font-size: 0.65rem; padding: 2px 4px;">
+                        {{ bar.count }}
+                    </span>
+
+                    <!-- Bar Fill -->
+                    <div class="w-100 rounded-top"
+                         style="height: {{ bar.height_pct }}%;
+                                background: {% if bar.is_selected %}linear-gradient(180deg, #10b981 0%, #059669 100%){% elif bar.count > 0 %}linear-gradient(180deg, rgba(16, 185, 129, 0.7) 0%, rgba(5, 150, 105, 0.4) 100%){% else %}rgba(255, 255, 255, 0.05){% endif %};
+                                border: 1px solid {% if bar.is_selected %}#10b981{% elif bar.count > 0 %}rgba(16, 185, 129, 0.4){% else %}rgba(255, 255, 255, 0.1){% endif %};
+                                box-shadow: {% if bar.is_selected %}0 0 12px rgba(16, 185, 129, 0.5){% elif bar.count > 0 %}0 0 6px rgba(16, 185, 129, 0.2){% else %}none{% endif %};">
+                    </div>
+
+                    <!-- Date & Day Labels -->
+                    <div class="text-center mt-2" style="line-height: 1.1;">
+                        <span class="d-block {% if bar.is_selected %}text-emerald fw-bold{% elif bar.is_today %}text-white fw-bold{% else %}text-secondary{% endif %}" style="font-size: 0.7rem;">
+                            {{ bar.day_name }}
+                        </span>
+                        <span class="d-block {% if bar.is_selected %}text-white fw-bold{% elif bar.is_today %}text-emerald fw-bold{% else %}text-light{% endif %}" style="font-size: 0.75rem;">
+                            {{ bar.day_num }}
+                        </span>
+                    </div>
                 </a>
             {% endfor %}
         </div>
     </div>
 
-    <!-- Filters Section -->
-    <div class="glass p-4 mb-4">
-        <form method="GET" class="row g-3 align-items-end">
-            <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+    <!-- Dynamic Quick Date Selector Strip -->
+    <div class="glass p-3 mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div class="d-flex align-items-center gap-2">
+                <span class="small text-secondary fw-semibold text-uppercase">
+                    <i class="bi bi-calendar-week me-1 green-accent"></i> Quick Select Date
+                </span>
+                {% if is_custom_range %}
+                    <span class="badge bg-info-subtle text-info small">Range Active: {{ date_from }} to {{ date_to }}</span>
+                {% elif not has_date_filter %}
+                    <span class="badge bg-secondary-subtle text-secondary small">No Date Filter (All Rides Active)</span>
+                {% endif %}
+            </div>
 
+            <!-- Date Strip Stepper Buttons -->
+            <div class="d-flex align-items-center gap-2">
+                {% if prev_date %}
+                    <a href="?date_from={{ prev_date }}&date_to={{ prev_date }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if time_from %}&time_from={{ time_from }}{% endif %}{% if time_to %}&time_to={{ time_to }}{% endif %}{% if order_by %}&order_by={{ order_by }}{% endif %}{% if queue_only %}&queue_only=1{% endif %}"
+                       class="btn btn-dark-custom btn-sm py-1 px-2" title="Previous Day">
+                        <i class="bi bi-chevron-left"></i> Prev
+                    </a>
+                {% else %}
+                    <button class="btn btn-dark-custom btn-sm py-1 px-2 text-muted" disabled>
+                        <i class="bi bi-chevron-left"></i> Prev
+                    </button>
+                {% endif %}
+
+                <a href="?date_from={{ next_date }}&date_to={{ next_date }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if time_from %}&time_from={{ time_from }}{% endif %}{% if time_to %}&time_to={{ time_to }}{% endif %}{% if order_by %}&order_by={{ order_by }}{% endif %}{% if queue_only %}&queue_only=1{% endif %}"
+                   class="btn btn-dark-custom btn-sm py-1 px-2" title="Next Day">
+                    Next <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="date-strip">
+            {% for day in date_options %}
+                <a href="?date_from={{ day.date_str }}&date_to={{ day.date_str }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if time_from %}&time_from={{ time_from }}{% endif %}{% if time_to %}&time_to={{ time_to }}{% endif %}{% if order_by %}&order_by={{ order_by }}{% endif %}{% if queue_only %}&queue_only=1{% endif %}"
+                   class="date-btn d-inline-flex align-items-center gap-1 {% if day.is_selected and not is_custom_range %}active{% endif %}">
+                    <span>{{ day.day_name }}</span>
+                    <span class="fw-bold">{{ day.day_num }}</span>
+                    {% if day.is_today %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 0.65rem;">Today</span>
+                    {% endif %}
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Date-Time Range & Attribute Filter Form -->
+    <div class="glass p-4 mb-4">
+        <form method="GET" class="row g-3">
+            <div class="col-12 mb-1">
+                <span class="small text-secondary fw-semibold text-uppercase">
+                    <i class="bi bi-sliders me-1 green-accent"></i> Filter & Sort Controls
+                </span>
+            </div>
+
+            <!-- Date Range: From / To -->
+            <div class="col-sm-6 col-md-3">
+                <label class="form-label">From Date</label>
+                <input type="date" name="date_from" value="{{ date_from }}" class="form-control">
+            </div>
+
+            <div class="col-sm-6 col-md-3">
+                <label class="form-label">Departing After</label>
+                <input type="time" name="time_from" value="{{ time_from }}" class="form-control" placeholder="00:00">
+            </div>
+
+            <div class="col-sm-6 col-md-3">
+                <label class="form-label">To Date</label>
+                <input type="date" name="date_to" value="{{ date_to }}" class="form-control">
+            </div>
+
+            <div class="col-sm-6 col-md-3">
+                <label class="form-label">Departing Before</label>
+                <input type="time" name="time_to" value="{{ time_to }}" class="form-control" placeholder="23:59">
+            </div>
+
+            <!-- Route & Visibility -->
             <div class="col-md-4">
                 <label class="form-label">Route</label>
                 <select name="route" class="form-select">
@@ -73,14 +180,35 @@
                 </select>
             </div>
 
+            <!-- Sort / Order By -->
             <div class="col-md-3">
-                <label class="form-label">Departing After</label>
-                <input type="time" name="time" value="{{ selected_time }}" class="form-control">
+                <label class="form-label">Order By</label>
+                <select name="order_by" class="form-select">
+                    <option value="time_asc" {% if order_by == 'time_asc' %}selected{% endif %}>Earliest Departure (Default)</option>
+                    <option value="time_desc" {% if order_by == 'time_desc' %}selected{% endif %}>Latest Departure</option>
+                    <option value="spots_desc" {% if order_by == 'spots_desc' %}selected{% endif %}>Most Total Spots</option>
+                    <option value="created_desc" {% if order_by == 'created_desc' %}selected{% endif %}>Recently Created</option>
+                    <option value="rating_desc" {% if order_by == 'rating_desc' %}selected{% endif %}>Highest Host Rating</option>
+                </select>
             </div>
 
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-green w-100">
-                    <i class="bi bi-funnel-fill me-1"></i> Filter
+            <!-- Queue Only Checkbox -->
+            <div class="col-md-2 d-flex align-items-center">
+                <div class="form-check mt-md-4">
+                    <input class="form-check-input" type="checkbox" name="queue_only" value="1" id="id_queue_only" {% if queue_only %}checked{% endif %}>
+                    <label class="form-check-label small" for="id_queue_only">
+                        <i class="bi bi-hourglass-split text-warning me-1"></i> Standby Queue Open
+                    </label>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="col-12 d-flex gap-2 justify-content-end">
+                <a href="{% url 'ride_list' %}" class="btn btn-dark-custom" title="Reset All Filters">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Filters
+                </a>
+                <button type="submit" class="btn btn-green px-4">
+                    <i class="bi bi-funnel-fill me-1"></i> Apply Criteria
                 </button>
             </div>
         </form>
@@ -131,33 +259,62 @@
                         <div>
                             <hr class="my-3">
                             <div class="d-flex gap-2 align-items-center">
-                                {% if ride.id in joined_ride_ids %}
+                                {% if ride.is_participant or ride.id in joined_ride_ids or ride.creator == user %}
                                     <a href="{% url 'ride_detail' ride.id %}" class="btn btn-green flex-grow-1">
                                         <i class="bi bi-chat-dots-fill me-1"></i> Open Room
+                                        {% if ride.pending_request_count > 0 and ride.creator == user %}
+                                            <span class="badge bg-warning text-dark ms-1">{{ ride.pending_request_count }} req</span>
+                                        {% endif %}
                                     </a>
-                                {% endif %}
-
-                                <div class="{% if ride.id in joined_ride_ids %}w-auto{% else %}w-100{% endif %}">
-                                    {% if ride.id in joined_ride_ids %}
+                                    {% if not ride.creator == user %}
                                         <form method="POST" action="{% url 'leave_ride' ride.id %}" class="m-0">
                                             {% csrf_token %}
-                                            <button type="submit" class="btn btn-outline-danger">
-                                                <i class="bi bi-box-arrow-left"></i> Leave
+                                            <button type="submit" class="btn btn-outline-danger" title="Leave Ride">
+                                                <i class="bi bi-box-arrow-left"></i>
                                             </button>
                                         </form>
-                                    {% elif not has_active_ride and ride.status == 'OPEN' %}
-                                        <form method="POST" action="{% url 'join_ride' ride.id %}" class="m-0">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-green w-100">
-                                                <i class="bi bi-person-plus-fill me-1"></i> Join Ride
-                                            </button>
-                                        </form>
-                                    {% elif ride.status == 'FULL' %}
-                                        <button class="btn btn-dark-custom w-100 text-warning" disabled>Ride Full</button>
-                                    {% else %}
-                                        <button class="btn btn-dark-custom w-100 text-secondary" disabled>Already In Ride</button>
                                     {% endif %}
-                                </div>
+                                {% elif ride.has_pending_request %}
+                                    <div class="d-flex align-items-center gap-2 w-100">
+                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle py-2 px-3 flex-grow-1 text-center">
+                                            <i class="bi bi-hourglass-split me-1"></i> Request Pending Host Approval
+                                        </span>
+                                        <form method="POST" action="{% url 'cancel_join_request' ride.id %}" class="m-0">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-secondary" title="Cancel Request">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                {% elif ride.is_waitlisted %}
+                                    <a href="{% url 'ride_detail' ride.id %}" class="btn btn-outline-warning flex-grow-1">
+                                        <i class="bi bi-hourglass-split me-1"></i> Standby Queue
+                                    </a>
+                                    <form method="POST" action="{% url 'leave_waitlist' ride.id %}" class="m-0">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-secondary" title="Leave Standby">
+                                            <i class="bi bi-x-circle"></i>
+                                        </button>
+                                    </form>
+                                {% elif ride.can_join %}
+                                    <form method="POST" action="{% url 'join_ride' ride.id %}" class="m-0 w-100">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-green w-100">
+                                            <i class="bi bi-send-fill me-1"></i> Request to Join
+                                        </button>
+                                    </form>
+                                {% elif ride.can_waitlist %}
+                                    <form method="POST" action="{% url 'join_waitlist' ride.id %}" class="m-0 w-100">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-warning w-100">
+                                            <i class="bi bi-hourglass-split me-1"></i> Join Standby (Waitlist)
+                                        </button>
+                                    </form>
+                                {% elif ride.status == 'FULL' %}
+                                    <button class="btn btn-dark-custom w-100 text-warning" disabled>Ride Full</button>
+                                {% else %}
+                                    <button class="btn btn-dark-custom w-100 text-secondary" disabled>Unavailable</button>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -170,12 +327,17 @@
                 <i class="bi bi-car-front"></i>
             </div>
             <h4 class="fw-bold mb-2">No Rides Found</h4>
-            <p class="text-secondary small mb-4">No rides scheduled for {{ selected_date|date:"F j, Y" }} matching your filters.</p>
-            {% if not has_active_ride %}
-                <a href="{% url 'create_ride' %}" class="btn btn-green">
-                    <i class="bi bi-plus-lg me-1"></i> Be the first to offer a ride
+            <p class="text-secondary small mb-4">No rides scheduled matching your current criteria.</p>
+            <div class="d-flex gap-2 justify-content-center">
+                <a href="{% url 'ride_list' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> Reset All Filters
                 </a>
-            {% endif %}
+                {% if not has_active_ride %}
+                    <a href="{% url 'create_ride' %}" class="btn btn-green">
+                        <i class="bi bi-plus-lg me-1"></i> Propose a New Ride
+                    </a>
+                {% endif %}
+            </div>
         </div>
     {% endif %}
 </div>

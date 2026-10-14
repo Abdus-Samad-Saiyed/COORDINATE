@@ -1,0 +1,42 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+
+# Environment & secrets
+.env
+debug_accounts.md
+superuser_password
+
+# Local databases
+*.sqlite3
+db.sqlite3
+
+# Generated / build artifacts
+staticfiles/
+media/
+project_dump.txt
+dump_project.py
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker (avoid recursive context)
+Dockerfile
+docker-compose.yml
+docker-compose*.yml
+
+# Documentation (not needed in image)
+docs/
+*.md
+!README.md

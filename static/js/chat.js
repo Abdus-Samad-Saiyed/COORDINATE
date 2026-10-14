@@ -27,8 +27,10 @@ document.addEventListener('DOMContentLoaded', function () {
     let socket = null;
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 5;
+    let isTerminated = false;
 
     function connectWebSocket() {
+        if (isTerminated) return;
         socket = new WebSocket(wsUrl);
 
         socket.onopen = function () {
@@ -42,18 +44,28 @@ document.addEventListener('DOMContentLoaded', function () {
         socket.onmessage = function (e) {
             try {
                 const data = JSON.parse(e.data);
-                appendMessage(data.author, data.content, data.timestamp, data.is_self);
+                if (data.type === 'message') {
+                    appendMessage(data.author, data.content, data.timestamp, data.is_self);
+                } else if (data.type === 'system_notice') {
+                    appendSystemNotice(data.content);
+                    if (['cancelled', 'completed', 'terminated'].includes(data.action)) {
+                        isTerminated = true;
+                        disableChatUI('Ride session ended. WebSocket connection closed.');
+                    }
+                } else if (data.type === 'error') {
+                    console.warn('Chat error from server:', data.error);
+                }
             } catch (err) {
                 console.error('Error parsing chat packet:', err);
             }
         };
 
-        socket.onclose = function () {
+        socket.onclose = function (e) {
             if (statusIndicator) {
-                statusIndicator.textContent = 'Disconnected';
+                statusIndicator.textContent = isTerminated ? 'Closed' : 'Disconnected';
                 statusIndicator.className = 'chat-status chat-status-disconnected';
             }
-            if (reconnectAttempts < maxReconnectAttempts) {
+            if (!isTerminated && reconnectAttempts < maxReconnectAttempts) {
                 reconnectAttempts++;
                 setTimeout(connectWebSocket, 2000 * reconnectAttempts);
             }
@@ -65,6 +77,26 @@ document.addEventListener('DOMContentLoaded', function () {
                 statusIndicator.className = 'chat-status chat-status-error';
             }
         };
+    }
+
+    function disableChatUI(noticeText) {
+        if (messageInput) {
+            messageInput.disabled = true;
+            messageInput.placeholder = noticeText || 'Chat is closed.';
+        }
+        const submitBtn = messageForm ? messageForm.querySelector('button[type="submit"]') : null;
+        if (submitBtn) {
+            submitBtn.disabled = true;
+        }
+    }
+
+    function appendSystemNotice(content) {
+        if (!messagesContainer || !content) return;
+        const noticeDiv = document.createElement('div');
+        noticeDiv.className = 'text-center my-2';
+        noticeDiv.innerHTML = `<span class="badge bg-dark border border-secondary text-white-50 px-3 py-2 small"><i class="bi bi-info-circle me-1 text-success"></i>${content}</span>`;
+        messagesContainer.appendChild(noticeDiv);
+        scrollToBottom();
     }
 
     function appendMessage(author, content, timestamp, isSelf) {

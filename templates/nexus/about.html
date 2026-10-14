@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}About Campus Nexus — The Vision, Mission & Modular Campus Ecosystem{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Hero Section -->
+    <div class="text-center mb-5">
+        <span class="badge bg-success-subtle text-success px-3 py-2 rounded-pill fw-semibold mb-3 border border-success-subtle d-inline-flex align-items-center">
+            <i class="bi bi-compass-fill me-2"></i> Built for NIT Srinagar Students
+        </span>
+        <h1 class="hero-title mb-3">One Platform. <span class="green-accent">All Campus Services.</span></h1>
+        <p class="hero-subtitle mx-auto text-secondary" style="max-width: 720px;">
+            Campus Nexus is a decentralized, privacy-preserving digital ecosystem connecting students across hostels, departments, and transit routes.
+        </p>
+    </div>
+
+    <!-- Core Philosophy Cards -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-4">
+            <div class="glass p-4 h-100 d-flex flex-column">
+                <div class="feature-icon mb-3">
+                    <i class="bi bi-shield-check"></i>
+                </div>
+                <h4 class="fw-bold text-white mb-2">Verified Accountability</h4>
+                <p class="text-secondary small mb-0 flex-grow-1">
+                    No anonymous trolls or unverified outsiders. Every account is authenticated against official institutional enrollment records to protect student safety and trust.
+                </p>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="glass p-4 h-100 d-flex flex-column">
+                <div class="feature-icon mb-3">
+                    <i class="bi bi-cash-coin"></i>
+                </div>
+                <h4 class="fw-bold text-white mb-2">Zero Commercial Middlemen</h4>
+                <p class="text-secondary small mb-0 flex-grow-1">
+                    Commercial rideshare platforms exploit students with surging commissions and high fares. Campus Nexus enables direct peer-to-peer taxi and cab sharing with transparent fare splits.
+                </p>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="glass p-4 h-100 d-flex flex-column">
+                <div class="feature-icon mb-3">
+                    <i class="bi bi-diagram-3-fill"></i>
+                </div>
+                <h4 class="fw-bold text-white mb-2">Modular Infrastructure</h4>
+                <p class="text-secondary small mb-0 flex-grow-1">
+                    Built as an umbrella system. Launching with COORDINATE for cab shares today, designed so any student or research group can build and plug in new services.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Extensibility & Open Invitation Section -->
+    <div class="glass p-4 p-md-5 mb-5 glass-glow border-success-subtle">
+        <div class="row align-items-center g-4">
+            <div class="col-lg-8">
+                <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-1 rounded-pill small fw-semibold mb-2">
+                    <i class="bi bi-lightbulb-fill me-1"></i> Open Invitation to Campus Builders
+                </span>
+                <h2 class="fw-bold text-white mb-3">Have an Idea or Utility for NIT Srinagar?</h2>
+                <p class="text-secondary mb-3">
+                    Campus Nexus is not a static app — it is a living student collective. Whether you want to automate hostel laundry slots, digitize central library seat occupancy, track mess feedback, or organize campus hackathons:
+                </p>
+                <div class="row g-3 small text-white-50 mb-3">
+                    <div class="col-sm-6">
+                        <i class="bi bi-check2-circle text-success me-1"></i> Build a new Django module inside Nexus
+                    </div>
+                    <div class="col-sm-6">
+                        <i class="bi bi-check2-circle text-success me-1"></i> Integrate external apps via REST API v1
+                    </div>
+                    <div class="col-sm-6">
+                        <i class="bi bi-check2-circle text-success me-1"></i> Use verified student authentication
+                    </div>
+                    <div class="col-sm-6">
+                        <i class="bi bi-check2-circle text-success me-1"></i> Peer review code through open PRs
+                    </div>
+                </div>
+
+                <div class="d-flex gap-3 flex-wrap pt-2">
+                    <a href="{% url 'feedback' %}?type=PROPOSAL" class="btn btn-green px-4">
+                        <i class="bi bi-send-fill me-1"></i> Propose a New Module
+                    </a>
+                    <a href="https://github.com/abdus-samad-saiyed/Campus-Nexus" target="_blank" class="btn btn-dark-custom px-4">
+                        <i class="bi bi-github me-1"></i> View GitHub Repository
+                    </a>
+                    <a href="{% url 'contributors' %}" class="btn btn-outline-green px-4">
+                        <i class="bi bi-people-fill me-1"></i> Meet Contributors
+                    </a>
+                </div>
+            </div>
+
+            <div class="col-lg-4 text-center">
+                <div class="p-4 rounded border border-secondary bg-black bg-opacity-40">
+                    <div class="feature-icon mx-auto mb-3" style="width: 60px; height: 60px; font-size: 1.8rem;">
+                        <i class="bi bi-code-slash"></i>
+                    </div>
+                    <h5 class="fw-bold text-white mb-2">Architecture Stack</h5>
+                    <div class="d-flex flex-wrap gap-1 justify-content-center">
+                        <span class="badge bg-secondary">Python 3.12</span>
+                        <span class="badge bg-secondary">Django 5.x</span>
+                        <span class="badge bg-secondary">Channels (ASGI)</span>
+                        <span class="badge bg-secondary">WebSockets</span>
+                        <span class="badge bg-secondary">PostgreSQL</span>
+                        <span class="badge bg-secondary">Redis</span>
+                        <span class="badge bg-secondary">Bootstrap 5</span>
+                        <span class="badge bg-secondary">REST API v1</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback & Bug Reporting Callout -->
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="glass p-4 h-100">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="feature-icon"><i class="bi bi-bug-fill text-danger"></i></div>
+                    <div>
+                        <h5 class="fw-bold text-white mb-0">Found a Bug?</h5>
+                        <p class="text-secondary small mb-0">Help keep Campus Nexus secure and reliable</p>
+                    </div>
+                </div>
+                <p class="text-secondary small mb-3">
+                    Notice a layout glitch, authentication anomaly, or calculation bug? Submit an actionable report with your device context.
+                </p>
+                <a href="{% url 'report_bug' %}?type=BUG" class="btn btn-dark-custom btn-sm">
+                    <i class="bi bi-exclamation-octagon me-1"></i> Report a Bug &rarr;
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="glass p-4 h-100">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="feature-icon"><i class="bi bi-chat-heart text-info"></i></div>
+                    <div>
+                        <h5 class="fw-bold text-white mb-0">Community Feedback</h5>
+                        <p class="text-secondary small mb-0">Share your thoughts on UX, safety, and features</p>
+                    </div>
+                </div>
+                <p class="text-secondary small mb-3">
+                    Tell us what works well, what needs improvement, or what route options you want added to the COORDINATE timetable.
+                </p>
+                <a href="{% url 'feedback' %}?type=GENERAL" class="btn btn-dark-custom btn-sm">
+                    <i class="bi bi-send me-1"></i> Submit Feedback &rarr;
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

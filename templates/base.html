@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}COORDINATE — Campus Ride Sharing{% endblock %}</title>
+    <title>{% block title %}Campus Nexus — Centralized Student Digital Services{% endblock %}</title>
 
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,18 +18,294 @@
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 
-    <!-- Custom Theme Styles -->
-    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+    <!-- Custom Theme & Watermark Styles -->
+    <link rel="stylesheet" href="{% static 'css/main.css' %}?v=2.8.0">
+    <link rel="stylesheet" href="{% static 'css/watermark.css' %}?v=2.8.0">
+    <script>
+        (function() {
+            try {
+                var state = sessionStorage.getItem('nexus_zen_transition_state');
+                var enabled = localStorage.getItem('nexus_zen_transitions');
+                if (state === 'incoming' && enabled !== 'false') {
+                    document.documentElement.classList.add('zen-incoming-page');
+                }
+            } catch (e) {}
+        })();
+    </script>
     {% block extra_head %}{% endblock %}
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
+    <!-- Clockwork Watermark Background (Pointer-inert, System Time Driven Center Clock, Industrial Gear Shadows) -->
+    <div id="clockwork-watermark" class="clockwork-watermark-container" aria-hidden="true">
+        <svg viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice" class="clockwork-svg" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <pattern id="nexus-grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                    <path d="M 50 0 L 0 0 0 50" fill="none" stroke="rgba(255,255,255,0.02)" stroke-width="1"/>
+                </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#nexus-grid)" />
+
+            <!-- Ambient Edge & Corner Gears Layer (Subtle Mechanical Gear Shadows) -->
+            <g id="gears-layer">
+                <!-- Top-Left Corner Gear (Center: 90, 90) -->
+                <g class="gear-edge gear-tl" data-cx="90" data-cy="90" data-speed="0.5">
+                    <circle cx="90" cy="90" r="82" fill="none" class="gear-shadow-teeth" stroke-width="12" stroke-dasharray="8,10"/>
+                    <circle cx="90" cy="90" r="76" fill="none" class="watermark-muted" stroke-width="2.5"/>
+                    <line x1="90" y1="14" x2="90" y2="166" class="watermark-muted" stroke-width="2.5"/>
+                    <line x1="14" y1="90" x2="166" y2="90" class="watermark-muted" stroke-width="2.5"/>
+                    <line x1="36" y1="36" x2="144" y2="144" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="144" y1="36" x2="36" y2="144" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="90" cy="90" r="42" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="90" cy="90" r="22" class="gear-shadow-hub"/>
+                    <circle cx="90" cy="90" r="8" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- Top-Right Corner Gear (Center: 910, 90) -->
+                <g class="gear-edge gear-tr" data-cx="910" data-cy="90" data-speed="-0.6">
+                    <circle cx="910" cy="90" r="70" fill="none" class="gear-shadow-teeth" stroke-width="10" stroke-dasharray="7,9"/>
+                    <circle cx="910" cy="90" r="65" fill="none" class="watermark-muted" stroke-width="2"/>
+                    <line x1="910" y1="25" x2="910" y2="155" class="watermark-muted" stroke-width="2"/>
+                    <line x1="845" y1="90" x2="975" y2="90" class="watermark-muted" stroke-width="2"/>
+                    <line x1="864" y1="44" x2="956" y2="136" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="956" y1="44" x2="864" y2="136" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="910" cy="90" r="35" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="910" cy="90" r="18" class="gear-shadow-hub"/>
+                    <circle cx="910" cy="90" r="7" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- Bottom-Left Corner Gear (Center: 90, 910) -->
+                <g class="gear-edge gear-bl" data-cx="90" data-cy="910" data-speed="-0.5">
+                    <circle cx="90" cy="910" r="85" fill="none" class="gear-shadow-teeth" stroke-width="13" stroke-dasharray="9,11"/>
+                    <circle cx="90" cy="910" r="78" fill="none" class="watermark-muted" stroke-width="2.5"/>
+                    <line x1="90" y1="832" x2="90" y2="988" class="watermark-muted" stroke-width="2.5"/>
+                    <line x1="12" y1="910" x2="168" y2="910" class="watermark-muted" stroke-width="2.5"/>
+                    <line x1="35" y1="855" x2="145" y2="965" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="145" y1="855" x2="35" y2="965" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="90" cy="910" r="44" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="90" cy="910" r="24" class="gear-shadow-hub"/>
+                    <circle cx="90" cy="910" r="9" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- Bottom-Right Corner Gear (Center: 910, 910) -->
+                <g class="gear-edge gear-br" data-cx="910" data-cy="910" data-speed="0.6">
+                    <circle cx="910" cy="910" r="75" fill="none" class="gear-shadow-teeth" stroke-width="11" stroke-dasharray="8,10"/>
+                    <circle cx="910" cy="910" r="69" fill="none" class="watermark-muted" stroke-width="2"/>
+                    <line x1="910" y1="841" x2="910" y2="979" class="watermark-muted" stroke-width="2"/>
+                    <line x1="841" y1="910" x2="979" y2="910" class="watermark-muted" stroke-width="2"/>
+                    <line x1="861" y1="861" x2="959" y2="959" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="959" y1="861" x2="861" y2="959" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="910" cy="910" r="38" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="910" cy="910" r="20" class="gear-shadow-hub"/>
+                    <circle cx="910" cy="910" r="8" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- Mid-Left & Mid-Right Edge Gears -->
+                <g class="gear-edge gear-edge-l" data-cx="40" data-cy="500" data-speed="0.7">
+                    <circle cx="40" cy="500" r="70" fill="none" class="gear-shadow-teeth" stroke-width="10" stroke-dasharray="7,9"/>
+                    <circle cx="40" cy="500" r="65" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="40" y1="435" x2="40" y2="565" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="-25" y1="500" x2="105" y2="500" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="40" cy="500" r="32" fill="none" class="watermark-muted" stroke-width="1"/>
+                    <circle cx="40" cy="500" r="16" class="gear-shadow-hub"/>
+                </g>
+                <g class="gear-edge gear-edge-r" data-cx="960" data-cy="500" data-speed="-0.7">
+                    <circle cx="960" cy="500" r="70" fill="none" class="gear-shadow-teeth" stroke-width="10" stroke-dasharray="7,9"/>
+                    <circle cx="960" cy="500" r="65" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="960" y1="435" x2="960" y2="565" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="895" y1="500" x2="1025" y2="500" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="960" cy="500" r="32" fill="none" class="watermark-muted" stroke-width="1"/>
+                    <circle cx="960" cy="500" r="16" class="gear-shadow-hub"/>
+                </g>
+            </g>
+
+            <!-- Scattered Screen Gears Layer (Horological Constellation Spread Across Viewport) -->
+            <g id="scattered-gears-layer">
+                <!-- S1: Upper-Left Drift (Subtle) -->
+                <g class="gear-edge gear-scattered scatter-subtle" data-cx="255" data-cy="185" data-speed="0.85">
+                    <circle cx="255" cy="185" r="48" fill="none" class="gear-shadow-teeth" stroke-width="8" stroke-dasharray="6,7"/>
+                    <circle cx="255" cy="185" r="44" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="221" y1="151" x2="289" y2="219" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="221" y1="219" x2="289" y2="151" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="255" cy="185" r="24" fill="none" class="watermark-muted" stroke-width="1"/>
+                    <circle cx="255" cy="185" r="13" class="gear-shadow-hub"/>
+                    <circle cx="255" cy="185" r="5" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S2: Upper-Center Pinion (Dense) -->
+                <g class="gear-edge gear-scattered scatter-dense" data-cx="420" data-cy="115" data-speed="-1.6">
+                    <circle cx="420" cy="115" r="30" fill="none" class="gear-shadow-teeth" stroke-width="7" stroke-dasharray="4,5"/>
+                    <circle cx="420" cy="115" r="27" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="420" y1="88" x2="420" y2="142" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="395" y1="128" x2="445" y2="102" class="watermark-muted" stroke-width="1.2"/>
+                    <circle cx="420" cy="115" r="9" class="gear-shadow-hub"/>
+                    <circle cx="420" cy="115" r="3.5" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S3: Upper-Right Drift (Subtle) -->
+                <g class="gear-edge gear-scattered scatter-subtle" data-cx="760" data-cy="210" data-speed="0.75">
+                    <circle cx="760" cy="210" r="54" fill="none" class="gear-shadow-teeth" stroke-width="9" stroke-dasharray="6,8"/>
+                    <circle cx="760" cy="210" r="50" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="760" y1="160" x2="760" y2="260" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="710" y1="210" x2="810" y2="210" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="725" y1="175" x2="795" y2="245" class="watermark-muted" stroke-width="1"/>
+                    <line x1="795" y1="175" x2="725" y2="245" class="watermark-muted" stroke-width="1"/>
+                    <circle cx="760" cy="210" r="28" fill="none" class="watermark-muted" stroke-width="1"/>
+                    <circle cx="760" cy="210" r="15" class="gear-shadow-hub"/>
+                    <circle cx="760" cy="210" r="6" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S4: Far-Right Upper (Dense) -->
+                <g class="gear-edge gear-scattered scatter-dense" data-cx="865" data-cy="370" data-speed="-1.25">
+                    <circle cx="865" cy="370" r="38" fill="none" class="gear-shadow-teeth" stroke-width="7" stroke-dasharray="5,6"/>
+                    <circle cx="865" cy="370" r="35" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="838" y1="343" x2="892" y2="397" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="892" y1="343" x2="838" y2="397" class="watermark-muted" stroke-width="1.2"/>
+                    <circle cx="865" cy="370" r="12" class="gear-shadow-hub"/>
+                    <circle cx="865" cy="370" r="4.5" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S5: Mid-Left Escapement (Subtle) -->
+                <g class="gear-edge gear-scattered scatter-subtle" data-cx="165" data-cy="365" data-speed="-0.68">
+                    <circle cx="165" cy="365" r="62" fill="none" class="gear-shadow-teeth" stroke-width="10" stroke-dasharray="7,9"/>
+                    <circle cx="165" cy="365" r="57" fill="none" class="watermark-muted" stroke-width="2"/>
+                    <line x1="165" y1="308" x2="165" y2="422" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="108" y1="365" x2="222" y2="365" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="125" y1="325" x2="205" y2="405" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="205" y1="325" x2="125" y2="405" class="watermark-muted" stroke-width="1.2"/>
+                    <circle cx="165" cy="365" r="32" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                    <circle cx="165" cy="365" r="17" class="gear-shadow-hub"/>
+                    <circle cx="165" cy="365" r="7" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S6: Lower-Left Field (Subtle) -->
+                <g class="gear-edge gear-scattered scatter-subtle" data-cx="235" data-cy="725" data-speed="0.6">
+                    <circle cx="235" cy="725" r="66" fill="none" class="gear-shadow-teeth" stroke-width="10" stroke-dasharray="8,10"/>
+                    <circle cx="235" cy="725" r="61" fill="none" class="watermark-muted" stroke-width="2"/>
+                    <line x1="235" y1="664" x2="235" y2="786" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="174" y1="725" x2="296" y2="725" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="235" cy="725" r="36" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                    <circle cx="235" cy="725" r="18" class="gear-shadow-hub"/>
+                    <circle cx="235" cy="725" r="7" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S7: Lower-Center-Left Pinion (Dense) -->
+                <g class="gear-edge gear-scattered scatter-dense" data-cx="375" data-cy="855" data-speed="-1.45">
+                    <circle cx="375" cy="855" r="32" fill="none" class="gear-shadow-teeth" stroke-width="7" stroke-dasharray="4,6"/>
+                    <circle cx="375" cy="855" r="29" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="375" y1="826" x2="375" y2="884" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="348" y1="868" x2="402" y2="842" class="watermark-muted" stroke-width="1.2"/>
+                    <circle cx="375" cy="855" r="10" class="gear-shadow-hub"/>
+                    <circle cx="375" cy="855" r="4" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S8: Lower-Center-Right Planetary (Dense) -->
+                <g class="gear-edge gear-scattered scatter-dense" data-cx="630" data-cy="845" data-speed="0.88">
+                    <circle cx="630" cy="845" r="48" fill="none" class="gear-shadow-teeth" stroke-width="8" stroke-dasharray="6,7"/>
+                    <circle cx="630" cy="845" r="44" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="596" y1="811" x2="664" y2="879" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="664" y1="811" x2="596" y2="879" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="630" cy="845" r="23" fill="none" class="watermark-muted" stroke-width="1"/>
+                    <circle cx="630" cy="845" r="13" class="gear-shadow-hub"/>
+                    <circle cx="630" cy="845" r="5" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S9: Lower-Right Field (Subtle) -->
+                <g class="gear-edge gear-scattered scatter-subtle" data-cx="785" data-cy="715" data-speed="-0.72">
+                    <circle cx="785" cy="715" r="58" fill="none" class="gear-shadow-teeth" stroke-width="9" stroke-dasharray="7,8"/>
+                    <circle cx="785" cy="715" r="53" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="785" y1="662" x2="785" y2="768" class="watermark-muted" stroke-width="1.5"/>
+                    <line x1="732" y1="715" x2="838" y2="715" class="watermark-muted" stroke-width="1.5"/>
+                    <circle cx="785" cy="715" r="28" fill="none" class="watermark-muted" stroke-width="1"/>
+                    <circle cx="785" cy="715" r="16" class="gear-shadow-hub"/>
+                    <circle cx="785" cy="715" r="6" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S10: Far-Left Lower Accent (Dense) -->
+                <g class="gear-edge gear-scattered scatter-dense" data-cx="125" data-cy="615" data-speed="1.5">
+                    <circle cx="125" cy="615" r="30" fill="none" class="gear-shadow-teeth" stroke-width="6" stroke-dasharray="4,5"/>
+                    <circle cx="125" cy="615" r="27" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="125" y1="588" x2="125" y2="642" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="102" y1="628" x2="148" y2="602" class="watermark-muted" stroke-width="1.2"/>
+                    <circle cx="125" cy="615" r="9" class="gear-shadow-hub"/>
+                    <circle cx="125" cy="615" r="3.5" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S11: Far-Right Lower Satellite (Dense) -->
+                <g class="gear-edge gear-scattered scatter-dense" data-cx="875" data-cy="615" data-speed="-1.65">
+                    <circle cx="875" cy="615" r="28" fill="none" class="gear-shadow-teeth" stroke-width="6" stroke-dasharray="4,5"/>
+                    <circle cx="875" cy="615" r="25" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="875" y1="590" x2="875" y2="640" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="853" y1="627" x2="897" y2="603" class="watermark-muted" stroke-width="1.2"/>
+                    <circle cx="875" cy="615" r="8" class="gear-shadow-hub"/>
+                    <circle cx="875" cy="615" r="3.5" fill="var(--bg, #050B08)"/>
+                </g>
+
+                <!-- S12: Upper-Center-Right Intermediate (Dense) -->
+                <g class="gear-edge gear-scattered scatter-dense" data-cx="605" data-cy="125" data-speed="1.35">
+                    <circle cx="605" cy="125" r="36" fill="none" class="gear-shadow-teeth" stroke-width="7" stroke-dasharray="5,6"/>
+                    <circle cx="605" cy="125" r="33" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="580" y1="100" x2="630" y2="150" class="watermark-muted" stroke-width="1.2"/>
+                    <line x1="630" y1="100" x2="580" y2="150" class="watermark-muted" stroke-width="1.2"/>
+                    <circle cx="605" cy="125" r="11" class="gear-shadow-hub"/>
+                    <circle cx="605" cy="125" r="4.5" fill="var(--bg, #050B08)"/>
+                </g>
+            </g>
+
+            <!-- Clockwork Dial & Hands Layer (Center: 500, 500) -->
+            <g id="clockwork-layer">
+                <g id="clockwork-dial">
+                    <!-- Outer dial rings -->
+                    <circle cx="500" cy="500" r="200" fill="none" class="watermark-muted" stroke-width="2" opacity="0.35"/>
+                    <circle cx="500" cy="500" r="190" fill="none" class="watermark-accent" stroke-width="1.5" stroke-dasharray="2,8" opacity="0.45"/>
+                    <circle cx="500" cy="500" r="160" fill="none" class="watermark-muted" stroke-width="1" opacity="0.35"/>
+                    <circle cx="500" cy="500" r="150" fill="none" class="watermark-accent" stroke-width="0.75" opacity="0.3"/>
+
+                    <!-- Major 12, 3, 6, 9 o'clock markers -->
+                    <line x1="500" y1="335" x2="500" y2="365" class="watermark-accent" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+                    <line x1="665" y1="500" x2="635" y2="500" class="watermark-accent" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+                    <line x1="500" y1="665" x2="500" y2="635" class="watermark-accent" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+                    <line x1="335" y1="500" x2="365" y2="500" class="watermark-accent" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+
+                    <!-- Minor hour tick marks (1, 2, 4, 5, 7, 8, 10, 11) -->
+                    <line x1="575" y1="370" x2="565" y2="387" class="watermark-muted" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+                    <line x1="630" y1="425" x2="613" y2="435" class="watermark-muted" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+                    <line x1="630" y1="575" x2="613" y2="565" class="watermark-muted" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+                    <line x1="575" y1="630" x2="565" y2="613" class="watermark-muted" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+                    <line x1="425" y1="630" x2="435" y2="613" class="watermark-muted" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+                    <line x1="370" y1="575" x2="387" y2="565" class="watermark-muted" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+                    <line x1="370" y1="425" x2="387" y2="435" class="watermark-muted" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+                    <line x1="425" y1="370" x2="435" y2="387" class="watermark-muted" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+                </g>
+
+                <!-- Center Real-Time Driven Hands (Center: 500, 500) -->
+                <g id="clockwork-hands">
+                    <g id="clockwork-hour-hand">
+                        <line x1="500" y1="500" x2="500" y2="395" class="watermark-accent" stroke-width="5" stroke-linecap="round" />
+                        <line x1="500" y1="500" x2="500" y2="520" class="watermark-accent" stroke-width="3.5" stroke-linecap="round" opacity="0.6" />
+                    </g>
+                    <g id="clockwork-minute-hand">
+                        <line x1="500" y1="500" x2="500" y2="345" class="watermark-muted" stroke-width="3" stroke-linecap="round" />
+                        <line x1="500" y1="500" x2="500" y2="530" class="watermark-muted" stroke-width="2" stroke-linecap="round" opacity="0.5" />
+                    </g>
+                    <g id="clockwork-second-hand">
+                        <line x1="500" y1="535" x2="500" y2="320" class="watermark-accent" stroke-width="1.5" stroke-linecap="round" />
+                        <circle cx="500" cy="350" r="3.5" class="watermark-accent-fill" />
+                    </g>
+                    <circle cx="500" cy="500" r="7.5" class="watermark-accent-fill" />
+                    <circle cx="500" cy="500" r="3" fill="var(--bg, #050B08)" />
+                </g>
+            </g>
+        </svg>
+    </div>
+
     <!-- Navigation Bar -->
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom sticky-top py-3">
+    <nav class="navbar navbar-expand-lg navbar-custom sticky-top py-2">
         <div class="container">
+            <!-- Campus Nexus Umbrella Brand -->
             <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'landing' %}{% endif %}">
-                <span class="feature-icon" style="width: 32px; height: 32px; font-size: 1rem;"><i class="bi bi-geo-alt-fill"></i></span>
-                <span><span class="green-accent">COORD</span>INATE</span>
+                <span class="feature-icon" style="width: 32px; height: 32px; font-size: 1rem;"><i class="bi bi-grid-3x3-gap-fill"></i></span>
+                <span>CAMPUS <span class="green-accent">NEXUS</span></span>
             </a>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain" aria-controls="navbarMain" aria-expanded="false" aria-label="Toggle navigation">
@@ -37,52 +313,261 @@
             </button>
 
             <div class="collapse navbar-collapse" id="navbarMain">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3 gap-lg-1">
                     {% if user.is_authenticated %}
                         <li class="nav-item">
-                            <a class="nav-link text-white-50 {% if request.resolver_match.url_name == 'dashboard' %}active text-white fw-semibold{% endif %}" href="{% url 'dashboard' %}">
-                                <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                            <a class="nav-link {% if request.resolver_match.url_name == 'ride_list' %}active fw-semibold{% endif %}" href="{% url 'ride_list' %}">
+                                <i class="bi bi-car-front-fill me-1"></i> Browse Rides
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-white-50 {% if 'coordinate' in request.path %}active text-white fw-semibold{% endif %}" href="{% url 'ride_list' %}">
-                                <i class="bi bi-car-front-fill me-1"></i> Rides
+                            <a class="nav-link {% if request.resolver_match.url_name == 'my_rides' %}active fw-semibold{% endif %}" href="{% url 'my_rides' %}">
+                                <i class="bi bi-clock-history me-1"></i> My Rides
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'messages_inbox' or request.resolver_match.url_name == 'direct_chat' %}active fw-semibold{% endif %}" href="{% url 'messages_inbox' %}">
+                                <i class="bi bi-chat-left-dots-fill me-1"></i> Messages
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active fw-semibold{% endif %}" href="{% url 'dashboard' %}">
+                                <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-compass me-1"></i> Explore
+                            </a>
+                            <ul class="dropdown-menu shadow">
+                                <li><a class="dropdown-item" href="{% url 'user_search' %}"><i class="bi bi-search me-2 text-primary"></i>Student Directory</a></li>
+                                <li><a class="dropdown-item" href="{% url 'service_catalogue' %}"><i class="bi bi-grid me-2 text-success"></i>All Services</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{% url 'contributors' %}"><i class="bi bi-people me-2 text-info"></i>Contributors</a></li>
+                                <li><a class="dropdown-item" href="{% url 'about' %}"><i class="bi bi-info-circle me-2 text-secondary"></i>About Nexus</a></li>
+                                <li><a class="dropdown-item" href="{% url 'contact' %}"><i class="bi bi-envelope me-2 text-warning"></i>Contact</a></li>
+                            </ul>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'service_catalogue' or request.resolver_match.url_name == 'landing' %}active fw-semibold{% endif %}" href="{% url 'service_catalogue' %}">
+                                <i class="bi bi-grid me-1"></i> Services
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'about' %}active fw-semibold{% endif %}" href="{% url 'about' %}">
+                                <i class="bi bi-info-circle me-1"></i> About
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'contributors' %}active fw-semibold{% endif %}" href="{% url 'contributors' %}">
+                                <i class="bi bi-people me-1"></i> Contributors
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'contact' %}active fw-semibold{% endif %}" href="{% url 'contact' %}">
+                                <i class="bi bi-envelope me-1"></i> Contact
                             </a>
                         </li>
                     {% endif %}
                 </ul>
 
                 <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <!-- Direct Zen Clock Reveal Button -->
+                    <button class="zen-nav-btn" type="button" onclick="window.toggleForegroundScatter()" title="Reveal Clock (Zen Mode)">
+                        <i class="bi bi-clock-history"></i>
+                        <span class="d-none d-md-inline">Zen Mode</span>
+                    </button>
+
+                    <!-- Unified Visual Effects & Canvas Settings Dropdown -->
+                    <div class="dropdown">
+                        <button class="btn btn-dark-custom btn-sm dropdown-toggle d-flex align-items-center gap-1 py-1 px-2" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Visual Effects & Display Configuration">
+                            <i class="bi bi-palette2 green-accent"></i>
+                            <span class="d-none d-lg-inline small">Effects</span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end shadow p-3" style="min-width: 320px;">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                <h6 class="mb-0 text-uppercase small fw-bold">
+                                    <i class="bi bi-sliders me-1 green-accent"></i> Visual Controls
+                                </h6>
+                                <button type="button" class="btn btn-sm btn-dark-custom py-0 px-2" onclick="window.toggleNexusTheme()" title="Switch Light/Dark Mode">
+                                    <i class="bi bi-sun-fill text-warning" id="theme-toggle-icon"></i>
+                                </button>
+                            </div>
+
+                            <!-- Watermark Mode -->
+                            <div class="mb-3">
+                                <label class="form-label small text-secondary d-flex justify-content-between mb-1">
+                                    <span>Watermark Canvas</span>
+                                </label>
+                                <select id="fx-watermark-mode" class="form-select form-select-sm" onchange="window.setNexusWatermarkMode(this.value)">
+                                    <option value="both">Gears & Clockwork (Default)</option>
+                                    <option value="gears">Corner & Edge Gears Only</option>
+                                    <option value="clock">Center Clockwork Only</option>
+                                    <option value="off">Off / Hidden</option>
+                                </select>
+                            </div>
+
+                            <!-- Gear Complexity Level -->
+                            <div class="mb-3">
+                                <label class="form-label small text-secondary d-flex justify-content-between mb-1">
+                                    <span>Gear Complexity Level</span>
+                                </label>
+                                <select id="fx-gear-complexity" class="form-select form-select-sm" onchange="window.setNexusGearComplexity(this.value)">
+                                    <option value="high">Complex (All Edge + Corner Gears)</option>
+                                    <option value="med">Medium (Edges & Corners)</option>
+                                    <option value="low">Minimal (Corners Only)</option>
+                                </select>
+                            </div>
+
+                            <!-- Random Gear Spread Option -->
+                            <div class="mb-3">
+                                <label class="form-label small text-secondary d-flex justify-content-between mb-1">
+                                    <span>Random Gear Spread</span>
+                                    <span id="fx-gear-spread-badge" class="badge bg-success-subtle green-accent px-2 py-0.5" style="font-size: 0.65rem;">Constellation</span>
+                                </label>
+                                <select id="fx-gear-spread" class="form-select form-select-sm" onchange="window.setNexusGearSpread(this.value)">
+                                    <option value="constellation">Constellation (12+ Scattered Gears)</option>
+                                    <option value="subtle">Subtle Drift (5 Scattered Gears)</option>
+                                    <option value="off">Off (Corners & Edges Only)</option>
+                                </select>
+                            </div>
+
+                            <!-- Watermark Transparency / Opacity Slider -->
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between small text-secondary mb-1">
+                                    <span>Watermark Transparency</span>
+                                    <span id="fx-opacity-val" class="fw-bold green-accent">22%</span>
+                                </div>
+                                <input type="range" class="form-range" id="fx-opacity-slider" min="0" max="60" value="22"
+                                       oninput="window.setNexusWatermarkOpacity(this.value)">
+                            </div>
+
+                            <!-- Accent Color Swatches Grid -->
+                            <div class="mb-3">
+                                <label class="form-label small text-secondary mb-2 d-block">Curated Accent Palettes</label>
+                                <div class="row g-1 mb-1">
+                                    <div class="col-3">
+                                        <button type="button" class="btn btn-dark-custom p-1 w-100 d-flex flex-column align-items-center" onclick="window.setNexusAccent('emerald')" title="Emerald">
+                                            <span class="rounded-circle d-inline-block" style="width: 14px; height: 14px; background: #08B74F;"></span>
+                                            <span style="font-size: 0.65rem;" class="mt-1">Emerald</span>
+                                        </button>
+                                    </div>
+                                    <div class="col-3">
+                                        <button type="button" class="btn btn-dark-custom p-1 w-100 d-flex flex-column align-items-center" onclick="window.setNexusAccent('cyan')" title="Cyan">
+                                            <span class="rounded-circle d-inline-block" style="width: 14px; height: 14px; background: #00D2FF;"></span>
+                                            <span style="font-size: 0.65rem;" class="mt-1">Cyan</span>
+                                        </button>
+                                    </div>
+                                    <div class="col-3">
+                                        <button type="button" class="btn btn-dark-custom p-1 w-100 d-flex flex-column align-items-center" onclick="window.setNexusAccent('indigo')" title="Indigo">
+                                            <span class="rounded-circle d-inline-block" style="width: 14px; height: 14px; background: #818CF8;"></span>
+                                            <span style="font-size: 0.65rem;" class="mt-1">Indigo</span>
+                                        </button>
+                                    </div>
+                                    <div class="col-3">
+                                        <button type="button" class="btn btn-dark-custom p-1 w-100 d-flex flex-column align-items-center" onclick="window.setNexusAccent('amber')" title="Amber">
+                                            <span class="rounded-circle d-inline-block" style="width: 14px; height: 14px; background: #F59E0B;"></span>
+                                            <span style="font-size: 0.65rem;" class="mt-1">Amber</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="row g-1">
+                                    <div class="col-3">
+                                        <button type="button" class="btn btn-dark-custom p-1 w-100 d-flex flex-column align-items-center" onclick="window.setNexusAccent('rose')" title="Rose">
+                                            <span class="rounded-circle d-inline-block" style="width: 14px; height: 14px; background: #FB7185;"></span>
+                                            <span style="font-size: 0.65rem;" class="mt-1">Rose</span>
+                                        </button>
+                                    </div>
+                                    <div class="col-3">
+                                        <button type="button" class="btn btn-dark-custom p-1 w-100 d-flex flex-column align-items-center" onclick="window.setNexusAccent('purple')" title="Purple">
+                                            <span class="rounded-circle d-inline-block" style="width: 14px; height: 14px; background: #A855F7;"></span>
+                                            <span style="font-size: 0.65rem;" class="mt-1">Purple</span>
+                                        </button>
+                                    </div>
+                                    <div class="col-3">
+                                        <button type="button" class="btn btn-dark-custom p-1 w-100 d-flex flex-column align-items-center" onclick="window.setNexusAccent('teal')" title="Teal">
+                                            <span class="rounded-circle d-inline-block" style="width: 14px; height: 14px; background: #14B8A6;"></span>
+                                            <span style="font-size: 0.65rem;" class="mt-1">Teal</span>
+                                        </button>
+                                    </div>
+                                    <div class="col-3">
+                                        <button type="button" class="btn btn-dark-custom p-1 w-100 d-flex flex-column align-items-center" onclick="window.setNexusAccent('orange')" title="Orange">
+                                            <span class="rounded-circle d-inline-block" style="width: 14px; height: 14px; background: #FF6B2B;"></span>
+                                            <span style="font-size: 0.65rem;" class="mt-1">Orange</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Custom Hexadecimal Color Picker -->
+                            <div class="pt-2 border-top border-secondary">
+                                <label class="form-label small text-secondary d-flex justify-content-between mb-1">
+                                    <span>Custom Hex Accent</span>
+                                    <span id="fx-hex-label" class="font-mono text-muted small">#08B74F</span>
+                                </label>
+                                <div class="input-group input-group-sm mb-3">
+                                    <input type="color" class="form-control form-control-color p-1" id="fx-custom-hex-picker" value="#08B74F" title="Choose color" oninput="window.setNexusCustomHex(this.value)">
+                                    <input type="text" class="form-control font-mono" id="fx-custom-hex-input" placeholder="#08B74F" maxlength="7" onchange="window.setNexusCustomHex(this.value)">
+                                    <button class="btn btn-outline-green btn-sm px-2" type="button" onclick="window.setNexusCustomHex(document.getElementById('fx-custom-hex-input').value)">Set</button>
+                                </div>
+                            </div>
+
+                            <!-- Zen Page Transitions Toggle -->
+                            <div class="pt-2 border-top border-secondary">
+                                <div class="form-check form-switch d-flex justify-content-between align-items-center ps-0 mb-0">
+                                    <label class="form-check-label small text-secondary" for="fx-zen-transitions-switch">
+                                        <span class="d-block fw-semibold text-white"><i class="bi bi-hourglass-split green-accent me-1"></i> Zen Page Transitions</span>
+                                        <span style="font-size: 0.7rem;" class="text-secondary">Scatter & hold clockwork between page changes</span>
+                                    </label>
+                                    <input class="form-check-input ms-2 flex-shrink-0" type="checkbox" role="switch" id="fx-zen-transitions-switch" checked
+                                           onchange="window.setNexusZenTransitions(this.checked)">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     {% if user.is_authenticated %}
-                        <a href="{% url 'profile' user.enrollment_number %}" class="btn btn-dark-custom d-flex align-items-center gap-1">
-                            <i class="bi bi-person-circle"></i>
-                            <span>{{ user.enrollment_number }}</span>
+                        <a href="{% url 'profile' user.enrollment_number %}" class="btn btn-dark-custom btn-sm d-flex align-items-center gap-2 py-1 px-2" title="My Profile">
+                            {% if user.profile_photo %}
+                                <img src="{{ user.profile_photo.url }}" alt="{{ user.enrollment_number }}" class="rounded-circle object-fit-cover" style="width: 20px; height: 20px;" onerror="this.onerror=null; this.src=''; this.parentElement.innerHTML='<i class=\'bi bi-person-circle\'></i><span>{{ user.enrollment_number }}</span>';">
+                            {% else %}
+                                <i class="bi bi-person-circle"></i>
+                            {% endif %}
+                            <span class="small">{{ user.enrollment_number }}</span>
                         </a>
 
-                        {% if user.is_superuser %}
-                            <a href="{% url 'application_list' %}" class="btn btn-outline-green position-relative">
-                                <i class="bi bi-card-checklist me-1"></i> Applications
-                            </a>
-                            <a href="{% url 'admin_analytics' %}" class="btn btn-dark-custom">
-                                <i class="bi bi-graph-up me-1"></i> Analytics
-                            </a>
-                            <a href="{% url 'admin:index' %}" class="btn btn-dark-custom">
-                                <i class="bi bi-shield-lock me-1"></i> Admin
-                            </a>
+                        {% if user.is_staff or user.is_superuser %}
+                            <div class="dropdown">
+                                <button class="btn btn-outline-green btn-sm dropdown-toggle d-flex align-items-center gap-1 py-1 px-2" type="button" data-bs-toggle="dropdown">
+                                    <i class="bi bi-shield-lock-fill"></i>
+                                    <span class="d-none d-md-inline small">Governance</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow">
+                                    <li><a class="dropdown-item" href="{% url 'operational_dashboard' %}"><i class="bi bi-speedometer me-2 text-success"></i>Operations Overview</a></li>
+                                    {% if user.is_superuser %}
+                                        <li><a class="dropdown-item" href="{% url 'manage_superusers' %}"><i class="bi bi-shield-shaded me-2 text-danger"></i>Superuser Control</a></li>
+                                    {% endif %}
+                                    <li><a class="dropdown-item" href="{% url 'application_list' %}"><i class="bi bi-card-checklist me-2 text-info"></i>Pending Applications</a></li>
+                                    <li><a class="dropdown-item" href="{% url 'admin_analytics' %}"><i class="bi bi-graph-up me-2 text-warning"></i>Ride Analytics</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{% url 'admin:index' %}" target="_blank"><i class="bi bi-database-lock me-2 text-secondary"></i>Django Admin</a></li>
+                                </ul>
+                            </div>
                         {% endif %}
 
                         <form action="{% url 'logout' %}" method="POST" class="m-0 d-inline">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-dark-custom text-danger" title="Logout">
+                            <button type="submit" class="btn btn-dark-custom btn-sm text-danger py-1 px-2" title="Logout">
                                 <i class="bi bi-box-arrow-right"></i>
                             </button>
                         </form>
                     {% else %}
-                        <a href="{% url 'login' %}" class="btn btn-dark-custom">
+                        <a href="{% url 'login' %}" class="btn btn-dark-custom btn-sm">
                             <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
                         </a>
-                        <a href="{% url 'apply_account' %}" class="btn btn-green">
-                            <i class="bi bi-person-plus-fill me-1"></i> Apply for Account
+                        <a href="{% url 'apply_account' %}" class="btn btn-green btn-sm">
+                            <i class="bi bi-person-plus-fill me-1"></i> Apply
                         </a>
                     {% endif %}
                 </div>
@@ -114,23 +599,46 @@
     </main>
 
     <!-- Footer -->
-    <footer class="footer-custom">
+    <footer class="footer-custom py-4 mt-5 border-top border-secondary">
         <div class="container">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3 mb-2">
                 <div class="d-flex align-items-center gap-2">
-                    <span class="green-accent fw-bold">COORDINATE</span>
-                    <span>&middot;</span>
-                    <span>NIT Srinagar</span>
+                    <span class="green-accent fw-bold fs-6">CAMPUS NEXUS</span>
+                    <span class="text-secondary">&middot;</span>
+                    <span class="text-secondary small">COORDINATE</span>
+                    <span class="text-secondary">&middot;</span>
+                    <span class="text-secondary small">NIT Srinagar</span>
                 </div>
-                <div class="text-secondary text-center text-md-end">
-                    <span>Tired of coordinating cab shares in overflowing WhatsApp chats.</span>
+                <div class="d-flex gap-3 text-secondary small flex-wrap justify-content-center">
+                    <a href="{% url 'about' %}" class="text-secondary text-decoration-none">About Nexus</a>
+                    <a href="{% url 'contact' %}" class="text-secondary text-decoration-none">Contact Us</a>
+                    <a href="{% url 'contributors' %}" class="text-secondary text-decoration-none">Contributors</a>
+                    <a href="{% url 'feedback' %}" class="text-secondary text-decoration-none">Submit Feedback</a>
+                    <a href="{% url 'report_bug' %}?type=BUG" class="text-danger text-decoration-none">Report a Bug</a>
+                    <a href="https://github.com/abdus-samad-saiyed/Campus-Nexus" target="_blank" class="text-secondary text-decoration-none">
+                        <i class="bi bi-github me-1"></i> GitHub
+                    </a>
                 </div>
+            </div>
+            <div class="text-secondary small text-center" style="font-size: 0.78rem;">
+                Independent student-built digital ecosystem &bull; All behavioral complaints are escalated to the Institute Proctorial Board &bull; Open Source under MIT License
             </div>
         </div>
     </footer>
+ 
+    <!-- Floating Zen Clock Reveal Restore Banner -->
+    <div id="zen-restore-banner" class="zen-restore-banner" aria-hidden="true">
+        <button type="button" class="zen-restore-btn" onclick="window.toggleForegroundScatter()">
+            <i class="bi bi-arrow-counterclockwise fs-5 green-accent"></i>
+            <span>Bring Everything Back!</span>
+            <span class="badge bg-dark border border-secondary text-secondary small ms-1">Esc</span>
+        </button>
+    </div>
 
     <!-- Bootstrap Bundle JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Clockwork Watermark Engine -->
+    <script src="{% static 'js/watermark.js' %}?v=2.8.0"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

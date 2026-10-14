@@ -5,6 +5,15 @@ db.sqlite3
 venv/
 .venv/
 .env
+*.log
 superuser_password
 project_dump.txt
 dump_project.py
+
+# Sensitive dev documentation
+debug_accounts.md
+CAMPUS_MAIL_CREDENTIALS.md
+
+# Generated directories
+media/
+staticfiles/

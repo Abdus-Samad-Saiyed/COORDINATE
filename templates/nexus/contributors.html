@@ -1,0 +1,317 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Contributors & Open Source Community — Campus Nexus{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header -->
+    <div class="text-center mb-5">
+        <span class="badge bg-success-subtle text-success px-3 py-2 rounded-pill fw-semibold mb-3 border border-success-subtle d-inline-flex align-items-center">
+            <i class="bi bi-people-fill me-2"></i> Open Source Community
+        </span>
+        <h1 class="hero-title mb-3">Campus Nexus <span class="green-accent">Contributors</span></h1>
+        <p class="hero-subtitle mx-auto text-secondary" style="max-width: 680px;">
+            The engineers, designers, and students building decentralized, secure, and privacy-respecting tools for the NIT Srinagar community.
+        </p>
+    </div>
+
+    <!-- Core Architect & Creator Spotlight -->
+    <div class="glass p-4 p-md-5 mb-5 glass-glow border-success-subtle">
+        <div class="d-flex flex-column flex-md-row align-items-center gap-4">
+            <div class="position-relative">
+                <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold fs-2 text-white bg-dark border border-success"
+                     style="width: 110px; height: 110px; box-shadow: 0 0 30px rgba(8, 183, 79, 0.35);">
+                    AS
+                </div>
+                <span class="position-absolute bottom-0 end-0 badge bg-success rounded-pill px-2 py-1 small" title="Lead Architect">
+                    <i class="bi bi-star-fill"></i>
+                </span>
+            </div>
+
+            <div class="flex-grow-1 text-center text-md-start">
+                <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-md-start gap-2 mb-1">
+                    <h3 class="fw-bold text-white mb-0">Abdus Samad Saiyed</h3>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle small">Lead Creator & Architect</span>
+                    <span class="badge bg-secondary small">NIT Srinagar &bull; CSE</span>
+                </div>
+                <p class="text-secondary small mb-3">
+                    Conceived the Campus Nexus umbrella platform and architected the COORDINATE ridesharing engine, real-time WebSocket communication layer, role-gated operational dashboard, and production security hardening.
+                </p>
+
+                <!-- Social & Repo Links -->
+                <div class="d-flex flex-wrap gap-2 justify-content-center justify-content-md-start">
+                    <a href="https://github.com/abdus-samad-saiyed" target="_blank" class="btn btn-dark-custom btn-sm">
+                        <i class="bi bi-github me-1"></i> GitHub Profile
+                    </a>
+                    <a href="https://linkedin.com/in/abdus-samad-saiyed" target="_blank" class="btn btn-dark-custom btn-sm text-info">
+                        <i class="bi bi-linkedin me-1"></i> LinkedIn
+                    </a>
+                    <a href="https://github.com/abdus-samad-saiyed/Campus-Nexus" target="_blank" class="btn btn-green btn-sm">
+                        <i class="bi bi-code-slash me-1"></i> Project Repository
+                    </a>
+                    {% if can_manage_contributors %}
+                        <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#nominateModal">
+                            <i class="bi bi-person-plus-fill me-1"></i> Add Contributor
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Contributors Directory -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h4 class="fw-bold text-white mb-1"><i class="bi bi-people-fill green-accent me-2"></i>Recognized Contributors</h4>
+            <p class="text-secondary small mb-0">Official contributors and architects recognized by administrators for impactful codebase commits.</p>
+        </div>
+        {% if can_manage_contributors %}
+            <button type="button" class="btn btn-green btn-sm" data-bs-toggle="modal" data-bs-target="#nominateModal">
+                <i class="bi bi-person-plus-fill me-1"></i> Add Contributor
+            </button>
+        {% endif %}
+    </div>
+
+    {% if contributors %}
+        <div class="row g-4 mb-5">
+            {% for c in contributors %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="glass p-4 h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold text-white bg-dark border border-secondary"
+                                     style="width: 48px; height: 48px;">
+                                    {{ c.name|slice:":2"|upper }}
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    {% if c.nominated_by %}
+                                        <span class="badge bg-dark border border-secondary text-secondary small" title="Added by {{ c.nominated_by.enrollment_number }}">
+                                            Added by {{ c.nominated_by.enrollment_number }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-success-subtle text-success small">Founding</span>
+                                    {% endif %}
+                                    {% if can_manage_contributors %}
+                                        <form action="{% url 'remove_contributor' c.id %}" method="POST" class="d-inline" onsubmit="return confirm('Remove {{ c.name|escapejs }} from recognized contributors?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-danger btn-sm p-1 px-2" title="Remove Contributor">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <h5 class="fw-bold text-white mb-1">{{ c.name }}</h5>
+                            <div class="text-emerald small fw-semibold mb-2">{{ c.role }}</div>
+                            {% if c.enrollment_number %}
+                                <div class="text-secondary small mb-2"><code>{{ c.enrollment_number }}</code></div>
+                            {% endif %}
+                            {% if c.bio %}
+                                <p class="text-secondary small mb-3">{{ c.bio }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex gap-2 pt-3 border-top border-secondary">
+                            {% if c.github_url %}
+                                <a href="{{ c.github_url }}" target="_blank" class="btn btn-dark-custom btn-sm flex-grow-1" title="GitHub">
+                                    <i class="bi bi-github me-1"></i> GitHub
+                                </a>
+                            {% endif %}
+                            {% if c.linkedin_url %}
+                                <a href="{{ c.linkedin_url }}" target="_blank" class="btn btn-dark-custom btn-sm flex-grow-1 text-info" title="LinkedIn">
+                                    <i class="bi bi-linkedin me-1"></i> LinkedIn
+                                </a>
+                            {% endif %}
+                            {% if c.enrollment_number %}
+                                <a href="{% url 'profile' c.enrollment_number %}" class="btn btn-outline-secondary btn-sm" title="View Profile">
+                                    <i class="bi bi-person"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="glass p-4 text-center mb-5">
+            <p class="text-secondary small mb-2">No external contributors added yet.</p>
+            {% if can_manage_contributors %}
+                <button type="button" class="btn btn-outline-green btn-sm" data-bs-toggle="modal" data-bs-target="#nominateModal">
+                    <i class="bi bi-plus-lg me-1"></i> Add the first student contributor
+                </button>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <!-- Contributor Roles & Recognition Grid -->
+    <h4 class="fw-bold text-white mb-3"><i class="bi bi-award-fill green-accent me-2"></i>Project Roles & Focus Areas</h4>
+    <div class="row g-4 mb-5">
+        <div class="col-md-6 col-lg-3">
+            <div class="glass p-4 h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="feature-icon mb-3"><i class="bi bi-shield-lock-fill"></i></div>
+                    <h5 class="fw-bold text-white mb-1">Security & Auth</h5>
+                    <p class="text-secondary small mb-3">
+                        PII data minimization, anti-enumeration authentication, rate limiting, and formula-injection defenses.
+                    </p>
+                </div>
+                <div class="text-white-50 small fw-semibold">
+                    Core Security Specification
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+            <div class="glass p-4 h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="feature-icon mb-3"><i class="bi bi-cpu-fill"></i></div>
+                    <h5 class="fw-bold text-white mb-1">Real-Time Core</h5>
+                    <p class="text-secondary small mb-3">
+                        ASGI Channels, WebSocket chat consumers, dynamic participant membership, and graceful post-departure buffering.
+                    </p>
+                </div>
+                <div class="text-white-50 small fw-semibold">
+                    Messaging & Concurrency
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+            <div class="glass p-4 h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="feature-icon mb-3"><i class="bi bi-palette-fill"></i></div>
+                    <h5 class="fw-bold text-white mb-1">UI / UX Tokens</h5>
+                    <p class="text-secondary small mb-3">
+                        Dark glassmorphism design system, system-time clockwork background watermark, and accessible forms.
+                    </p>
+                </div>
+                <div class="text-white-50 small fw-semibold">
+                    Visual Experience & Tokens
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+            <div class="glass p-4 h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="feature-icon mb-3"><i class="bi bi-phone-fill"></i></div>
+                    <h5 class="fw-bold text-white mb-1">Mobile & API</h5>
+                    <p class="text-secondary small mb-3">
+                        Versioned REST API v1 (`/api/v1/`), token auth, and React Native mobile architecture documentation.
+                    </p>
+                </div>
+                <div class="text-white-50 small fw-semibold">
+                    Cross-Platform API
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- How to Contribute Section -->
+    <div class="glass p-4 p-md-5">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="fw-bold text-white mb-0">
+                <i class="bi bi-git green-accent me-2"></i>How to Contribute to Campus Nexus
+            </h4>
+            <span class="badge bg-dark border border-secondary text-secondary">Open to NIT Srinagar Students</span>
+        </div>
+        <p class="text-secondary small mb-4">
+            We welcome code contributions, bug fixes, UI improvements, and new service proposals from all departments and degree programs.
+        </p>
+
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="p-3 rounded border border-secondary bg-black bg-opacity-40 h-100">
+                    <div class="fw-bold text-white mb-2">1. Clone & Set Up Locally</div>
+                    <pre class="bg-dark p-2 rounded small text-success mb-2" style="font-size: 0.75rem;"><code>git clone https://github.com/abdus-samad-saiyed/Campus-Nexus.git
+cd Campus-Nexus
+python -m venv venv
+pip install -r requirements.txt</code></pre>
+                    <p class="text-secondary small mb-0">Run migrations and seed local debug accounts with <code>python manage.py create_debug_accounts</code>.</p>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="p-3 rounded border border-secondary bg-black bg-opacity-40 h-100">
+                    <div class="fw-bold text-white mb-2">2. Pick an Issue or Propose</div>
+                    <p class="text-secondary small mb-3">
+                        Browse open tasks in the repository issue tracker, or submit a feature proposal for upcoming modules like print queue or mess menus.
+                    </p>
+                    <a href="https://github.com/abdus-samad-saiyed/Campus-Nexus/issues" target="_blank" class="btn btn-dark-custom btn-sm w-100">
+                        <i class="bi bi-box-arrow-up-right me-1"></i> Browse Issues
+                    </a>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="p-3 rounded border border-secondary bg-black bg-opacity-40 h-100">
+                    <div class="fw-bold text-white mb-2">3. Submit a Pull Request</div>
+                    <p class="text-secondary small mb-3">
+                        Ensure all automated unit and integration tests pass (<code>python manage.py test</code>) before submitting your PR.
+                    </p>
+                    <a href="https://github.com/abdus-samad-saiyed/Campus-Nexus/pulls" target="_blank" class="btn btn-green btn-sm w-100">
+                        <i class="bi bi-git me-1"></i> Open Pull Request
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if can_manage_contributors %}
+<!-- Add Contributor Modal (Admin Only) -->
+<div class="modal fade" id="nominateModal" tabindex="-1" aria-labelledby="nominateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content glass border-secondary text-white">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold" id="nominateModalLabel">
+                    <i class="bi bi-person-plus-fill text-success me-2"></i>Add Official Contributor
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{% url 'nominate_contributor' %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p class="text-secondary small mb-3">
+                        As an administrator, you can formally add recognized contributors who have engineered features or improved the Campus Nexus platform.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Full Name *</label>
+                        <input type="text" name="name" class="form-control" placeholder="e.g. Faheem Ahmad" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Enrollment Number (Optional)</label>
+                        <input type="text" name="enrollment_number" class="form-control" placeholder="e.g. 2024BCSE042">
+                        <div class="form-text text-secondary small">If provided, this links directly to their verified campus profile.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Role / Focus Area *</label>
+                        <input type="text" name="role" class="form-control" placeholder="e.g. Backend API Contributor / Security Researcher" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">GitHub Profile URL</label>
+                        <input type="url" name="github_url" class="form-control" placeholder="https://github.com/username">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">LinkedIn Profile URL</label>
+                        <input type="url" name="linkedin_url" class="form-control" placeholder="https://linkedin.com/in/username">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Contribution Highlights / Bio</label>
+                        <textarea name="bio" class="form-control" rows="3" maxlength="255" placeholder="Brief summary of their contribution or module work..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-dark-custom" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-green">
+                        <i class="bi bi-check2-circle me-1"></i> Add Contributor
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chat with {{ friend.enrollment_number }} — Campus Nexus{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="glass p-4">
+                <!-- Chat Header -->
+                <div class="d-flex justify-content-between align-items-center pb-3 border-bottom border-secondary mb-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <a href="{% url 'profile' friend.enrollment_number %}" class="position-relative">
+                            {% if friend.profile_photo %}
+                                <img src="{{ friend.profile_photo.url }}" class="rounded-circle object-fit-cover shadow"
+                                     style="width: 48px; height: 48px;" alt="{{ friend.enrollment_number }}">
+                            {% else %}
+                                <div class="feature-icon" style="width: 48px; height: 48px; font-size: 1.5rem;">
+                                    <i class="bi bi-person-fill"></i>
+                                </div>
+                            {% endif %}
+                            <span id="friend-presence-dot" class="position-absolute bottom-0 end-0 p-1 bg-secondary border border-dark rounded-circle"
+                                  style="width: 12px; height: 12px;" title="Offline"></span>
+                        </a>
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <h5 class="fw-bold mb-0">
+                                    <a href="{% url 'profile' friend.enrollment_number %}" class="text-white text-decoration-none">
+                                        {{ friend.display_name }}
+                                    </a>
+                                </h5>
+                                <span class="badge bg-dark border border-secondary text-secondary small">{{ friend.branch }}</span>
+                            </div>
+                            <div class="small d-flex align-items-center gap-2 mt-1">
+                                <span id="friend-presence-text" class="text-secondary">Offline</span>
+                                <span id="typing-indicator" class="text-success fst-italic d-none">
+                                    <i class="bi bi-pen me-1"></i> typing…
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{% url 'messages_inbox' %}" class="btn btn-dark-custom btn-sm" title="Back to All Messages">
+                            <i class="bi bi-inbox-fill me-1"></i> Inbox
+                        </a>
+                        <a href="{% url 'profile' friend.enrollment_number %}" class="btn btn-outline-green btn-sm" title="View Profile">
+                            <i class="bi bi-person-badge"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Chat Box Container -->
+                <div class="chat-container direct-chat-container" id="direct-chat-box"
+                     data-friend-enrollment="{{ friend.enrollment_number }}"
+                     data-current-user="{{ request.user.enrollment_number }}">
+
+                    <!-- Message stream -->
+                    <div class="chat-messages" id="direct-chat-messages" style="min-height: 380px; max-height: 480px; overflow-y: auto;">
+                        {% if chat_messages %}
+                            {% for msg in chat_messages %}
+                                <div class="message-item {% if msg.sender == request.user %}message-self{% else %}message-other{% endif %}">
+                                    <div class="message-author">{% if msg.sender == request.user %}You{% else %}{{ msg.sender.enrollment_number }}{% endif %}</div>
+                                    <div class="message-bubble">{{ msg.content }}</div>
+                                    <div class="message-time">{{ msg.created_at|date:"M j, H:i" }}</div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center text-secondary small py-5" id="empty-direct-chat-notice">
+                                <i class="bi bi-chat-heart d-block fs-3 mb-2 green-accent"></i>
+                                Start your direct conversation with {{ friend.enrollment_number }}!
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Message Input Form -->
+                    <div class="chat-footer pt-3 border-top border-secondary">
+                        <form id="direct-chat-form" method="POST" action="{% url 'direct_chat' friend.enrollment_number %}" class="d-flex gap-2 m-0">
+                            {% csrf_token %}
+                            <input type="text" id="direct-chat-input" name="content" class="form-control"
+                                   placeholder="Type a message to {{ friend.enrollment_number }}…"
+                                   maxlength="2000" autocomplete="off" required>
+                            <button type="submit" class="btn btn-green px-4">
+                                <i class="bi bi-send-fill"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const chatContainer = document.getElementById('direct-chat-box');
+    if (!chatContainer) return;
+
+    const friendEnrollment = chatContainer.dataset.friendEnrollment;
+    const currentUser = chatContainer.dataset.currentUser;
+    const messagesContainer = document.getElementById('direct-chat-messages');
+    const chatForm = document.getElementById('direct-chat-form');
+    const chatInput = document.getElementById('direct-chat-input');
+    const presenceDot = document.getElementById('friend-presence-dot');
+    const presenceText = document.getElementById('friend-presence-text');
+    const typingIndicator = document.getElementById('typing-indicator');
+
+    function scrollToBottom() {
+        if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    }
+    scrollToBottom();
+
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsUrl = `${protocol}${window.location.host}/ws/chat/direct/${friendEnrollment}/`;
+
+    let socket = null;
+    let typingTimeout = null;
+
+    function connectSocket() {
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = function () {
+            // Announce presence
+            socket.send(JSON.stringify({ type: 'presence', status: 'online' }));
+        };
+
+        socket.onmessage = function (e) {
+            try {
+                const data = JSON.parse(e.data);
+                if (data.type === 'message') {
+                    appendDirectMessage(data.sender, data.content, data.timestamp, data.is_self);
+                } else if (data.type === 'typing') {
+                    if (data.is_typing) {
+                        typingIndicator.classList.remove('d-none');
+                    } else {
+                        typingIndicator.classList.add('d-none');
+                    }
+                } else if (data.type === 'presence') {
+                    if (data.status === 'online') {
+                        if (presenceDot) {
+                            presenceDot.className = 'position-absolute bottom-0 end-0 p-1 bg-success border border-dark rounded-circle';
+                            presenceDot.title = 'Online';
+                        }
+                        if (presenceText) {
+                            presenceText.textContent = 'Active now';
+                            presenceText.className = 'text-success fw-semibold';
+                        }
+                    } else {
+                        if (presenceDot) {
+                            presenceDot.className = 'position-absolute bottom-0 end-0 p-1 bg-secondary border border-dark rounded-circle';
+                            presenceDot.title = 'Offline';
+                        }
+                        if (presenceText) {
+                            presenceText.textContent = 'Offline';
+                            presenceText.className = 'text-secondary';
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Error handling direct chat payload:', err);
+            }
+        };
+
+        socket.onclose = function () {
+            setTimeout(connectSocket, 3000);
+        };
+    }
+
+    connectSocket();
+
+    function appendDirectMessage(sender, content, timestamp, isSelf) {
+        const emptyNotice = document.getElementById('empty-direct-chat-notice');
+        if (emptyNotice) emptyNotice.remove();
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message-item ${isSelf ? 'message-self' : 'message-other'}`;
+
+        const authorDiv = document.createElement('div');
+        authorDiv.className = 'message-author';
+        authorDiv.textContent = isSelf ? 'You' : sender;
+
+        const bubbleDiv = document.createElement('div');
+        bubbleDiv.className = 'message-bubble';
+        bubbleDiv.textContent = content;
+
+        const timeDiv = document.createElement('div');
+        timeDiv.className = 'message-time';
+        timeDiv.textContent = timestamp;
+
+        msgDiv.appendChild(authorDiv);
+        msgDiv.appendChild(bubbleDiv);
+        msgDiv.appendChild(timeDiv);
+        messagesContainer.appendChild(msgDiv);
+        scrollToBottom();
+    }
+
+    // Typing throttle handler
+    if (chatInput) {
+        chatInput.addEventListener('input', function () {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'typing', is_typing: true }));
+                clearTimeout(typingTimeout);
+                typingTimeout = setTimeout(function () {
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: 'typing', is_typing: false }));
+                    }
+                }, 1500);
+            }
+        });
+    }
+
+    if (chatForm) {
+        chatForm.addEventListener('submit', function (e) {
+            const text = (chatInput.value || '').trim();
+            if (!text) {
+                e.preventDefault();
+                return;
+            }
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                e.preventDefault();
+                socket.send(JSON.stringify({
+                    type: 'message',
+                    content: text,
+                }));
+                // Reset input
+                chatInput.value = '';
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'typing', is_typing: false }));
+                }
+            }
+            // If WebSocket is not ready, lets standard HTTP POST proceed
+        });
+    }
+});
+</script>
+{% endblock %}

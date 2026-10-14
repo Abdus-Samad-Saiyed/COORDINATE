@@ -1,11 +1,13 @@
-"""
-WebSocket consumer for ride chat.
+"""WebSocket consumer for ride chat.
 
-Each ride has its own channel group: 'ride_<ride_id>'
+Each ride has its own channel group: 'ride_<ride_id>'.
 Messages are saved to the DB and broadcast to all connected participants.
+Includes dynamic membership checks, safe frame parsing, rate limiting, and post-departure buffering.
 """
 
+import datetime
 import json
+import time
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -14,12 +16,22 @@ from django.utils import timezone
 
 class RideChatConsumer(AsyncWebsocketConsumer):
 
-    async def connect(self):
-        self.ride_id = self.scope['url_route']['kwargs']['ride_id']
-        self.group_name = f'ride_{self.ride_id}'
-        self.user = self.scope['user']
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.last_message_times = []
 
-        if not self.user.is_authenticated:
+    async def connect(self):
+        raw_id = self.scope['url_route']['kwargs']['ride_id']
+        try:
+            self.ride_id = int(raw_id)
+        except (ValueError, TypeError):
+            await self.close()
+            return
+
+        self.group_name = f'ride_{self.ride_id}'
+        self.user = self.scope.get('user')
+
+        if not self.user or not self.user.is_authenticated:
             await self.close()
             return
 
@@ -31,44 +43,118 @@ class RideChatConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
-    async def receive(self, text_data):
+    async def receive(self, text_data=None, bytes_data=None):
+        # CHAT-01: Safely ignore binary frames
+        if bytes_data is not None or not text_data:
+            return
+
         try:
             data = json.loads(text_data)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError):
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'error': 'Invalid message format.',
+            }))
             return
 
         content = (data.get('content') or '').strip()
-        if not content or len(content) > 1000:
+        if not content:
             return
 
+        if len(content) > 1000:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'error': 'Message exceeds 1000 characters limit.',
+            }))
+            return
+
+        # CHAT-03: Rate limiting on chat (max 5 messages per 3 seconds per connection)
+        now_ts = time.time()
+        self.last_message_times = [t for t in self.last_message_times if now_ts - t < 3.0]
+        if len(self.last_message_times) >= 5:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'error': 'Chat rate limit reached. Slow down.',
+            }))
+            return
+        self.last_message_times.append(now_ts)
+
+        # SEC-04: Dynamic membership re-check (in case user was kicked after connecting)
+        if not await self._is_participant():
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'error': 'You are no longer a participant in this ride.',
+            }))
+            await self.close()
+            return
+
+        # CHAT-05: Check send permission (departure buffer of 2 hours)
         if not await self._can_send():
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'error': 'Chat is closed for this ride.',
+            }))
             return
 
+        # Persist message
         message = await self._save_message(content)
 
+        # Broadcast to ride group
         await self.channel_layer.group_send(
             self.group_name,
             {
                 'type': 'chat.message',
+                'message_id': message.id,
                 'author': self.user.enrollment_number,
                 'content': message.content,
                 'timestamp': message.created_at.strftime('%b %d, %H:%M'),
             },
         )
 
+        # CHAT-02: Delivery acknowledgement to sender
+        await self.send(text_data=json.dumps({
+            'type': 'ack',
+            'status': 'sent',
+            'message_id': message.id,
+        }))
+
     async def chat_message(self, event):
         """Relay a group message to this specific WebSocket connection."""
         await self.send(text_data=json.dumps({
+            'type': 'message',
+            'message_id': event.get('message_id'),
             'author': event['author'],
             'content': event['content'],
             'timestamp': event['timestamp'],
             'is_self': event['author'] == self.user.enrollment_number,
         }))
 
+    async def system_notice(self, event):
+        """Relay system announcements (lifecycle teardown, rescheduling, standby promotion)."""
+        action = event.get('action')
+        await self.send(text_data=json.dumps({
+            'type': 'system_notice',
+            'action': action,
+            'content': event.get('content', ''),
+            'departure_time': event.get('departure_time'),
+            'user': event.get('user'),
+        }))
+        if action in ['cancelled', 'completed', 'terminated']:
+            await self.close(code=4001)
+
+    async def ride_terminated(self, event):
+        """Teardown handler: closes WebSocket connection when ride ends."""
+        await self.system_notice(event)
+
+    async def ride_rescheduled(self, event):
+        """Reschedule handler: notifies all clients of new departure time."""
+        await self.system_notice(event)
+
     # ------------------------------------------------------------------
-    # DB helpers (run in thread pool via database_sync_to_async)
+    # DB helpers
     # ------------------------------------------------------------------
 
     @database_sync_to_async
@@ -84,7 +170,10 @@ class RideChatConsumer(AsyncWebsocketConsumer):
         from coordinate.models import RideRequest
         try:
             ride = RideRequest.objects.get(id=self.ride_id)
-            return ride.status != 'COMPLETED' and ride.departure_time > timezone.now()
+            if ride.status in ['COMPLETED', 'CANCELLED']:
+                return False
+            # Post-departure chat buffer: 2 hours after scheduled departure
+            return ride.departure_time + datetime.timedelta(hours=2) > timezone.now()
         except RideRequest.DoesNotExist:
             return False
 

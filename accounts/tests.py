@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import AccountApplication, FriendRequest, Friendship, User
+from .two_factor import create_phone_otp
 
 
 class AccountWorkflowTests(TestCase):
@@ -34,13 +35,15 @@ class AccountWorkflowTests(TestCase):
         )
 
     def test_valid_application_normalizes_and_hashes_password(self):
-
+        _, raw_otp = create_phone_otp(phone_number='9999999903', email='applicant2024@nitsri.ac.in', purpose='SIGNUP')
         response = self.client.post(
             reverse('apply_account'),
             {
                 'enrollment_number': '2024bcse013',
                 'full_name': 'Applicant',
                 'phone_number': '9999999903',
+                'email': 'applicant2024@nitsri.ac.in',
+                'phone_otp': raw_otp,
                 'gender': 'M',
                 'password': 'password12345',
             }
@@ -53,6 +56,10 @@ class AccountWorkflowTests(TestCase):
         self.assertEqual(
             application.enrollment_number,
             '2024BCSE013'
+        )
+        self.assertEqual(
+            application.email,
+            'applicant2024@nitsri.ac.in'
         )
         self.assertNotEqual(
             application.password,
@@ -67,6 +74,7 @@ class AccountWorkflowTests(TestCase):
                 'enrollment_number': 'bad',
                 'full_name': 'Applicant',
                 'phone_number': '9999999903',
+                'email': 'applicant2024@nitsri.ac.in',
                 'gender': 'M',
                 'password': 'password12345',
             }
@@ -81,6 +89,7 @@ class AccountWorkflowTests(TestCase):
             enrollment_number='2024BCSE013',
             full_name='Applicant',
             phone_number='9999999903',
+            email='applicant2024@nitsri.ac.in',
             gender='M',
             password='hashed',
             application_number='APP001'
@@ -92,6 +101,7 @@ class AccountWorkflowTests(TestCase):
                 'enrollment_number': '2024BCSE013',
                 'full_name': 'Applicant',
                 'phone_number': '9999999903',
+                'email': 'applicant2024@nitsri.ac.in',
                 'gender': 'M',
                 'password': 'password12345',
             }
@@ -108,6 +118,7 @@ class AccountWorkflowTests(TestCase):
             enrollment_number='2024BCSE013',
             full_name='Applicant',
             phone_number='9999999903',
+            email='applicant2024@nitsri.ac.in',
             gender='M',
             password='pbkdf2_sha256$1000000$example$hash',
             application_number='APP001'
@@ -202,3 +213,32 @@ class AccountWorkflowTests(TestCase):
 
         self.assertEqual(Friendship.objects.count(), 1)
         self.assertEqual(FriendRequest.objects.count(), 0)
+
+    def test_profile_photo_replaces_and_deletes_old_file_from_storage(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.core.files.storage import default_storage
+
+        # 1. Upload first photo
+        file1 = SimpleUploadedFile('avatar1.jpg', b'image_content_1', content_type='image/jpeg')
+        self.user.profile_photo = file1
+        self.user.save()
+
+        path1 = self.user.profile_photo.name
+        self.assertTrue(default_storage.exists(path1))
+
+        # 2. Upload second photo (replacing first)
+        file2 = SimpleUploadedFile('avatar2.jpg', b'image_content_2', content_type='image/jpeg')
+        self.user.profile_photo = file2
+        self.user.save()
+
+        path2 = self.user.profile_photo.name
+        self.assertNotEqual(path1, path2)
+        # Previous photo must be deleted from storage
+        self.assertFalse(default_storage.exists(path1))
+        # New photo must exist
+        self.assertTrue(default_storage.exists(path2))
+
+        # 3. Deleting the user cleans up the remaining photo
+        self.user.delete()
+        self.assertFalse(default_storage.exists(path2))
+

@@ -1,12 +1,14 @@
 """Forms for the coordinate app."""
 
+import datetime
 from django import forms
+from django.utils import timezone
 
 from .models import RideMessage, RideRequest, RideReview
 
 
 class RideRequestForm(forms.ModelForm):
-    """Form for creating a new ride."""
+    """Form for creating a new ride with validation for spots, departure time, and routes."""
 
     class Meta:
         model = RideRequest
@@ -35,17 +37,27 @@ class RideRequestForm(forms.ModelForm):
             ),
             'total_spots': forms.NumberInput(attrs={
                 'class': 'form-control',
-                'min': 2,
+                'min': 1,
                 'max': 6,
-                'placeholder': '2–6',
+                'placeholder': '1–6',
             }),
         }
 
     def clean_total_spots(self):
         spots = self.cleaned_data.get('total_spots')
-        if spots is not None and (spots < 2 or spots > 6):
-            raise forms.ValidationError('Total spots must be between 2 and 6.')
+        if spots is not None and (spots < 1 or spots > 6):
+            raise forms.ValidationError('Total spots must be between 1 and 6.')
         return spots
+
+    def clean_departure_time(self):
+        dep_time = self.cleaned_data.get('departure_time')
+        if dep_time:
+            now = timezone.now()
+            if dep_time <= now:
+                raise forms.ValidationError('Departure time must be in the future.')
+            if dep_time > now + datetime.timedelta(days=30):
+                raise forms.ValidationError('Departure time cannot be scheduled more than 30 days in advance.')
+        return dep_time
 
     def clean(self):
         cleaned = super().clean()
@@ -73,16 +85,90 @@ class RideMessageForm(forms.ModelForm):
 
 
 class RideReviewForm(forms.ModelForm):
-    """Post-ride review form."""
+    """Post-ride review form with multi-parameter ratings and grievance categorization."""
+
+    rating = forms.ChoiceField(
+        choices=[(1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')],
+        widget=forms.RadioSelect(attrs={'class': 'btn-check'}),
+        initial=5,
+        label='Overall Experience',
+    )
+    punctuality_rating = forms.ChoiceField(
+        choices=[(1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')],
+        widget=forms.RadioSelect(attrs={'class': 'btn-check'}),
+        initial=5,
+        required=False,
+        label='Punctuality & Timeliness',
+    )
+    communication_rating = forms.ChoiceField(
+        choices=[(1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')],
+        widget=forms.RadioSelect(attrs={'class': 'btn-check'}),
+        initial=5,
+        required=False,
+        label='Communication & Responsiveness',
+    )
+    reliability_rating = forms.ChoiceField(
+        choices=[(1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')],
+        widget=forms.RadioSelect(attrs={'class': 'btn-check'}),
+        initial=5,
+        required=False,
+        label='Reliability & Etiquette',
+    )
+    grievance = forms.ChoiceField(
+        choices=RideReview.GRIEVANCE_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_grievance'}),
+        initial='NONE',
+        required=False,
+        label='Grievance Category',
+    )
 
     class Meta:
         model = RideReview
-        fields = ['rating', 'complaint']
+        fields = [
+            'rating',
+            'punctuality_rating',
+            'communication_rating',
+            'reliability_rating',
+            'grievance',
+            'custom_grievance',
+            'complaint',
+        ]
         widgets = {
-            'rating': forms.RadioSelect(),
+            'grievance': forms.Select(attrs={'class': 'form-select', 'id': 'id_grievance'}),
+            'custom_grievance': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Specify custom grievance details...',
+                'id': 'id_custom_grievance',
+            }),
             'complaint': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 3,
-                'placeholder': 'Optional: describe any issue with this participant.',
+                'placeholder': 'Optional: additional details or feedback for this participant.',
             }),
         }
+
+    def clean(self):
+        cleaned = super().clean()
+        rating_val = cleaned.get('rating')
+        try:
+            rating_int = int(rating_val) if rating_val is not None else 5
+        except (ValueError, TypeError):
+            rating_int = 5
+
+        for field in ['punctuality_rating', 'communication_rating', 'reliability_rating']:
+            val = cleaned.get(field)
+            if not val:
+                cleaned[field] = rating_int
+            else:
+                try:
+                    cleaned[field] = int(val)
+                except (ValueError, TypeError):
+                    cleaned[field] = rating_int
+
+        if not cleaned.get('grievance'):
+            cleaned['grievance'] = 'NONE'
+
+        if cleaned.get('grievance') == 'CUSTOM' and not cleaned.get('custom_grievance'):
+            self.add_error('custom_grievance', 'Please provide details for the custom grievance.')
+
+        return cleaned

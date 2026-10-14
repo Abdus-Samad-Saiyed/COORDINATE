@@ -1,0 +1,807 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Operational Dashboard — Campus Nexus Operations{% endblock %}
+
+{% block extra_head %}
+<!-- Chart.js for Administrative Graphical Representations -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-1 rounded-pill small fw-semibold mb-2">
+                <i class="bi bi-shield-lock-fill me-1"></i> Authorized Staff / Superuser Only
+            </span>
+            <h2 class="fw-bold mb-1">Campus Nexus <span class="green-accent">Operations</span></h2>
+            <p class="text-secondary small mb-0">System metrics, real-time concurrency, server load, visual analytics, and proctorial escalations</p>
+        </div>
+
+        <!-- Action Buttons Group -->
+        <div class="d-flex gap-2 flex-wrap">
+            <div class="dropdown">
+                <button class="btn btn-green dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-download me-1"></i> Data Exports
+                </button>
+                <ul class="dropdown-menu dropdown-menu-dark shadow">
+                    <li><a class="dropdown-item" href="{% url 'export_rides_csv' %}"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Export Rides (CSV)</a></li>
+                    <li><a class="dropdown-item" href="{% url 'export_users_csv' %}"><i class="bi bi-people me-2"></i>Export Users (CSV)</a></li>
+                    <li><a class="dropdown-item" href="{% url 'export_applications_csv' %}"><i class="bi bi-card-checklist me-2"></i>Export Applications (CSV)</a></li>
+                </ul>
+            </div>
+            {% if user.is_superuser %}
+                <a href="{% url 'manage_superusers' %}" class="btn btn-outline-danger" title="Manage Platform Superusers">
+                    <i class="bi bi-shield-shaded me-1"></i> Superusers ({{ superusers_count }})
+                </a>
+            {% endif %}
+            <a href="{% url 'health_check' %}" target="_blank" class="btn btn-dark-custom" title="View System Health JSON">
+                <i class="bi bi-activity text-success me-1"></i> Health Check
+            </a>
+        </div>
+    </div>
+
+    <!-- Server Telemetry & Runtime Load Bar -->
+    <div class="glass p-3 mb-4 border-secondary">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 small">
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success-subtle text-success"><i class="bi bi-hdd-network-fill me-1"></i> System Online</span>
+                <span class="text-white-50">DB Engine: <strong>{{ server_telemetry.db_engine }}</strong></span>
+                <span class="text-secondary">&bull;</span>
+                <span class="text-white-50">Latency: <strong class="text-success">{{ server_telemetry.db_latency_ms }} ms</strong></span>
+            </div>
+            <div class="d-flex align-items-center gap-3 text-secondary flex-wrap">
+                <span><i class="bi bi-cpu me-1 text-info"></i> {{ server_telemetry.cpu_count }} CPU Cores</span>
+                <span><i class="bi bi-diagram-2 me-1 text-warning"></i> {{ server_telemetry.active_threads }} Active Threads</span>
+                <span><i class="bi bi-terminal me-1 text-secondary"></i> Python {{ server_telemetry.python_version }}</span>
+                <span><i class="bi bi-clock me-1 text-secondary"></i> {{ server_telemetry.server_time }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Server Traffic & Operational Telemetry -->
+    <div class="glass p-4 mb-4 border-success-subtle">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+                <h5 class="fw-bold text-white mb-0">
+                    <i class="bi bi-activity green-accent me-2"></i>Server Traffic & Operational Telemetry
+                </h5>
+                <span class="text-secondary small">Real-time throughput, requests today, user sign-ins, and interval metrics</span>
+            </div>
+            <span class="badge bg-success-subtle text-success border border-success-subtle small text-uppercase">
+                Telemetry Active &bull; Uptime: {{ traffic_telemetry.uptime_display }}
+            </span>
+        </div>
+
+        <!-- Telemetry Stats Row -->
+        <div class="row g-3 mb-4">
+            <div class="col-sm-6 col-lg-3">
+                <div class="p-3 rounded bg-black bg-opacity-40 border border-secondary">
+                    <span class="text-secondary small fw-semibold text-uppercase d-block mb-1">Requests Today</span>
+                    <div class="fs-3 fw-bold text-emerald">{{ traffic_telemetry.requests_today }}</div>
+                    <span class="text-secondary small">Since midnight local time</span>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="p-3 rounded bg-black bg-opacity-40 border border-secondary">
+                    <span class="text-secondary small fw-semibold text-uppercase d-block mb-1">Average Daily Requests</span>
+                    <div class="fs-3 fw-bold text-info">{{ traffic_telemetry.avg_daily_requests }}</div>
+                    <span class="text-secondary small">30-day operational average</span>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="p-3 rounded bg-black bg-opacity-40 border border-secondary">
+                    <span class="text-secondary small fw-semibold text-uppercase d-block mb-1">Sign-ins Today</span>
+                    <div class="fs-3 fw-bold text-warning">{{ traffic_telemetry.users_signin_today }}</div>
+                    <span class="text-secondary small">Distinct authenticated accounts</span>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="p-3 rounded bg-black bg-opacity-40 border border-secondary">
+                    <span class="text-secondary small fw-semibold text-uppercase d-block mb-1">Peak Concurrency (RPS)</span>
+                    <div class="fs-3 fw-bold text-success">{{ traffic_telemetry.peak_rps }} <span class="fs-6 text-secondary">req/s</span></div>
+                    <span class="text-secondary small">Avg latency: {{ traffic_telemetry.avg_latency_ms }} ms</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Request Volume Across Time Intervals -->
+        <div class="p-3 rounded bg-black bg-opacity-30 border border-secondary">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-secondary small fw-semibold text-uppercase">Traffic Volume Over Time Intervals</span>
+                <span class="text-secondary small"><i class="bi bi-clock-history me-1"></i> Rolling Window Telemetry</span>
+            </div>
+            <div class="row g-2 text-center">
+                <div class="col-6 col-md-3">
+                    <div class="p-2 rounded bg-black bg-opacity-20 border border-secondary">
+                        <span class="text-secondary small d-block">Last 1 Hour</span>
+                        <strong class="text-white fs-6">{{ traffic_telemetry.requests_last_hour }}</strong>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-2 rounded bg-black bg-opacity-20 border border-secondary">
+                        <span class="text-secondary small d-block">Today (24 Hours)</span>
+                        <strong class="text-white fs-6">{{ traffic_telemetry.requests_today }}</strong>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-2 rounded bg-black bg-opacity-20 border border-secondary">
+                        <span class="text-secondary small d-block">Last 7 Days</span>
+                        <strong class="text-white fs-6">{{ traffic_telemetry.requests_7d }}</strong>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-2 rounded bg-black bg-opacity-20 border border-secondary">
+                        <span class="text-secondary small d-block">Last 30 Days (Total)</span>
+                        <strong class="text-white fs-6">{{ traffic_telemetry.requests_30d }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core Metrics Cards Grid -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass p-3 h-100">
+                <div class="text-secondary small fw-semibold text-uppercase mb-1">Verified Students</div>
+                <div class="stat-value text-white">{{ verified_users }} <span class="text-secondary fs-6 fw-normal">/ {{ total_users }} total</span></div>
+                <div class="text-secondary small mt-2">
+                    <i class="bi bi-person-check me-1 text-success"></i> {{ pending_applications }} pending verification
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass p-3 h-100">
+                <div class="text-secondary small fw-semibold text-uppercase mb-1">Concurrent Sessions</div>
+                <div class="stat-value text-info">{{ active_sessions_count }}</div>
+                <div class="text-secondary small mt-2">
+                    <i class="bi bi-people me-1"></i> {{ unique_active_users_count }} unique concurrent user{{ unique_active_users_count|pluralize }}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass p-3 h-100">
+                <div class="text-secondary small fw-semibold text-uppercase mb-1">Rides Completed</div>
+                <div class="stat-value text-success">{{ completed_rides }} <span class="text-secondary fs-6 fw-normal">/ {{ total_rides }}</span></div>
+                <div class="text-secondary small mt-2">
+                    <i class="bi bi-check2-circle me-1 text-success"></i> {{ completion_rate }}% completion rate &bull; {{ active_rides }} active
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass p-3 h-100">
+                <div class="text-secondary small fw-semibold text-uppercase mb-1">Proctorial Escalations</div>
+                <div class="stat-value text-danger">{{ incidents_count }}</div>
+                <div class="text-secondary small mt-2">
+                    <i class="bi bi-chat-quote me-1 text-warning"></i> {{ open_feedback_count }} open feedback/bug reports
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphical Representations: Interactive Charts Row 1 -->
+    <div class="row g-4 mb-4">
+        <!-- Chart 1: 7-Day Activity Trend -->
+        <div class="col-lg-8">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="fw-bold text-white mb-0">Platform Growth &amp; Activity (7-Day Period)</h5>
+                        <p class="text-secondary small mb-0">Daily verified student registrations and ride requests created</p>
+                    </div>
+                    <span class="badge bg-dark border border-secondary text-secondary">Time-Series</span>
+                </div>
+                <div style="position: relative; height: 260px; width: 100%;">
+                    <canvas id="growthActivityChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart 2: Ride Lifecycle Status Breakdown -->
+        <div class="col-lg-4">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="fw-bold text-white mb-0">Ride Status Distribution</h5>
+                        <p class="text-secondary small mb-0">Lifecycle status breakdown</p>
+                    </div>
+                </div>
+                <div style="position: relative; height: 260px; width: 100%;" class="d-flex align-items-center justify-content-center">
+                    <canvas id="rideStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphical Representations: Interactive Charts Row 2 -->
+    <div class="row g-4 mb-4">
+        <!-- Chart 3: Popular Transit Routes -->
+        <div class="col-lg-6">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="fw-bold text-white mb-0">Most Traveled Campus Routes</h5>
+                        <p class="text-secondary small mb-0">Cumulative demand across predefined destinations</p>
+                    </div>
+                    <span class="badge bg-dark border border-secondary text-secondary">Route Demand</span>
+                </div>
+                <div style="position: relative; height: 240px; width: 100%;">
+                    <canvas id="routesChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart 4: Hourly Departure Distribution -->
+        <div class="col-lg-6">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="fw-bold text-white mb-0">Hourly Travel Demand Curve (06:00 &ndash; 22:00)</h5>
+                        <p class="text-secondary small mb-0">Peak hours for student transit scheduling</p>
+                    </div>
+                    <span class="badge bg-dark border border-secondary text-secondary">Hourly Peaks</span>
+                </div>
+                <div style="position: relative; height: 240px; width: 100%;">
+                    <canvas id="hourlyDemandChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Institute Misconduct Incident Escalations Queue -->
+    <div class="glass p-4 mb-4 border-danger-subtle">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+            <div>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 small fw-semibold mb-1">
+                    <i class="bi bi-bank2 me-1"></i> Institute Escalation Queue
+                </span>
+                <h5 class="fw-bold text-white mb-0">Disciplinary Reports &amp; Chat Transcript Evidence</h5>
+                <p class="text-secondary small mb-0">
+                    Misconduct reports filed by students with attached in-ride chat transcripts. Escalated directly to the Institute Proctorial Board / DSW.
+                </p>
+            </div>
+            <span class="badge bg-dark border border-secondary text-secondary">{{ incident_reports|length }} Recent Reports</span>
+        </div>
+
+        {% if incident_reports %}
+            <div class="table-responsive">
+                <table class="table table-dark table-sm table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead>
+                        <tr class="text-secondary">
+                            <th>Filing Ref</th>
+                            <th>Ride ID</th>
+                            <th>Reporter</th>
+                            <th>Reported User</th>
+                            <th>Violation Category</th>
+                            <th>Chat Log</th>
+                            <th>Filed At</th>
+                            <th class="text-end">Dossier</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inc in incident_reports %}
+                            <tr>
+                                <td><code>{{ inc.reference_id }}</code></td>
+                                <td>Ride #{{ inc.ride_id }}</td>
+                                <td class="fw-semibold text-white">{{ inc.reporter.enrollment_number }}</td>
+                                <td>
+                                    {% if inc.reported_user %}
+                                        <span class="text-danger fw-semibold">{{ inc.reported_user.enrollment_number }}</span>
+                                    {% else %}
+                                        <span class="text-secondary fst-italic">General Ride</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="badge bg-danger-subtle text-danger">{{ inc.get_category_display }}</span></td>
+                                <td>
+                                    {% if inc.include_chat_log %}
+                                        <span class="badge bg-success-subtle text-success"><i class="bi bi-chat-text-fill me-1"></i> Attached</span>
+                                    {% else %}
+                                        <span class="text-secondary small">None</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-white-50">{{ inc.created_at|date:"M j, H:i" }}</td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2"
+                                            data-bs-toggle="modal" data-bs-target="#incidentModal-{{ inc.id }}">
+                                        View Dossier
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <!-- Incident Dossier Modal -->
+                            <div class="modal fade" id="incidentModal-{{ inc.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered modal-lg">
+                                    <div class="modal-content glass border-danger-subtle text-white">
+                                        <div class="modal-header border-secondary">
+                                            <h5 class="modal-title fw-bold text-danger">
+                                                <i class="bi bi-bank2 me-1"></i> Incident Dossier &bull; {{ inc.reference_id }}
+                                            </h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body small">
+                                            <div class="p-3 mb-3 rounded bg-dark border border-secondary">
+                                                <div class="row g-2">
+                                                    <div class="col-6">Reporter: <strong>{{ inc.reporter.enrollment_number }}</strong> ({{ inc.reporter.get_full_name }})</div>
+                                                    <div class="col-6">Reported: <strong>{{ inc.reported_user.enrollment_number|default:"Ride General" }}</strong></div>
+                                                    <div class="col-6">Classification: <span class="badge bg-danger">{{ inc.get_category_display }}</span></div>
+                                                    <div class="col-6">Status: <span class="badge bg-warning-subtle text-warning">{{ inc.get_status_display }}</span></div>
+                                                </div>
+                                            </div>
+
+                                            <h6 class="fw-bold text-white mb-1">Student Incident Statement:</h6>
+                                            <div class="p-3 rounded bg-black bg-opacity-50 border border-secondary mb-3 text-white">
+                                                {{ inc.statement }}
+                                            </div>
+
+                                            {% if inc.include_chat_log and inc.chat_transcript %}
+                                                <h6 class="fw-bold text-white mb-1">Captured In-Ride Chat Transcript Evidence:</h6>
+                                                <pre class="p-3 rounded bg-black bg-opacity-70 border border-secondary text-success small" style="max-height: 250px; overflow-y: auto;"><code>{{ inc.chat_transcript }}</code></pre>
+                                            {% endif %}
+                                        </div>
+                                        <div class="modal-footer border-secondary">
+                                            <button type="button" class="btn btn-dark-custom" data-bs-dismiss="modal">Close</button>
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="window.print();">
+                                                <i class="bi bi-printer me-1"></i> Print Proctorial Dossier
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="p-4 text-center text-secondary small">
+                <i class="bi bi-shield-check text-success fs-3 d-block mb-2"></i>
+                No misconduct incident reports filed. Campus community transit is operating peacefully.
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- In-Person Physical Verification Desk Queue -->
+    <div class="glass p-4 mb-4 border-warning-subtle">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+            <div>
+                <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1 small fw-semibold mb-1">
+                    <i class="bi bi-person-badge-fill me-1"></i> Identity Recovery Desk
+                </span>
+                <h5 class="fw-bold text-white mb-0">In-Person Physical Verification Desk</h5>
+                <p class="text-secondary small mb-0">
+                    Students who lost their phone, SIM card, or credentials can meet an administrator or contributor in person with their official Institute ID card to reset credentials.
+                </p>
+            </div>
+            <span class="badge bg-dark border border-secondary text-secondary">{{ physical_verifications|length }} Pending Verifications</span>
+        </div>
+
+        {% if physical_verifications %}
+            <div class="table-responsive">
+                <table class="table table-dark table-sm table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead>
+                        <tr class="text-secondary">
+                            <th>Enrollment</th>
+                            <th>Student Name</th>
+                            <th>Contact Phone</th>
+                            <th>Contact Email</th>
+                            <th>Reason / Notes</th>
+                            <th>Filed At</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pvr in physical_verifications %}
+                            <tr>
+                                <td class="fw-bold text-white"><code>{{ pvr.user.enrollment_number }}</code></td>
+                                <td>{{ pvr.user.display_name }}</td>
+                                <td><span class="text-warning">{{ pvr.contact_phone|default:pvr.user.phone_number }}</span></td>
+                                <td>{{ pvr.contact_email|default:"-" }}</td>
+                                <td class="text-truncate" style="max-width: 200px;">{{ pvr.student_notes|default:"-" }}</td>
+                                <td class="text-secondary">{{ pvr.created_at|date:"M j, H:i" }}</td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-warning btn-sm py-0 px-2 text-dark fw-semibold"
+                                            data-bs-toggle="modal" data-bs-target="#verifyModal-{{ pvr.id }}">
+                                        <i class="bi bi-patch-check me-1"></i> Verify In Person
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <!-- Verify In Person Modal -->
+                            <div class="modal fade" id="verifyModal-{{ pvr.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content glass border-warning-subtle text-white">
+                                        <div class="modal-header border-secondary">
+                                            <h5 class="modal-title fw-bold text-warning">
+                                                <i class="bi bi-person-vcard me-1"></i> Physical Verification &bull; {{ pvr.user.enrollment_number }}
+                                            </h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body small">
+                                            <div class="p-3 mb-3 rounded bg-dark border border-secondary">
+                                                <div class="row g-2">
+                                                    <div class="col-6">Student: <strong>{{ pvr.user.display_name }}</strong></div>
+                                                    <div class="col-6">Enrollment: <code>{{ pvr.user.enrollment_number }}</code></div>
+                                                    <div class="col-6">Alt Contact: <strong>{{ pvr.contact_phone }}</strong></div>
+                                                    <div class="col-6">Reg Phone: <strong>{{ pvr.user.phone_number }}</strong></div>
+                                                    <div class="col-12 mt-2">Notes: <em>"{{ pvr.student_notes }}"</em></div>
+                                                </div>
+                                            </div>
+
+                                            <div class="alert alert-warning py-2 px-3 small mb-3">
+                                                <i class="bi bi-shield-exclamation me-1"></i>
+                                                Confirm you have physically inspected the student's official Institute / College ID card.
+                                            </div>
+
+                                            <!-- Action Form: Reset Password -->
+                                            <form action="{% url 'admin_resolve_physical_verification' pvr.id %}" method="POST" class="mb-3 p-3 rounded bg-black bg-opacity-40 border border-secondary">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="verify_reset_password">
+                                                <h6 class="fw-bold text-success mb-2"><i class="bi bi-key me-1"></i> Option A: Reset Password In Person</h6>
+                                                <div class="mb-2">
+                                                    <label class="form-label small text-secondary">New Temporary Password</label>
+                                                    <input type="text" name="new_password" required minlength="6" class="form-control form-control-sm font-monospace" placeholder="Enter new password for student">
+                                                </div>
+                                                <div class="mb-2">
+                                                    <input type="text" name="notes" class="form-control form-control-sm" placeholder="Resolution notes (e.g. Physically verified NIT ID card)">
+                                                </div>
+                                                <button type="submit" class="btn btn-green btn-sm w-100">
+                                                    <i class="bi bi-check-circle me-1"></i> Confirm Physical ID &amp; Set Password
+                                                </button>
+                                            </form>
+
+                                            <!-- Action Form: Update Phone -->
+                                            <form action="{% url 'admin_resolve_physical_verification' pvr.id %}" method="POST" class="mb-3 p-3 rounded bg-black bg-opacity-40 border border-secondary">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="verify_update_phone">
+                                                <h6 class="fw-bold text-info mb-2"><i class="bi bi-telephone me-1"></i> Option B: Update Phone Number</h6>
+                                                <div class="mb-2">
+                                                    <input type="text" name="phone_number" value="{{ pvr.contact_phone|default:pvr.user.phone_number }}" required class="form-control form-control-sm" placeholder="New verified phone number">
+                                                </div>
+                                                <div class="mb-2">
+                                                    <input type="text" name="notes" class="form-control form-control-sm" placeholder="Resolution notes">
+                                                </div>
+                                                <button type="submit" class="btn btn-info btn-sm w-100 text-dark fw-semibold">
+                                                    <i class="bi bi-check-circle me-1"></i> Confirm Physical ID &amp; Update Phone
+                                                </button>
+                                            </form>
+
+                                            <!-- Action Form: Reject -->
+                                            <form action="{% url 'admin_resolve_physical_verification' pvr.id %}" method="POST" onsubmit="return confirm('Reject this physical verification request?');">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="reject">
+                                                <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                                                    <i class="bi bi-x-circle me-1"></i> Reject Request (No Valid ID Presented)
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="p-3 text-center text-secondary small">
+                <i class="bi bi-check2-circle text-success fs-4 d-block mb-1"></i>
+                No pending physical verification requests at the operations desk.
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Student Identity & Security Operations Directory -->
+    <div class="glass p-4 mb-4 border-secondary">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+            <div>
+                <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 small fw-semibold mb-1">
+                    <i class="bi bi-people-fill me-1"></i> Identity &amp; Lifecycle Operations
+                </span>
+                <h5 class="fw-bold text-white mb-0">Student Directory &amp; Security Administration</h5>
+                <p class="text-secondary small mb-0">
+                    Administratively update student phone numbers, reset passwords, or close/soft-delete accounts while retaining historical trip logs.
+                </p>
+            </div>
+            <span class="badge bg-dark border border-secondary text-secondary">{{ student_accounts|length }} Accounts Displayed</span>
+        </div>
+
+        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+            <table class="table table-dark table-sm table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                <thead class="sticky-top bg-dark">
+                    <tr class="text-secondary">
+                        <th>Enrollment</th>
+                        <th>Name</th>
+                        <th>Branch</th>
+                        <th>Phone</th>
+                        <th>Role / Status</th>
+                        <th class="text-end">Administrative Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in student_accounts %}
+                        <tr>
+                            <td class="fw-bold text-white"><code>{{ student.enrollment_number }}</code></td>
+                            <td>{{ student.display_name }}</td>
+                            <td>{{ student.branch|default:"-" }} ({{ student.joining_year|default:"-" }})</td>
+                            <td><code>{{ student.phone_number }}</code></td>
+                            <td>
+                                {% if student.is_superuser %}
+                                    <span class="badge bg-danger-subtle text-danger">Superuser</span>
+                                {% elif student.is_debug_account %}
+                                    <span class="badge bg-warning-subtle text-warning">Debug (20XX)</span>
+                                {% else %}
+                                    <span class="badge bg-success-subtle text-success">Student</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-info py-0 px-2" data-bs-toggle="modal" data-bs-target="#phoneModal-{{ student.id }}" title="Change Phone">
+                                        <i class="bi bi-phone"></i>
+                                    </button>
+                                    {% if user.is_superuser and student != user %}
+                                        <form action="{% url 'admin_delete_account' student.id %}" method="POST" class="d-inline" onsubmit="return confirm('Close and soft-delete account for {{ student.enrollment_number }}? Past logs and reviews will be retained.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-danger py-0 px-2" title="Close / Soft-Delete Account">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+
+                                <!-- Change Phone Modal -->
+                                <div class="modal fade text-start" id="phoneModal-{{ student.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered modal-sm">
+                                        <div class="modal-content glass border-secondary text-white">
+                                            <div class="modal-header border-secondary">
+                                                <h6 class="modal-title fw-bold text-info">Update Phone &bull; {{ student.enrollment_number }}</h6>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <form action="{% url 'admin_update_phone' student.id %}" method="POST">
+                                                {% csrf_token %}
+                                                <div class="modal-body small">
+                                                    <label class="form-label text-secondary">Verified Phone Number</label>
+                                                    <input type="text" name="phone_number" value="{{ student.phone_number }}" required class="form-control form-control-sm">
+                                                </div>
+                                                <div class="modal-footer border-secondary">
+                                                    <button type="button" class="btn btn-dark-custom btn-sm" data-bs-dismiss="modal">Cancel</button>
+                                                    <button type="submit" class="btn btn-info btn-sm text-dark fw-semibold">Save Phone</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Community Feedback & Operational Audit Trail Row -->
+    <div class="row g-4">
+        <!-- Community Feedback Queue -->
+        <div class="col-lg-6">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0">Community Feedback &amp; Bug Tracker</h5>
+                    <span class="badge bg-dark border border-secondary text-secondary">{{ feedback_count }} Submissions</span>
+                </div>
+                <p class="text-secondary small mb-3">
+                    Direct bug reports, feature requests, and new service proposals submitted by students.
+                </p>
+
+                {% if feedback_entries %}
+                    <div class="d-flex flex-column gap-2" style="max-height: 380px; overflow-y: auto;">
+                        {% for fb in feedback_entries %}
+                            <div class="p-3 rounded border border-secondary bg-dark bg-opacity-50">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="badge {% if fb.feedback_type == 'BUG' %}bg-danger{% elif fb.feedback_type == 'PROPOSAL' %}bg-warning-subtle text-warning{% else %}bg-info-subtle text-info{% endif %} small">
+                                        {{ fb.get_feedback_type_display }}
+                                    </span>
+                                    <span class="text-secondary small">{{ fb.created_at|date:"M j, H:i" }}</span>
+                                </div>
+                                <h6 class="fw-bold text-white mb-1">{{ fb.title }}</h6>
+                                <p class="text-white-50 small mb-2">{{ fb.description }}</p>
+                                <div class="text-secondary small" style="font-size: 0.75rem;">
+                                    By: <strong>{{ fb.submitter_name }}</strong> ({{ fb.submitter_contact|default:"No contact" }})
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="p-4 text-center text-secondary small">
+                        <i class="bi bi-chat-square-text fs-3 d-block mb-2 text-info"></i>
+                        No student feedback tickets submitted yet.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Operational Audit Trail -->
+        <div class="col-lg-6">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0">Operational Audit Trail</h5>
+                    <span class="badge bg-dark border border-secondary text-white-50">Last 25 Events</span>
+                </div>
+                <p class="text-secondary small mb-3">
+                    Immutable log of administrative and system lifecycle events. Data minimized to protect student privacy.
+                </p>
+
+                {% if audit_events %}
+                    <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
+                        <table class="table table-dark table-sm table-hover align-middle mb-0" style="font-size: 0.8rem;">
+                            <thead>
+                                <tr class="text-secondary">
+                                    <th>Timestamp</th>
+                                    <th>Event</th>
+                                    <th>Actor</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for evt in audit_events %}
+                                    <tr>
+                                        <td class="text-white-50 nowrap">{{ evt.timestamp|date:"M d H:i" }}</td>
+                                        <td>
+                                            <span class="badge bg-secondary small">{{ evt.event_type }}</span>
+                                        </td>
+                                        <td class="fw-semibold text-success">{{ evt.actor_enrollment|default:"System" }}</td>
+                                        <td class="text-secondary text-truncate" style="max-width: 180px;" title="{{ evt.description }}">
+                                            {{ evt.description }}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="p-4 text-center text-secondary small">
+                        <i class="bi bi-clock-history fs-3 d-block mb-2"></i>
+                        Audit trail initialized. Events will populate as actions occur.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Shared chart dark theme settings
+    const fontColor = '#a1a1aa';
+    const gridColor = 'rgba(255, 255, 255, 0.05)';
+
+    // 1. Growth & Activity Chart
+    const growthCtx = document.getElementById('growthActivityChart');
+    if (growthCtx) {
+        new Chart(growthCtx, {
+            type: 'line',
+            data: {
+                labels: {{ days_labels_json|safe }},
+                datasets: [
+                    {
+                        label: 'New Verified Students',
+                        data: {{ user_growth_json|safe }},
+                        borderColor: '#08B74F',
+                        backgroundColor: 'rgba(8, 183, 79, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                    },
+                    {
+                        label: 'Rides Created',
+                        data: {{ ride_creation_json|safe }},
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: fontColor } }
+                },
+                scales: {
+                    x: { ticks: { color: fontColor }, grid: { color: gridColor } },
+                    y: { ticks: { color: fontColor, stepSize: 1 }, grid: { color: gridColor }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // 2. Ride Status Doughnut Chart
+    const statusCtx = document.getElementById('rideStatusChart');
+    if (statusCtx) {
+        new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: {{ status_labels_json|safe }},
+                datasets: [{
+                    data: {{ status_series_json|safe }},
+                    backgroundColor: ['#08B74F', '#eab308', '#38bdf8', '#ef4444'],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: fontColor, boxWidth: 12 } }
+                }
+            }
+        });
+    }
+
+    // 3. Most Traveled Routes Bar Chart
+    const routesCtx = document.getElementById('routesChart');
+    if (routesCtx) {
+        new Chart(routesCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ route_labels_json|safe }},
+                datasets: [{
+                    label: 'Rides',
+                    data: {{ route_series_json|safe }},
+                    backgroundColor: 'rgba(8, 183, 79, 0.7)',
+                    borderColor: '#08B74F',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { ticks: { color: fontColor, stepSize: 1 }, grid: { color: gridColor }, beginAtZero: true },
+                    y: { ticks: { color: fontColor }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    // 4. Hourly Demand Curve
+    const hourlyCtx = document.getElementById('hourlyDemandChart');
+    if (hourlyCtx) {
+        new Chart(hourlyCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ hourly_labels_json|safe }},
+                datasets: [{
+                    label: 'Departures',
+                    data: {{ hourly_series_json|safe }},
+                    backgroundColor: 'rgba(56, 189, 248, 0.65)',
+                    borderColor: '#38bdf8',
+                    borderWidth: 1,
+                    borderRadius: 3,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { ticks: { color: fontColor }, grid: { display: false } },
+                    y: { ticks: { color: fontColor, stepSize: 1 }, grid: { color: gridColor }, beginAtZero: true }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
