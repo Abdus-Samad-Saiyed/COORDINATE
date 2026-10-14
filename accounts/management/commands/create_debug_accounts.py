@@ -81,7 +81,7 @@ PERSONAL_SUPERACCOUNT = {
     'verified': True,
     'is_active': True,
 }
-PERSONAL_PASSWORD = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'DevSuperPass@2024')
+PERSONAL_PASSWORD = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'AbSm72000@123')
 
 
 class Command(BaseCommand):

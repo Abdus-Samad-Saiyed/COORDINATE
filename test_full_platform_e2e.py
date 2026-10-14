@@ -80,7 +80,7 @@ def run_comprehensive_audit():
             "username": "2024BCSE065",
             "first_name": "Abdus",
             "last_name": "Samad Saiyed",
-            "email": "2024bcse065@nitsri.ac.in",
+            "email": "asaiyed_2024bcse065@nitsri.ac.in",
             "phone_number": "+917355463857",
             "gender": "M",
             "is_staff": True,
@@ -89,17 +89,18 @@ def run_comprehensive_audit():
             "verified": True,
         }
     )
-    admin.set_password("TestAdminPass@123")
+    admin_pw = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'AbSm72000@123')
+    admin.set_password(admin_pw)
     admin.first_name = "Abdus"
     admin.last_name = "Samad Saiyed"
     admin.is_staff = True
     admin.is_superuser = True
-    admin.email = "2024bcse065@nitsri.ac.in"
+    admin.email = "asaiyed_2024bcse065@nitsri.ac.in"
     admin.phone_number = "+917355463857"
     admin.current_session_key = ''
     admin.save()
     assert_test(admin.get_full_name() == "Abdus Samad Saiyed", "Superaccount full name is 'Abdus Samad Saiyed'")
-    assert_test(admin.email == "2024bcse065@nitsri.ac.in", "Superaccount email is '2024bcse065@nitsri.ac.in'")
+    assert_test(admin.email == "asaiyed_2024bcse065@nitsri.ac.in", "Superaccount email is 'asaiyed_2024bcse065@nitsri.ac.in'")
 
     def force_login_sync(cl, u):
         cl.force_login(u)

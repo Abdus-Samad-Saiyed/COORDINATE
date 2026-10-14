@@ -156,14 +156,14 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # --- Email -------------------------------------------------------------------
 
-EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = env('EMAIL_HOST', default='')
+EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = env('EMAIL_HOST', default='smtp.gmail.com')
 EMAIL_PORT = env.int('EMAIL_PORT', default=587)
 EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
-EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='noreply.campus.nexus@gmail.com')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='ayneofpiaixfwvhb')
 EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT', default=10)
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='COORDINATE <noreply@coordinate.nitsri.ac.in>')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Campus Nexus <noreply.campus.nexus@gmail.com>')
 
 
 # --- Messages ----------------------------------------------------------------
