@@ -17,3 +17,10 @@ CAMPUS_MAIL_CREDENTIALS.md
 # Generated directories
 media/
 staticfiles/
+
+DEBUG_CREDENTIALS.md
+CAMPUS_MAIL_CREDENTIALS.md
+*CREDENTIALS*.md
+project_dump.txt
+db.sqlite3
+.env
