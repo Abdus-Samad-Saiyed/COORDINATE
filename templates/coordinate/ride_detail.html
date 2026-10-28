@@ -188,7 +188,7 @@
                             </div>
 
                             <div class="d-flex justify-content-between align-items-center small text-secondary">
-                                {% if p.user == request.user or is_creator or p.user == ride.creator or request.user.is_staff %}
+                                {% if p.can_view_contact %}
                                     <span><i class="bi bi-telephone-fill me-1"></i> {{ p.user.phone_number }}</span>
                                 {% else %}
                                     <span><i class="bi bi-shield-check me-1 text-success"></i> Ride passenger</span>

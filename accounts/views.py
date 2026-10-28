@@ -64,6 +64,11 @@ from .two_factor import (
 )
 
 from campus.services import get_all_services
+from coordinate.policies import (
+    can_view_profile_field,
+    can_view_student_directory,
+    is_verified_student,
+)
 
 # ---------------------------------------------------------------------------
 # Access helpers
@@ -838,8 +843,10 @@ def profile_view(request, enrollment_number):
         ).select_related('user1', 'user2')
         friends = [f.user2 if f.user1 == profile_user else f.user1 for f in friendships]
 
-    # Phone number privacy check
-    can_see_phone = profile_user.can_view_phone_number(request.user)
+    # Privacy checks via centralized policy
+    can_see_phone = can_view_profile_field(request.user, profile_user, 'phone_number')
+    can_see_email = can_view_profile_field(request.user, profile_user, 'email')
+    can_see_photo = can_view_profile_field(request.user, profile_user, 'profile_photo')
 
     # Recent reviews: complaint text is only visible to authorized moderators
     recent_reviews = (
@@ -853,6 +860,8 @@ def profile_view(request, enrollment_number):
         'is_self': is_self,
         'is_friend': is_friend,
         'can_see_phone': can_see_phone,
+        'can_see_email': can_see_email,
+        'can_see_photo': can_see_photo,
         'can_see_friends': can_see_friends,
         'friends': friends,
         'is_moderator': is_moderator,
@@ -866,6 +875,9 @@ def profile_view(request, enrollment_number):
 @login_required
 def user_search(request):
     """Search for students by enrollment number or name with privacy filtering."""
+    if not can_view_student_directory(request.user):
+        messages.error(request, "Access to the student directory requires a verified student account.")
+        return redirect('dashboard')
     query = request.GET.get('q', '').strip()
 
     # Base queryset: verified active students excluding oneself and soft-deleted accounts

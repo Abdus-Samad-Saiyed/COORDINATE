@@ -24,6 +24,11 @@ from accounts.throttling import rate_limit
 from accounts.views import enforce_single_session_login
 from campus.services import get_all_services, get_service_by_slug
 from coordinate.models import RideParticipant, RideRequest
+from coordinate.policies import (
+    is_verified_student,
+    record_ride_consent,
+    revoke_ride_consent,
+)
 from coordinate.views import (
     _are_friends,
     _parse_date,
@@ -214,8 +219,11 @@ def api_me(request: HttpRequest) -> JsonResponse:
 
 @require_GET
 def api_ride_list(request: HttpRequest) -> JsonResponse:
-    """List open rides respecting filters and audience comfort gates."""
+    """List open rides respecting filters and audience comfort gates for verified students."""
     user = get_api_user(request)
+    if not user or not (user.is_staff or user.is_superuser or is_verified_student(user)):
+        return json_error("Authentication as a verified student required.", status=401, code="AUTH_REQUIRED")
+
     now = timezone.now()
 
     rides = (
@@ -280,13 +288,8 @@ def api_ride_list(request: HttpRequest) -> JsonResponse:
     # Server-authoritative audience comfort gating
     visible_rides = []
     for ride in rides:
-        if user:
-            if _user_can_see_ride(user, ride):
-                visible_rides.append(serialize_ride(ride, request_user=user))
-        else:
-            # Unauthenticated browse: only show MIXED rides
-            if ride.visibility == "MIXED":
-                visible_rides.append(serialize_ride(ride, request_user=None))
+        if _user_can_see_ride(user, ride):
+            visible_rides.append(serialize_ride(ride, request_user=user))
 
     return json_success({
         "count": len(visible_rides),
@@ -298,6 +301,9 @@ def api_ride_list(request: HttpRequest) -> JsonResponse:
 def api_ride_detail(request: HttpRequest, ride_id: int) -> JsonResponse:
     """Return full details and participant list for a specific ride."""
     user = get_api_user(request)
+    if not user or not (user.is_staff or user.is_superuser or is_verified_student(user)):
+        return json_error("Authentication as a verified student required.", status=401, code="AUTH_REQUIRED")
+
     ride = (
         RideRequest.objects
         .filter(pk=ride_id)
@@ -309,10 +315,8 @@ def api_ride_detail(request: HttpRequest, ride_id: int) -> JsonResponse:
         return json_error("Ride not found.", status=404, code="RIDE_NOT_FOUND")
 
     # Visibility check
-    if user and not _user_can_see_ride(user, ride):
+    if not _user_can_see_ride(user, ride):
         return json_error("You do not have permission to view this ride.", status=403, code="FORBIDDEN")
-    if not user and ride.visibility != "MIXED":
-        return json_error("Authentication required to view restricted rides.", status=401, code="AUTH_REQUIRED")
 
     return json_success({"ride": serialize_ride_detail(ride, request_user=user)})
 
@@ -425,6 +429,7 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
             status="OPEN",
         )
         RideParticipant.objects.create(ride=ride, user=user)
+        record_ride_consent(ride, user, request=request, share_contact=True)
         ride.sync_status()
 
     return json_success({"ride": serialize_ride_detail(ride, request_user=user)}, status=201)
@@ -461,6 +466,7 @@ def api_ride_join(request: HttpRequest, ride_id: int) -> JsonResponse:
 
         try:
             RideParticipant.objects.create(ride=ride, user=user)
+            record_ride_consent(ride, user, request=request, share_contact=True)
             ride.sync_status()
         except IntegrityError:
             return json_error("You are already a participant in this ride.", status=409, code="ALREADY_PARTICIPANT")
@@ -500,6 +506,7 @@ def api_ride_leave(request: HttpRequest, ride_id: int) -> JsonResponse:
             return json_error("You are not a participant in this ride.", status=400, code="NOT_A_PARTICIPANT")
 
         participant.delete()
+        revoke_ride_consent(ride, user)
         ride.left_users.add(user)
 
         remaining = RideParticipant.objects.filter(ride=ride).count()

@@ -32,6 +32,7 @@ from accounts.models import Friendship, User
 
 from .forms import RideMessageForm, RideRequestForm, RideReviewForm
 from .models import (
+    RideConsent,
     RideIncidentReport,
     RideJoinRequest,
     RideMessage,
@@ -39,6 +40,13 @@ from .models import (
     RideRequest,
     RideReview,
     RideWaitlist,
+)
+from .policies import (
+    can_view_ride,
+    can_view_ride_contact,
+    is_verified_student,
+    record_ride_consent,
+    revoke_ride_consent,
 )
 
 
@@ -64,29 +72,8 @@ def _are_friends(user1, user2) -> bool:
 
 
 def _user_can_see_ride(user, ride) -> bool:
-    """
-    Visibility rules:
-      MIXED   → everyone
-      BOYS    → male users only
-      GIRLS   → female users only
-      FRIENDS → creator's friends only (creator can always see their own rides)
-    Participants and the creator can always see the ride regardless.
-    """
-    if ride.creator_id == user.pk:
-        return True
-    if RideParticipant.objects.filter(ride=ride, user=user).exists():
-        return True
-
-    v = ride.visibility
-    if v == 'MIXED':
-        return True
-    if v == 'BOYS':
-        return user.gender == 'M'
-    if v == 'GIRLS':
-        return user.gender == 'F'
-    if v == 'FRIENDS':
-        return _are_friends(user, ride.creator)
-    return False
+    """Enforce server-authoritative audience comfort and ride visibility via centralized policy."""
+    return can_view_ride(user, ride)
 
 
 def _user_can_join_ride(user, ride) -> bool:
@@ -507,6 +494,7 @@ def create_ride(request):
                 ride.creator = request.user
                 ride.save()
                 RideParticipant.objects.create(ride=ride, user=request.user)
+                record_ride_consent(ride, request.user, request=request, share_contact=True)
                 ride.sync_status()
 
             messages.success(request, 'Ride created! Share the details with your classmates.')
@@ -544,6 +532,7 @@ def join_ride(request, ride_id):
             status='PENDING',
         )
         if created:
+            record_ride_consent(ride, request.user, request=request, share_contact=True)
             messages.success(request, f'Join request submitted to host {ride.creator.enrollment_number}! Awaiting host approval.')
             try:
                 channel_layer = get_channel_layer()
@@ -596,6 +585,7 @@ def approve_join_request(request, ride_id, request_id):
             return redirect('ride_detail', ride_id=ride.id)
 
         RideParticipant.objects.get_or_create(ride=ride, user=join_req.user)
+        record_ride_consent(ride, join_req.user, request=request, share_contact=True)
         join_req.status = 'APPROVED'
         join_req.reviewed_at = timezone.now()
         join_req.save(update_fields=['status', 'reviewed_at'])
@@ -667,6 +657,7 @@ def leave_ride(request, ride_id):
             return redirect('ride_detail', ride_id=ride.id)
 
         participant.delete()
+        revoke_ride_consent(ride, request.user)
         ride.left_users.add(request.user)
 
         remaining = RideParticipant.objects.filter(ride=ride).count()
@@ -840,12 +831,14 @@ def ride_detail(request, ride_id):
     if not (is_creator or is_participant or is_waitlisted or has_join_request):
         raise Http404
 
-    participants = (
+    participants = list(
         RideParticipant.objects
         .filter(ride=ride)
         .select_related('user')
         .order_by('joined_at')
     )
+    for p in participants:
+        p.can_view_contact = can_view_ride_contact(request.user, ride, p.user)
 
     waitlist_entries = (
         RideWaitlist.objects
@@ -954,6 +947,7 @@ def kick_participant(request, ride_id, participant_id):
 
         # RIDE-04: Record kick so removed user cannot rejoin and can be reviewed immediately
         kicked_enrollment = participant.user.enrollment_number
+        revoke_ride_consent(ride, participant.user)
         ride.kicked_users.add(participant.user)
         participant.delete()
         ride.sync_status()

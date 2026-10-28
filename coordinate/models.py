@@ -342,3 +342,28 @@ class RideIncidentReport(models.Model):
     def __str__(self) -> str:
         return f"{self.reference_id} — Ride #{self.ride_id} ({self.get_category_display()})"
 
+
+class RideConsent(models.Model):
+    """Explicit, ride-scoped affirmative consent given by a student to disclose
+    identity, departure status, and contact details to fellow confirmed participants."""
+
+    ride = models.ForeignKey(RideRequest, on_delete=models.CASCADE, related_name='consents')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ride_consents')
+    consent_version = models.CharField(max_length=20, default='v1.0')
+    share_contact_details = models.BooleanField(default=True)
+    granted_at = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ride', 'user'],
+                name='unique_ride_consent',
+            )
+        ]
+        verbose_name = 'Ride Consent'
+        verbose_name_plural = 'Ride Consents'
+
+    def __str__(self) -> str:
+        return f"Consent for {self.user.enrollment_number} in Ride #{self.ride_id} ({self.consent_version})"
+

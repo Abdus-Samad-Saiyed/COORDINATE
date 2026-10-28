@@ -59,16 +59,23 @@ def serialize_ride(ride: RideRequest, request_user: Optional[User] = None) -> Di
 
 
 def serialize_ride_detail(ride: RideRequest, request_user: Optional[User] = None) -> Dict[str, Any]:
-    """Serialize full ride details including confirmed participants."""
+    """Serialize full ride details including confirmed participants with affirmative consent contact controls."""
+    from coordinate.policies import can_view_ride_contact
+
     data = serialize_ride(ride, request_user=request_user)
     participants = []
     for p in ride.participants.select_related('user').all():
         u = p.user
-        participants.append({
+        p_info = {
             "enrollment_number": u.enrollment_number,
             "name": u.display_name,
             "gender": u.gender,
             "is_creator": u.pk == ride.creator_id,
-        })
+        }
+        if request_user and can_view_ride_contact(request_user, ride, u):
+            p_info["phone_number"] = u.phone_number
+            p_info["email"] = u.email
+
+        participants.append(p_info)
     data["participants"] = participants
     return data
