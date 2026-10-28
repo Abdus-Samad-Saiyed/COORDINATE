@@ -162,9 +162,17 @@ async function authenticateWithPasskey() {
             throw new Error('Biometric authentication cancelled.');
         }
 
-        // Convert clientDataJSON to base64url
-        const clientDataB64 = btoa(String.fromCharCode.apply(null, new Uint8Array(assertion.response.clientDataJSON)))
-            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        function bufferToBase64url(buffer) {
+            if (!buffer) return '';
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        const clientDataB64 = bufferToBase64url(assertion.response.clientDataJSON);
 
         statusDiv.textContent = 'Verifying cryptographic signature...';
 
@@ -179,8 +187,17 @@ async function authenticateWithPasskey() {
                 'X-CSRFToken': csrfToken,
             },
             body: JSON.stringify({
+                id: assertion.id,
                 credential_id: assertion.id,
+                rawId: bufferToBase64url(assertion.rawId),
+                type: assertion.type,
                 client_data_json: clientDataB64,
+                response: {
+                    clientDataJSON: clientDataB64,
+                    authenticatorData: bufferToBase64url(assertion.response.authenticatorData),
+                    signature: bufferToBase64url(assertion.response.signature),
+                    userHandle: assertion.response.userHandle ? bufferToBase64url(assertion.response.userHandle) : null
+                }
             })
         });
 

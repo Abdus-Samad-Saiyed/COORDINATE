@@ -436,6 +436,16 @@ async function registerWebAuthnPasskey() {
 
         statusDiv.textContent = 'Registering passkey...';
 
+        function bufferToBase64url(buffer) {
+            if (!buffer) return '';
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
         const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
 
         const verifyRes = await fetch("{% url 'passkey_reg_verify' %}", {
@@ -445,8 +455,14 @@ async function registerWebAuthnPasskey() {
                 'X-CSRFToken': csrfToken,
             },
             body: JSON.stringify({
-                credential_id: credential.id,
-                public_key: 'webauthn_es256_public_key',
+                id: credential.id,
+                rawId: bufferToBase64url(credential.rawId),
+                type: credential.type,
+                response: {
+                    clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+                    attestationObject: bufferToBase64url(credential.response.attestationObject),
+                    transports: credential.response.getTransports ? credential.response.getTransports() : []
+                },
                 name: 'Windows Hello / Biometric Passkey',
             })
         });

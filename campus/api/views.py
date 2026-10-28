@@ -129,9 +129,10 @@ def api_login(request: HttpRequest) -> JsonResponse:
                 details={"two_factor_required": True},
             )
         from accounts.two_factor import verify_phone_otp
-        if not verify_phone_otp(user, otp_code, purpose="2FA"):
+        ok, msg = verify_phone_otp(user, submitted_code=otp_code, purpose="2FA")
+        if not ok:
             return json_error(
-                "Invalid or expired 2FA OTP code.",
+                msg or "Invalid or expired 2FA OTP code.",
                 status=401,
                 code="INVALID_2FA_OTP",
             )

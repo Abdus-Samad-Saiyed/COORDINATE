@@ -59,6 +59,7 @@ from .two_factor import (
     create_phone_otp,
     generate_webauthn_challenge,
     verify_passkey_assertion,
+    verify_passkey_registration,
     verify_phone_otp,
 )
 
@@ -188,6 +189,7 @@ def custom_login_view(request, extra_context=None):
     return render(request, 'registration/login.html', context)
 
 
+@rate_limit(key_prefix='two_factor_verify', limit=10, period_seconds=60)
 def two_factor_verify(request):
     """Handle 2FA Phone SMS verification and Passkey bypass options."""
     user_id = request.session.get('pre_2fa_user_id')
@@ -267,15 +269,22 @@ def _get_webauthn_rp_id(request):
         return host
 
 
+@rate_limit(key_prefix='passkey_auth_chal', limit=10, period_seconds=60)
 def passkey_auth_challenge(request):
     """Generate WebAuthn challenge for bypassing 2FA with biometric / Windows Hello passkey."""
     user_id = request.session.get('pre_2fa_user_id') or (request.user.id if request.user.is_authenticated else None)
     if not user_id:
         return JsonResponse({'error': 'No authentication session in progress.'}, status=401)
 
+    pre_2fa_time = request.session.get('pre_2fa_time')
+    now_ts = timezone.now().timestamp()
+    if request.session.get('pre_2fa_user_id') and (not pre_2fa_time or (now_ts - pre_2fa_time) > 300):
+        return JsonResponse({'error': 'Authentication session expired. Please sign in again.'}, status=401)
+
     user = get_object_or_404(User, id=user_id)
     challenge = generate_webauthn_challenge()
     request.session['passkey_challenge'] = challenge
+    request.session['passkey_challenge_time'] = now_ts
 
     credentials = list(
         PasskeyCredential.objects.filter(user=user)
@@ -289,6 +298,7 @@ def passkey_auth_challenge(request):
     })
 
 
+@rate_limit(key_prefix='passkey_auth_ver', limit=10, period_seconds=60)
 @require_POST
 def passkey_auth_verify(request):
     """Verify WebAuthn client assertion and bypass 2FA upon biometric / Windows Hello match."""
@@ -302,15 +312,28 @@ def passkey_auth_verify(request):
     user = get_object_or_404(User, id=user_id)
     redirect_to = _safe_redirect_url(request, request.session.get('pre_2fa_redirect', '/dashboard/'), fallback='/dashboard/')
     challenge = request.session.pop('passkey_challenge', '')
-    if not challenge:
-        return JsonResponse({'success': False, 'error': 'Challenge already consumed or missing. Please try again.'}, status=400)
+    challenge_time = request.session.pop('passkey_challenge_time', None)
+    if not challenge or not challenge_time or (now_ts - challenge_time) > 120:
+        return JsonResponse({'success': False, 'error': 'Challenge already consumed, expired, or missing. Please try again.'}, status=400)
 
     try:
         data = json.loads(request.body.decode('utf-8'))
-        credential_id = data.get('credential_id', '')
-        client_data_json = data.get('client_data_json', '')
+        credential_id = data.get('credential_id') or data.get('id', '')
+        client_data_json = data.get('client_data_json') or data.get('response', {}).get('clientDataJSON', '')
+        rp_id = _get_webauthn_rp_id(request) or request.get_host().split(':')[0]
+        expected_origin = f"{'https' if request.is_secure() else 'http'}://{request.get_host()}"
 
-        success, msg = verify_passkey_assertion(user, credential_id, client_data_json, challenge)
+        full_cred = data if ('response' in data and 'authenticatorData' in data['response']) else None
+
+        success, msg = verify_passkey_assertion(
+            user=user,
+            credential_id=credential_id,
+            client_data_json_b64=client_data_json,
+            session_challenge=challenge,
+            full_credential=full_cred,
+            expected_rp_id=rp_id,
+            expected_origin=expected_origin,
+        )
         if success:
             request.session.pop('pre_2fa_user_id', None)
             request.session.pop('pre_2fa_redirect', None)
@@ -332,10 +355,12 @@ def passkey_auth_verify(request):
 
 
 @login_required
+@rate_limit(key_prefix='passkey_reg_chal', limit=10, period_seconds=60)
 def passkey_reg_challenge(request):
     """Generate registration challenge for saving a biometric / Windows Hello key."""
     challenge = generate_webauthn_challenge()
     request.session['passkey_reg_challenge'] = challenge
+    request.session['passkey_reg_challenge_time'] = timezone.now().timestamp()
     return JsonResponse({
         'challenge': challenge,
         'user_id': str(request.user.id),
@@ -346,29 +371,51 @@ def passkey_reg_challenge(request):
 
 
 @login_required
+@rate_limit(key_prefix='passkey_reg_ver', limit=10, period_seconds=60)
 @require_POST
 def passkey_reg_verify(request):
     """Register and store new PasskeyCredential for the authenticated student."""
+    now_ts = timezone.now().timestamp()
+    challenge = request.session.pop('passkey_reg_challenge', '')
+    challenge_time = request.session.pop('passkey_reg_challenge_time', None)
+
+    if not challenge or not challenge_time or (now_ts - challenge_time) > 120:
+        return JsonResponse({'success': False, 'error': 'Registration challenge expired, consumed, or missing.'}, status=400)
+
     try:
         data = json.loads(request.body.decode('utf-8'))
-        credential_id = data.get('credential_id', '').strip()
-        public_key = data.get('public_key', '').strip()
         key_name = data.get('name', '').strip() or 'Windows Hello / Biometric Key'
+        rp_id = _get_webauthn_rp_id(request) or request.get_host().split(':')[0]
+        expected_origin = f"{'https' if request.is_secure() else 'http'}://{request.get_host()}"
 
-        if not credential_id:
-            return JsonResponse({'success': False, 'error': 'Credential ID is required.'}, status=400)
+        success, msg, cred_info = verify_passkey_registration(
+            data=data,
+            session_challenge=challenge,
+            expected_rp_id=rp_id,
+            expected_origin=expected_origin,
+        )
+
+        if not success:
+            return JsonResponse({'success': False, 'error': msg}, status=400)
 
         PasskeyCredential.objects.update_or_create(
             user=request.user,
-            credential_id=credential_id,
+            credential_id=cred_info['credential_id'],
             defaults={
-                'public_key': public_key,
+                'public_key': cred_info['public_key'],
+                'sign_count': cred_info.get('sign_count', 0),
                 'name': key_name[:100],
             }
         )
 
         request.user.two_factor_enabled = True
         request.user.save(update_fields=['two_factor_enabled'])
+
+        log_audit_event(
+            event_type='PASSKEY_REGISTERED',
+            actor_enrollment=request.user.enrollment_number,
+            description=f'Registered passkey credential: {key_name[:50]}',
+        )
 
         return JsonResponse({'success': True, 'message': 'Passkey registered successfully!'})
     except Exception as exc:
@@ -411,6 +458,7 @@ def send_signup_otp(request):
 
 
 @login_required
+@rate_limit(key_prefix='send_security_otp', limit=5, period_seconds=60)
 @require_POST
 def send_security_otp(request):
     """Dispatch phone and email OTP to currently logged-in student to authorize security edits.
@@ -442,6 +490,7 @@ def send_security_otp(request):
     })
 
 
+@rate_limit(key_prefix='forgot_password', limit=5, period_seconds=60)
 def forgot_password_view(request):
     """Forgotten password recovery: Phone SMS / Email OTP reset or Physical In-Person Desk request."""
     if request.user.is_authenticated:
@@ -578,7 +627,7 @@ def apply_account(request):
         phone_otp = request.POST.get('phone_otp', '').strip()
         phone_num = request.POST.get('phone_number', '').strip()
 
-        is_debug = enrollment.startswith('20XX')
+        is_debug = enrollment.startswith('20XX') and (getattr(settings, 'DEBUG', False) or 'test' in sys.argv)
         phone_verified = False
 
         if is_debug:
@@ -676,11 +725,7 @@ def profile_view(request, enrollment_number):
 
         if password_changed:
             current_password = request.POST.get('current_password', '').strip()
-            if current_password:
-                if not profile_user.check_password(current_password):
-                    messages.error(request, "Current password is incorrect.")
-                    return redirect('profile', enrollment_number=profile_user.enrollment_number)
-            elif not grace_active:
+            if not current_password or not profile_user.check_password(current_password):
                 messages.error(request, "Current password is required and must be correct to set a new password.")
                 return redirect('profile', enrollment_number=profile_user.enrollment_number)
 
