@@ -668,11 +668,21 @@ def health_check(request: HttpRequest) -> HttpResponse:
         db_ok = False
         db_error = str(exc)
 
+    cache_ok = True
+    try:
+        from django.core.cache import cache
+        cache.set('__health_probe__', '1', 5)
+        if cache.get('__health_probe__') != '1':
+            cache_ok = False
+    except Exception:
+        cache_ok = False
+
     status_code = 200 if db_ok else 503
     traffic = get_traffic_telemetry()
     payload = {
         "status": "healthy" if db_ok else "unhealthy",
         "database": "connected" if db_ok else "disconnected",
+        "cache": "connected" if cache_ok else "degraded",
         "timestamp": timezone.now().isoformat(),
         "version": "2.4.0",
         "traffic_telemetry": {
