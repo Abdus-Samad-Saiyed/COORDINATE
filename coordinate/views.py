@@ -181,6 +181,7 @@ def _promote_next_waitlist_passenger(ride):
                     ride=ride,
                     user=candidate,
                 )
+                record_ride_consent(ride, candidate, share_contact=True)
                 ride.sync_status()
 
                 # Post system chat announcement
@@ -699,22 +700,26 @@ def leave_ride(request, ride_id):
 @login_required
 @require_POST
 def terminate_ride(request, ride_id):
-    """Creator terminates their own ride. Cancels rather than deletes if history exists."""
-    ride = get_object_or_404(RideRequest, id=ride_id, creator=request.user)
+    """Creator terminates their own ride. Cancels rather than deletes to preserve history and audit log."""
+    with transaction.atomic():
+        ride = get_object_or_404(
+            RideRequest.objects.select_for_update(),
+            id=ride_id,
+            creator=request.user,
+        )
 
-    if ride.status == 'COMPLETED':
-        messages.error(request, 'Completed rides cannot be terminated.')
-        return redirect('ride_detail', ride_id=ride.id)
+        if ride.status in ['COMPLETED', 'CANCELLED']:
+            messages.error(request, f'Cannot terminate a {ride.status.lower()} ride.')
+            return redirect('ride_detail', ride_id=ride.id)
 
-    if ride.messages.exists():
         ride.status = 'CANCELLED'
         ride.save(update_fields=['status'])
-        _broadcast_ride_teardown(ride, 'cancelled')
-        messages.info(request, 'Ride cancelled.')
-    else:
-        _broadcast_ride_teardown(ride, 'cancelled')
-        ride.delete()
-        messages.success(request, 'Ride terminated.')
+
+        # Revoke all affirmative consents for this ride
+        RideConsent.objects.filter(ride=ride).delete()
+
+        transaction.on_commit(lambda: _broadcast_ride_teardown(ride, 'cancelled'))
+        messages.info(request, 'Ride cancelled and closed.')
 
     return redirect('ride_list')
 
@@ -992,18 +997,20 @@ def complete_ride(request, ride_id):
 
         ride.status = 'COMPLETED'
         ride.save(update_fields=['status'])
-        _broadcast_ride_teardown(ride, 'completed')
+        transaction.on_commit(lambda: _broadcast_ride_teardown(ride, 'completed'))
 
-        # RIDE-05: Update attendance and reliability statistics
-        participant_users = (
+        # RIDE-05: Update attendance and reliability statistics only for group rides (>= 2 participants)
+        # Prevents solo reputation farming
+        participant_users = list(
             RideParticipant.objects
             .filter(ride=ride)
             .select_related('user')
         )
-        for rp in participant_users:
-            rp.user.rides_completed = F('rides_completed') + 1
-            rp.user.on_time_count = F('on_time_count') + 1
-            rp.user.save(update_fields=['rides_completed', 'on_time_count'])
+        if len(participant_users) >= 2:
+            for rp in participant_users:
+                rp.user.rides_completed = F('rides_completed') + 1
+                rp.user.on_time_count = F('on_time_count') + 1
+                rp.user.save(update_fields=['rides_completed', 'on_time_count'])
 
     messages.success(request, 'Ride marked as completed. You can now review your fellow passengers.')
     return redirect('ride_detail', ride_id=ride.id)
