@@ -263,7 +263,13 @@
       document.body.appendChild(toast);
     }
 
-    toast.innerHTML = `<i class="bi ${icon} text-warning fs-5"></i> <span>${message}</span>`;
+    toast.innerHTML = '';
+    const toastIcon = document.createElement('i');
+    toastIcon.className = `bi ${icon} text-warning fs-5`;
+    const toastMsg = document.createElement('span');
+    toastMsg.textContent = message;
+    toast.appendChild(toastIcon);
+    toast.appendChild(toastMsg);
     requestAnimationFrame(() => {
       toast.style.opacity = '1';
       toast.style.transform = 'translateX(-50%) translateY(0)';

@@ -9,7 +9,7 @@
         <div class="col-lg-4">
             <div class="glass p-4 text-center">
                 <div class="mb-3 position-relative d-inline-block">
-                    {% if profile_user.profile_photo %}
+                    {% if can_see_photo and profile_user.profile_photo %}
                         <img src="{{ profile_user.profile_photo.url }}" alt="{{ profile_user.enrollment_number }}"
                              class="rounded-circle border border-2 border-success object-fit-cover shadow"
                              style="width: 88px; height: 88px;">

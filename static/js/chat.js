@@ -94,7 +94,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!messagesContainer || !content) return;
         const noticeDiv = document.createElement('div');
         noticeDiv.className = 'text-center my-2';
-        noticeDiv.innerHTML = `<span class="badge bg-dark border border-secondary text-white-50 px-3 py-2 small"><i class="bi bi-info-circle me-1 text-success"></i>${content}</span>`;
+        const badge = document.createElement('span');
+        badge.className = 'badge bg-dark border border-secondary text-white-50 px-3 py-2 small';
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-info-circle me-1 text-success';
+        badge.appendChild(icon);
+        const textNode = document.createTextNode(' ' + content);
+        badge.appendChild(textNode);
+        noticeDiv.appendChild(badge);
         messagesContainer.appendChild(noticeDiv);
         scrollToBottom();
     }

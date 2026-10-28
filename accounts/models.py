@@ -403,6 +403,14 @@ class AuditEvent(models.Model):
     def __str__(self) -> str:
         return f"[{self.timestamp.strftime('%Y-%m-%d %H:%M')}] {self.event_type}: {self.description}"
 
+    def delete(self, *args, **kwargs):
+        raise PermissionError("Audit events are immutable and cannot be deleted.")
+
+    def save(self, *args, **kwargs):
+        if self.pk and not kwargs.get('force_insert', False):
+            raise PermissionError("Audit events are immutable and cannot be modified.")
+        super().save(*args, **kwargs)
+
 
 class PlatformFeedback(models.Model):
     """User feedback, feature requests, proposals, and bug reports."""

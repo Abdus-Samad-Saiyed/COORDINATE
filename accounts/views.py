@@ -631,6 +631,7 @@ def apply_account(request):
         enrollment = request.POST.get('enrollment_number', '').strip().upper()
         phone_otp = request.POST.get('phone_otp', '').strip()
         phone_num = request.POST.get('phone_number', '').strip()
+        email_addr = request.POST.get('email', '').strip().lower()
 
         is_debug = enrollment.startswith('20XX') and (getattr(settings, 'DEBUG', False) or 'test' in sys.argv)
         phone_verified = False
@@ -641,7 +642,7 @@ def apply_account(request):
             if not phone_otp:
                 form.add_error(None, "Phone verification code is required. Please verify your phone number via OTP.")
             else:
-                phone_verified, otp_err = verify_phone_otp(phone_number=phone_num, submitted_code=phone_otp, purpose='SIGNUP')
+                phone_verified, otp_err = verify_phone_otp(phone_number=phone_num, email=email_addr, submitted_code=phone_otp, purpose='SIGNUP')
                 if not phone_verified:
                     form.add_error(None, f"Phone verification failed: {otp_err}")
 

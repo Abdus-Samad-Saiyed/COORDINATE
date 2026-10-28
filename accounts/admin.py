@@ -151,6 +151,15 @@ class AuditEventAdmin(admin.ModelAdmin):
     readonly_fields = ['timestamp', 'event_type', 'actor_enrollment', 'target_id', 'description']
     ordering = ['-timestamp']
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(PlatformFeedback)
 class PlatformFeedbackAdmin(admin.ModelAdmin):
