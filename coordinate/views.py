@@ -661,6 +661,21 @@ def leave_ride(request, ride_id):
         revoke_ride_consent(ride, request.user)
         ride.left_users.add(request.user)
 
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f'ride_{ride.id}',
+                    {
+                        'type': 'system.notice',
+                        'action': 'user_left',
+                        'user': request.user.enrollment_number,
+                        'content': f"{request.user.enrollment_number} left the ride.",
+                    }
+                )
+        except Exception:
+            pass
+
         remaining = RideParticipant.objects.filter(ride=ride).count()
         if remaining == 0:
             # Preserve ride if it has chat history or completed; otherwise clean up

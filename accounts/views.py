@@ -935,6 +935,21 @@ def unfriend_user(request, enrollment_number):
         Q(user1=target_user, user2=request.user)
     ).delete()
     if deleted:
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                u1_id, u2_id = sorted([request.user.id, target_user.id])
+                async_to_sync(channel_layer.group_send)(
+                    f'direct_chat_{u1_id}_{u2_id}',
+                    {
+                        'type': 'chat.unfriended',
+                        'message': f'Friendship connection ended.',
+                    }
+                )
+        except Exception:
+            pass
         messages.info(request, f'Removed {target_user.enrollment_number} from your friends.')
     return redirect('profile', enrollment_number=target_user.enrollment_number)
 

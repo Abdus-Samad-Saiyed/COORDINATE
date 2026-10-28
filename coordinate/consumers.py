@@ -123,6 +123,10 @@ class RideChatConsumer(AsyncWebsocketConsumer):
 
     async def chat_message(self, event):
         """Relay a group message to this specific WebSocket connection."""
+        if not await self._is_participant():
+            await self.close(code=4003)
+            return
+
         await self.send(text_data=json.dumps({
             'type': 'message',
             'message_id': event.get('message_id'),
@@ -144,7 +148,7 @@ class RideChatConsumer(AsyncWebsocketConsumer):
         }))
         if action in ['cancelled', 'completed', 'terminated']:
             await self.close(code=4001)
-        elif action == 'user_kicked' and event.get('user') == self.user.enrollment_number:
+        elif action in ['user_kicked', 'user_left', 'membership_revoked'] and event.get('user') == self.user.enrollment_number:
             await self.close(code=4003)
 
     async def ride_terminated(self, event):

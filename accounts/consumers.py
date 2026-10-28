@@ -91,6 +91,15 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
 
         # Chat message
         if event_type == 'message':
+            # Dynamic friendship check
+            if not await self._are_friends():
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'error': 'You are no longer connected as friends with this user.',
+                }))
+                await self.close(code=4003)
+                return
+
             content = (data.get('content') or '').strip()
             if not content or len(content) > 2000:
                 return
@@ -119,6 +128,10 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
     # ------------------------------------------------------------------
 
     async def chat_direct_message(self, event):
+        if not await self._are_friends():
+            await self.close(code=4003)
+            return
+
         await self.send(text_data=json.dumps({
             'type': 'message',
             'message_id': event['message_id'],
@@ -127,6 +140,14 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
             'timestamp': event['timestamp'],
             'is_self': event['sender'] == self.user.enrollment_number,
         }))
+
+    async def chat_unfriended(self, event):
+        """Immediately disconnect both clients when friendship is dissolved."""
+        await self.send(text_data=json.dumps({
+            'type': 'unfriended',
+            'message': event.get('message', 'Friendship connection ended.'),
+        }))
+        await self.close(code=4003)
 
     async def chat_typing(self, event):
         if event['sender'] != self.user.enrollment_number:
