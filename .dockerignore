@@ -11,8 +11,13 @@ venv/
 
 # Environment & secrets
 .env
+.env.*
+!.env.example
+campus/settings/secrets_local.py
 debug_accounts.md
 superuser_password
+*CREDENTIALS*.md
+test_report.json
 
 # Local databases
 *.sqlite3

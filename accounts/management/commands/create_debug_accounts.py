@@ -69,19 +69,19 @@ import os
 
 DEBUG_PASSWORD = os.environ.get('DEBUG_ACCOUNT_PASSWORD', 'Debug@123')
 PERSONAL_SUPERACCOUNT = {
-    'enrollment_number': '2024BCSE065',
-    'username': '2024BCSE065',
-    'first_name': 'Abdus Samad',
-    'last_name': 'Saiyed',
-    'email': 'asaiyed_2024bcse065@nitsri.ac.in',
-    'phone_number': '+917355463857',
+    'enrollment_number': os.environ.get('PERSONAL_SUPERACCOUNT_ENROLLMENT', '2024BCSE065'),
+    'username': os.environ.get('PERSONAL_SUPERACCOUNT_ENROLLMENT', '2024BCSE065'),
+    'first_name': os.environ.get('PERSONAL_SUPERACCOUNT_FIRST_NAME', 'Abdus Samad'),
+    'last_name': os.environ.get('PERSONAL_SUPERACCOUNT_LAST_NAME', 'Saiyed'),
+    'email': os.environ.get('PERSONAL_SUPERACCOUNT_EMAIL', 'asaiyed_2024bcse065@nitsri.ac.in'),
+    'phone_number': os.environ.get('PERSONAL_SUPERACCOUNT_PHONE', '+919999999999'),
     'gender': 'M',
     'is_superuser': True,
     'is_staff': True,
     'verified': True,
     'is_active': True,
 }
-PERSONAL_PASSWORD = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'AbSm72000@123')
+PERSONAL_PASSWORD = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'DevAdmin@Placeholder123')
 
 
 class Command(BaseCommand):
@@ -114,9 +114,9 @@ class Command(BaseCommand):
                 setattr(super_user, k, v)
             super_user.set_password(PERSONAL_PASSWORD)
             super_user.save()
-            self.stdout.write(self.style.SUCCESS(f'Updated superaccount {super_user.enrollment_number} (+917355463857)'))
+            self.stdout.write(self.style.SUCCESS(f'Updated superaccount {super_user.enrollment_number}'))
         else:
-            self.stdout.write(self.style.SUCCESS(f'Created superaccount {super_user.enrollment_number} (+917355463857)'))
+            self.stdout.write(self.style.SUCCESS(f'Created superaccount {super_user.enrollment_number}'))
 
         # 2. Reassign rides and participations from 2024BCSE001 to 2024BCSE065 before deletion
         old_admin = User.objects.filter(enrollment_number='2024BCSE001').first()

@@ -1,26 +1,32 @@
 __pycache__/
 *.py[cod]
+*.pyo
+
+# Local database & logs
 *.sqlite3
 db.sqlite3
+*.log
+
+# Environments & secrets
+.env
+.env.*
+!.env.example
+campus/settings/secrets_local.py
+superuser_password
+*CREDENTIALS*.md
+debug_accounts.md
+test_report.json
+
+# Virtualenv
 venv/
 .venv/
-.env
-*.log
-superuser_password
+
+# Generated directories & tools
+media/
+staticfiles/
 project_dump.txt
 dump_project.py
 
-# Sensitive dev documentation
-debug_accounts.md
-CAMPUS_MAIL_CREDENTIALS.md
-
-# Generated directories
-media/
-staticfiles/
-
-DEBUG_CREDENTIALS.md
-CAMPUS_MAIL_CREDENTIALS.md
-*CREDENTIALS*.md
-project_dump.txt
-db.sqlite3
-.env
+# IDE
+.idea/
+.vscode/

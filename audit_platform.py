@@ -9,7 +9,13 @@ import sys
 import django
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'campus.settings.dev')
+import django
 django.setup()
+
+from django.conf import settings
+if not getattr(settings, 'DEBUG', False):
+    print("REFUSING TO RUN: audit_platform.py must NEVER run against production (DEBUG=False).", file=sys.stderr)
+    sys.exit(1)
 
 from datetime import datetime, timedelta
 from django.contrib.auth import get_user_model

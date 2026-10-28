@@ -9,6 +9,7 @@ Tests cover:
 """
 
 import os
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -37,8 +38,9 @@ class DebugAccountsProductionGuardTest(TestCase):
     @override_settings(DEBUG=True)
     def test_runs_when_debug_true(self):
         """Command executes successfully when DEBUG=True."""
-        # Should not raise — just run it.
-        call_command('create_debug_accounts')
+        from io import StringIO
+        out = StringIO()
+        call_command('create_debug_accounts', stdout=out)
 
 
 class DebugAccountsResetGuardTest(TestCase):
@@ -65,64 +67,58 @@ class DebugAccountsNoPasswordLeakTest(TestCase):
 class ProductionSecretKeyValidationTest(unittest.TestCase):
     """SEC-09: prod.py must raise ValueError on insecure/missing SECRET_KEY."""
 
+    BASE_PROD_ENV = {
+        'DJANGO_ALLOWED_HOSTS': 'campus.example.com',
+        'DATABASE_URL': 'postgres://user:pass@localhost:5432/campus_db',
+        'REDIS_URL': 'redis://localhost:6379/0',
+        'EMAIL_HOST_PASSWORD': 'test-prod-email-password-token',
+    }
+
+    def setUp(self):
+        self._orig_secrets = sys.modules.pop('campus.settings.secrets_local', None)
+        sys.modules.pop('campus.settings.prod', None)
+
+    def tearDown(self):
+        sys.modules.pop('campus.settings.prod', None)
+        if self._orig_secrets is not None:
+            sys.modules['campus.settings.secrets_local'] = self._orig_secrets
+
     def test_insecure_default_raises(self):
         """Importing prod settings with the placeholder key must raise."""
-        import importlib
-        import campus.settings.base as base_module
+        import os
+        from unittest.mock import patch
 
-        original_key = base_module.SECRET_KEY
-        try:
-            base_module.SECRET_KEY = 'insecure-dev-key-change-me'
-
-            # Force fresh import of prod module
-            import sys
+        env_vars = {**self.BASE_PROD_ENV, 'DJANGO_SECRET_KEY': 'insecure-dev-key-change-me'}
+        with patch.dict(os.environ, env_vars, clear=False):
             sys.modules.pop('campus.settings.prod', None)
-
             with self.assertRaises(ValueError) as ctx:
                 import campus.settings.prod  # noqa: F401
             self.assertIn('DJANGO_SECRET_KEY', str(ctx.exception))
-        finally:
-            base_module.SECRET_KEY = original_key
-            import sys
-            sys.modules.pop('campus.settings.prod', None)
 
     def test_empty_key_raises(self):
         """Empty string SECRET_KEY must also raise."""
-        import importlib
-        import campus.settings.base as base_module
+        import os
+        from unittest.mock import patch
 
-        original_key = base_module.SECRET_KEY
-        try:
-            base_module.SECRET_KEY = ''
-
-            import sys
+        env_vars = {**self.BASE_PROD_ENV, 'DJANGO_SECRET_KEY': ''}
+        with patch.dict(os.environ, env_vars, clear=False):
             sys.modules.pop('campus.settings.prod', None)
-
             with self.assertRaises(ValueError):
                 import campus.settings.prod  # noqa: F401
-        finally:
-            base_module.SECRET_KEY = original_key
-            import sys
-            sys.modules.pop('campus.settings.prod', None)
 
     def test_real_key_does_not_raise(self):
         """A real secret key must not trigger the guard."""
-        import importlib
-        import campus.settings.base as base_module
+        import os
+        from unittest.mock import patch
 
-        original_key = base_module.SECRET_KEY
-        try:
-            base_module.SECRET_KEY = 'a-real-production-secret-key-that-is-long-enough'
-
-            import sys
+        env_vars = {
+            **self.BASE_PROD_ENV,
+            'DJANGO_SECRET_KEY': 'a-real-production-secret-key-that-is-long-enough-and-random-32chars',
+        }
+        with patch.dict(os.environ, env_vars, clear=False):
             sys.modules.pop('campus.settings.prod', None)
-
             # This should NOT raise
             import campus.settings.prod  # noqa: F401
-        finally:
-            base_module.SECRET_KEY = original_key
-            import sys
-            sys.modules.pop('campus.settings.prod', None)
 
 
 class DumpToolExclusionTest(unittest.TestCase):

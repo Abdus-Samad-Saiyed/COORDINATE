@@ -307,27 +307,39 @@ class Phase8ProductionReadinessTests(TestCase):
         import sys
         from unittest import mock
 
-        # 1. With dev default key, prod settings must refuse to start
-        import campus.settings.base as base_settings
-        with mock.patch.dict(os.environ, {"DJANGO_SECRET_KEY": "insecure-dev-key-change-me"}):
-            importlib.reload(base_settings)
-            if "campus.settings.prod" in sys.modules:
-                del sys.modules["campus.settings.prod"]
-            with self.assertRaises(ValueError):
-                import campus.settings.prod  # noqa: F401
+        prod_base_env = {
+            "DJANGO_ALLOWED_HOSTS": "campus.nitsri.ac.in",
+            "DATABASE_URL": "postgres://user:pass@localhost:5432/campus_db",
+            "REDIS_URL": "redis://localhost:6379/0",
+            "EMAIL_HOST_PASSWORD": "dummy-password",
+        }
 
-        # 2. With a strong production secret key, prod settings imports successfully
-        with mock.patch.dict(os.environ, {"DJANGO_SECRET_KEY": "strong-production-key-for-testing-12345"}):
+        orig_secrets = sys.modules.pop("campus.settings.secrets_local", None)
+        try:
+            # 1. With dev default key, prod settings must refuse to start
             import campus.settings.base as base_settings
-            importlib.reload(base_settings)
-            if "campus.settings.prod" in sys.modules:
-                del sys.modules["campus.settings.prod"]
-            import campus.settings.prod as prod_settings
-            self.assertEqual(prod_settings.SECURE_PROXY_SSL_HEADER, ("HTTP_X_FORWARDED_PROTO", "https"))
-            self.assertTrue(prod_settings.SESSION_COOKIE_SECURE)
-            self.assertTrue(prod_settings.CSRF_COOKIE_SECURE)
-            self.assertFalse(prod_settings.DEBUG)
+            with mock.patch.dict(os.environ, {**prod_base_env, "DJANGO_SECRET_KEY": "insecure-dev-key-change-me"}):
+                importlib.reload(base_settings)
+                if "campus.settings.prod" in sys.modules:
+                    del sys.modules["campus.settings.prod"]
+                with self.assertRaises(ValueError):
+                    import campus.settings.prod  # noqa: F401
 
-            if "campus.settings.prod" in sys.modules:
-                del sys.modules["campus.settings.prod"]
-        importlib.reload(base_settings)
+            # 2. With a strong production secret key, prod settings imports successfully
+            with mock.patch.dict(os.environ, {**prod_base_env, "DJANGO_SECRET_KEY": "strong-production-key-for-testing-12345-random-safe"}):
+                import campus.settings.base as base_settings
+                importlib.reload(base_settings)
+                if "campus.settings.prod" in sys.modules:
+                    del sys.modules["campus.settings.prod"]
+                import campus.settings.prod as prod_settings
+                self.assertEqual(prod_settings.SECURE_PROXY_SSL_HEADER, ("HTTP_X_FORWARDED_PROTO", "https"))
+                self.assertTrue(prod_settings.SESSION_COOKIE_SECURE)
+                self.assertTrue(prod_settings.CSRF_COOKIE_SECURE)
+                self.assertFalse(prod_settings.DEBUG)
+
+                if "campus.settings.prod" in sys.modules:
+                    del sys.modules["campus.settings.prod"]
+            importlib.reload(base_settings)
+        finally:
+            if orig_secrets is not None:
+                sys.modules["campus.settings.secrets_local"] = orig_secrets

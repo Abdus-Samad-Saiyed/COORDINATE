@@ -17,6 +17,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'campus.settings.dev')
 import django
 django.setup()
 from django.conf import settings
+
 settings.EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 
 from datetime import datetime, timedelta
@@ -54,6 +55,10 @@ class LinkExtractor(HTMLParser):
 
 
 def run_comprehensive_audit():
+    if not getattr(settings, 'DEBUG', False) or 'prod' in os.environ.get('DJANGO_SETTINGS_MODULE', ''):
+        print("REFUSING TO RUN: test_full_platform_e2e.py must NEVER run against production.", file=sys.stderr)
+        return False
+
     print("=" * 75)
     print("STARTING FULL END-TO-END DEEP PLATFORM VERIFICATION")
     print("=" * 75)
@@ -89,14 +94,14 @@ def run_comprehensive_audit():
             "verified": True,
         }
     )
-    admin_pw = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'AbSm72000@123')
+    admin_pw = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'TestSuperPass@2024')
     admin.set_password(admin_pw)
-    admin.first_name = "Abdus"
-    admin.last_name = "Samad Saiyed"
+    admin.first_name = os.environ.get('PERSONAL_SUPERACCOUNT_FIRST_NAME', 'Abdus')
+    admin.last_name = os.environ.get('PERSONAL_SUPERACCOUNT_LAST_NAME', 'Samad Saiyed')
     admin.is_staff = True
     admin.is_superuser = True
-    admin.email = "asaiyed_2024bcse065@nitsri.ac.in"
-    admin.phone_number = "+917355463857"
+    admin.email = os.environ.get('PERSONAL_SUPERACCOUNT_EMAIL', 'asaiyed_2024bcse065@nitsri.ac.in')
+    admin.phone_number = os.environ.get('PERSONAL_SUPERACCOUNT_PHONE', '+919999999999')
     admin.current_session_key = ''
     admin.save()
     assert_test(admin.get_full_name() == "Abdus Samad Saiyed", "Superaccount full name is 'Abdus Samad Saiyed'")
