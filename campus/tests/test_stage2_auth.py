@@ -21,6 +21,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.models import Session
+from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -101,6 +102,7 @@ class Stage2ApiAuthAndTwoFactorTests(TestCase):
     """Test API 2FA enforcement and Bearer token session binding."""
 
     def setUp(self):
+        cache.clear()
         self.client = Client()
         self.user = User.objects.create_user(
             enrollment_number="2024BCSE102",
@@ -114,6 +116,9 @@ class Stage2ApiAuthAndTwoFactorTests(TestCase):
             verified=True,
             two_factor_enabled=True,
         )
+
+    def tearDown(self):
+        cache.clear()
 
     def test_api_login_requires_2fa_and_rejects_invalid_otp(self):
         """api_login must challenge 2FA when enabled and reject false OTP without bypassing."""

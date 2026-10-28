@@ -323,13 +323,10 @@ class Phase6ApiFoundationTests(TestCase):
             status="OPEN",
         )
 
-        # 1. Unauthenticated client only sees MIXED
+        # 1. Unauthenticated client is rejected (auth required)
         anon_client = Client()
         res_anon = anon_client.get(reverse("api_ride_list"))
-        self.assertEqual(res_anon.status_code, 200)
-        anon_ids = [r["id"] for r in res_anon.json()["data"]["rides"]]
-        self.assertIn(mixed_ride.id, anon_ids)
-        self.assertNotIn(girls_ride.id, anon_ids)
+        self.assertEqual(res_anon.status_code, 401)
 
         # 2. Male user cannot see GIRLS ride
         male_client = Client()

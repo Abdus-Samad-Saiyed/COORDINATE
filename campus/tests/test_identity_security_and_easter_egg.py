@@ -135,6 +135,7 @@ class IdentitySecurityArchitectureTests(TestCase):
 
         # Update password and phone within grace window
         res = self.client.post(reverse("profile", args=[self.student.enrollment_number]), {
+            "current_password": "StudentPass@123",
             "phone_number": "+918888877777",
             "new_password": "NewSecretPass@123",
             "confirm_password": "NewSecretPass@123",

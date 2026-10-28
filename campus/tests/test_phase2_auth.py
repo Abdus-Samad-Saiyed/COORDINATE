@@ -251,7 +251,11 @@ class PrivacySafeguardTests(TestCase):
         res_stranger = self.client.get(reverse('ride_detail', args=[self.ride.id]))
         self.assertEqual(res_stranger.status_code, 404)
 
-        # Host sees passenger's phone number
+        # Host sees passenger's phone number when affirmative consent is established
+        from coordinate.policies import record_ride_consent
+        record_ride_consent(self.ride, self.user_a)
+        record_ride_consent(self.ride, self.user_b)
+
         self.client.force_login(self.user_a)
         res_host = self.client.get(reverse('ride_detail', args=[self.ride.id]))
         self.assertEqual(res_host.status_code, 200)
