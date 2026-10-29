@@ -37,30 +37,34 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
-        # Announce online presence to the friend if not hidden
+        # Announce online presence to the friend if not hidden and first connection
         user_hides_online = await self._user_hides_online()
         if not user_hides_online:
-            await self.channel_layer.group_send(
-                self.group_name,
-                {
-                    'type': 'chat.presence',
-                    'sender': self.user.enrollment_number,
-                    'status': 'online',
-                }
-            )
-
-    async def disconnect(self, close_code):
-        if hasattr(self, 'group_name'):
-            user_hides_online = await self._user_hides_online()
-            if not user_hides_online:
+            count = await self._incr_user_connection(self.user.id)
+            if count == 1:
                 await self.channel_layer.group_send(
                     self.group_name,
                     {
                         'type': 'chat.presence',
                         'sender': self.user.enrollment_number,
-                        'status': 'offline',
+                        'status': 'online',
                     }
                 )
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'group_name'):
+            user_hides_online = await self._user_hides_online()
+            if not user_hides_online:
+                count = await self._decr_user_connection(self.user.id)
+                if count <= 0:
+                    await self.channel_layer.group_send(
+                        self.group_name,
+                        {
+                            'type': 'chat.presence',
+                            'sender': self.user.enrollment_number,
+                            'status': 'offline',
+                        }
+                    )
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def receive(self, text_data=None, bytes_data=None):
@@ -201,3 +205,28 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
             return User.objects.filter(id=self.user.id, hide_online_status=True).exists()
         except Exception:
             return False
+
+    @database_sync_to_async
+    def _incr_user_connection(self, user_id: int) -> int:
+        from django.core.cache import cache
+        key = f"ws_presence_{user_id}"
+        try:
+            val = cache.get(key, 0) + 1
+            cache.set(key, val, timeout=86400)
+            return val
+        except Exception:
+            return 1
+
+    @database_sync_to_async
+    def _decr_user_connection(self, user_id: int) -> int:
+        from django.core.cache import cache
+        key = f"ws_presence_{user_id}"
+        try:
+            val = max(0, cache.get(key, 1) - 1)
+            if val == 0:
+                cache.delete(key)
+            else:
+                cache.set(key, val, timeout=86400)
+            return val
+        except Exception:
+            return 0
