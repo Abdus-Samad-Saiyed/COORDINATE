@@ -167,6 +167,8 @@ def custom_login_view(request, extra_context=None):
                 can_resend, _ = can_resend_otp(user, purpose='2FA')
                 if can_resend:
                     otp, raw_code = create_phone_otp(user, purpose='2FA')
+                    if not getattr(otp, 'any_delivered', True):
+                        messages.warning(request, "Unable to deliver verification code to your email or SMS. If you have registered a passkey, you may authenticate using it below.")
                 return redirect('two_factor_verify')
 
             auth_login(request, user)
@@ -229,10 +231,13 @@ def two_factor_verify(request):
         if action == 'resend':
             can_resend, wait_seconds = can_resend_otp(user, purpose='2FA')
             if can_resend:
-                can_resend, _ = can_resend_otp(user, purpose='2FA')
-                if can_resend:
-                    otp, raw_code = create_phone_otp(user, purpose='2FA')
-                messages.info(request, "A new 6-digit verification code has been dispatched to your email and phone.")
+                otp, raw_code = create_phone_otp(user, purpose='2FA')
+                if not getattr(otp, 'any_delivered', True):
+                    messages.warning(request, "Delivery failed. Could not dispatch verification code to your email or mobile. You may authenticate using your passkey if registered.")
+                elif getattr(otp, 'email_sent', False) and not getattr(otp, 'sms_sent', False):
+                    messages.info(request, f"A new 6-digit verification code has been dispatched to your email ({masked_email}). (SMS delivery is currently unavailable).")
+                else:
+                    messages.info(request, "A new 6-digit verification code has been dispatched to your email and phone.")
             else:
                 messages.warning(request, f"Please wait {wait_seconds} seconds before requesting a new code.")
             return redirect('two_factor_verify')
@@ -516,12 +521,15 @@ def send_signup_otp(request):
         return JsonResponse({'success': False, 'error': f'Please wait {wait_sec} seconds before requesting a new code.'}, status=429)
 
     otp, raw_code = create_phone_otp(phone_number=phone, email=email, purpose='SIGNUP')
+    if not getattr(otp, 'any_delivered', True):
+        return JsonResponse({'success': False, 'error': 'Unable to deliver verification code via SMS or email. Please check your contact details or try again.'}, status=502)
+
     dest_parts = []
-    if email:
+    if getattr(otp, 'email_sent', False) or (email and not getattr(otp, 'sms_sent', False)):
         dest_parts.append(f"email ({email})")
-    if phone:
+    if getattr(otp, 'sms_sent', False):
         dest_parts.append(f"mobile ({phone[-4:]})")
-    dest_str = " and ".join(dest_parts) or "your contacts"
+    dest_str = " and ".join(dest_parts) or f"email ({email})"
     return JsonResponse({
         'success': True,
         'message': f'Verification code dispatched to {dest_str}. Check your email inbox or SMS.',
@@ -549,12 +557,15 @@ def send_security_otp(request):
         return JsonResponse({'success': False, 'error': f'Please wait {wait_sec} seconds before requesting a new code.'}, status=429)
 
     otp, raw_code = create_phone_otp(user=user, phone_number=target_phone, email=target_email, purpose='SECURITY_CHANGE')
+    if not getattr(otp, 'any_delivered', True):
+        return JsonResponse({'success': False, 'error': 'Unable to deliver security code to your registered contacts. Please try again later.'}, status=502)
+
     dest_parts = []
-    if target_email:
+    if getattr(otp, 'email_sent', False) or (target_email and not getattr(otp, 'sms_sent', False)):
         dest_parts.append(f"email ({target_email})")
-    if target_phone:
+    if getattr(otp, 'sms_sent', False):
         dest_parts.append(f"mobile ({target_phone[-4:]})")
-    dest_str = " and ".join(dest_parts)
+    dest_str = " and ".join(dest_parts) or "your registered contacts"
     return JsonResponse({
         'success': True,
         'message': f'Verification code dispatched to {dest_str}. Check your email or SMS.',
@@ -589,7 +600,12 @@ def forgot_password_view(request):
                 p = user.phone_number or ''
                 masked_phone = f"***-***-{p[-4:]}" if len(p) >= 4 else p
                 if can_resend:
-                    messages.success(request, f"A 6-digit reset code was dispatched to your registered email ({masked_email}) and mobile ({masked_phone}).")
+                    if not getattr(otp, 'any_delivered', True):
+                        messages.warning(request, "Delivery failed. We could not reach your email or mobile. You can request a reset in-person via the Physical Desk tab below.")
+                    elif getattr(otp, 'email_sent', False) and not getattr(otp, 'sms_sent', False):
+                        messages.success(request, f"A 6-digit reset code was dispatched to your registered email ({masked_email}). (SMS delivery unavailable).")
+                    else:
+                        messages.success(request, f"A 6-digit reset code was dispatched to your registered email ({masked_email}) and mobile ({masked_phone}).")
                 else:
                     messages.info(request, f"A reset code was already dispatched recently. Please check your email or wait {wait_sec}s before requesting a new code.")
                 return render(request, 'registration/forgot_password.html', {

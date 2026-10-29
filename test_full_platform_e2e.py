@@ -94,7 +94,7 @@ def run_comprehensive_audit():
             "verified": True,
         }
     )
-    admin_pw = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'TestSuperPass@2024')
+    admin_pw = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'Debug@123')
     admin.set_password(admin_pw)
     admin.first_name = os.environ.get('PERSONAL_SUPERACCOUNT_FIRST_NAME', 'Abdus')
     admin.last_name = os.environ.get('PERSONAL_SUPERACCOUNT_LAST_NAME', 'Samad Saiyed')

@@ -211,22 +211,26 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
         from django.core.cache import cache
         key = f"ws_presence_{user_id}"
         try:
-            val = cache.get(key, 0) + 1
-            cache.set(key, val, timeout=86400)
-            return val
+            cache.add(key, 0, timeout=86400)
+            return cache.incr(key)
         except Exception:
-            return 1
+            try:
+                val = cache.get(key, 0) + 1
+                cache.set(key, val, timeout=86400)
+                return val
+            except Exception:
+                return 1
 
     @database_sync_to_async
     def _decr_user_connection(self, user_id: int) -> int:
         from django.core.cache import cache
         key = f"ws_presence_{user_id}"
         try:
-            val = max(0, cache.get(key, 1) - 1)
-            if val == 0:
+            val = cache.decr(key)
+            if val <= 0:
                 cache.delete(key)
-            else:
-                cache.set(key, val, timeout=86400)
+                return 0
             return val
-        except Exception:
+        except (ValueError, Exception):
+            cache.delete(key)
             return 0

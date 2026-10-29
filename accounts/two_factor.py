@@ -88,10 +88,16 @@ def dispatch_sms(phone_number: str, message: str) -> bool:
             logger.error("Failed to send real SMS via Twilio: %s", exc)
             return False
 
-    logger.info("[SMS DISPATCH] To: %s (dispatch requested)", phone_number)
-    if getattr(settings, 'DEBUG', False):
-        print(f"\n=======================================================\n[SMS DISPATCH] To: {phone_number}\nMessage: {message}\n=======================================================\n")
-    return True
+    import sys
+    is_testing = 'test' in sys.argv or getattr(settings, 'TESTING', False)
+    if getattr(settings, 'DEBUG', False) or is_testing:
+        logger.info("[SMS DISPATCH] To: %s (dev/test simulation)", phone_number)
+        if getattr(settings, 'DEBUG', False):
+            print(f"\n=======================================================\n[SMS DISPATCH] To: {phone_number}\nMessage: {message}\n=======================================================\n")
+        return True
+
+    logger.warning("[SMS DISPATCH] Twilio gateway not configured. SMS not dispatched to %s", phone_number)
+    return False
 
 
 def dispatch_email_otp(email: str, code: str, purpose: str = '2FA', user: User = None) -> bool:
@@ -216,13 +222,20 @@ def create_phone_otp(
     logger.info("OTP (%s) generated for %s", purpose, ident)
 
     # 1. Dispatch SMS
+    sms_sent = False
     if target_phone:
         sms_text = f"Your Campus Nexus verification code is {raw_code}. Valid for 5 minutes."
-        dispatch_sms(target_phone, sms_text)
+        sms_sent = dispatch_sms(target_phone, sms_text)
 
     # 2. Dispatch MIME / SMTP Email
+    email_sent = False
     if target_email:
-        dispatch_email_otp(target_email, raw_code, purpose=purpose, user=user)
+        email_sent = dispatch_email_otp(target_email, raw_code, purpose=purpose, user=user)
+
+    # Attach in-memory delivery indicators for caller inspection
+    otp.sms_sent = sms_sent
+    otp.email_sent = email_sent
+    otp.any_delivered = sms_sent or email_sent
 
     return otp, raw_code
 
