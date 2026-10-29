@@ -684,16 +684,17 @@ def health_check(request: HttpRequest) -> HttpResponse:
         "database": "connected" if db_ok else "disconnected",
         "cache": "connected" if cache_ok else "degraded",
         "timestamp": timezone.now().isoformat(),
-        "version": "2.4.0",
-        "traffic_telemetry": {
+    }
+    if request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser):
+        payload["version"] = "2.4.0"
+        payload["traffic_telemetry"] = {
             "total_requests": traffic['total_requests'],
             "avg_latency_ms": traffic['avg_latency_ms'],
             "peak_rps": traffic['peak_rps'],
             "uptime": traffic['uptime_display'],
         }
-    }
-    if db_error:
-        payload["error"] = db_error
+        if db_error and settings.DEBUG:
+            payload["error"] = db_error
 
     # Return HTML if explicitly requested via format=html or if a browser sends text/html without format=json
     accept_header = request.headers.get('Accept', '') or ''
