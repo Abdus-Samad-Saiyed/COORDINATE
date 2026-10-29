@@ -10,6 +10,19 @@ from .models import RideMessage, RideRequest, RideReview
 class RideRequestForm(forms.ModelForm):
     """Form for creating a new ride with validation for spots, departure time, and routes."""
 
+    disclose_identity = forms.BooleanField(
+        required=False,
+        initial=True,
+        label='Disclose student identity (name, enrollment, gender) to confirmed co-passengers',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'id_disclose_identity'}),
+    )
+    share_contact = forms.BooleanField(
+        required=False,
+        initial=False,
+        label='Share contact details (phone number and email) with confirmed co-passengers during active trip',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'id_share_contact'}),
+    )
+
     class Meta:
         model = RideRequest
         fields = [
@@ -61,6 +74,11 @@ class RideRequestForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        if 'disclose_identity' in self.data:
+            if not cleaned.get('disclose_identity'):
+                self.add_error('disclose_identity', 'You must consent to disclose your identity to create a ride.')
+        else:
+            cleaned['disclose_identity'] = True
         if cleaned.get('route') == 'CUSTOM':
             if not cleaned.get('custom_from_location'):
                 self.add_error('custom_from_location', 'Required for custom routes.')

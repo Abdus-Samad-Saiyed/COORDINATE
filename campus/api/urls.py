@@ -8,7 +8,9 @@ from .views import (
     api_logout,
     api_me,
     api_my_rides,
+    api_ride_approve_request,
     api_ride_create,
+    api_ride_decline_request,
     api_ride_detail,
     api_ride_join,
     api_ride_leave,
@@ -35,6 +37,8 @@ urlpatterns = [
     path("rides/create/", api_ride_create, name="api_ride_create"),
     path("rides/<int:ride_id>/", api_ride_detail, name="api_ride_detail"),
     path("rides/<int:ride_id>/join/", api_ride_join, name="api_ride_join"),
+    path("rides/<int:ride_id>/requests/<int:request_id>/approve/", api_ride_approve_request, name="api_ride_approve_request"),
+    path("rides/<int:ride_id>/requests/<int:request_id>/decline/", api_ride_decline_request, name="api_ride_decline_request"),
     path("rides/<int:ride_id>/leave/", api_ride_leave, name="api_ride_leave"),
     path("my-rides/", api_my_rides, name="api_my_rides"),
 ]

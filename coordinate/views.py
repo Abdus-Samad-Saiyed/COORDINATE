@@ -48,6 +48,15 @@ from .policies import (
     record_ride_consent,
     revoke_ride_consent,
 )
+from .services import (
+    approve_ride_join_request,
+    cancel_ride_service,
+    decline_ride_join_request,
+    kick_passenger_service,
+    leave_ride_service,
+    promote_waitlist_passenger,
+    request_to_join_ride,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -155,59 +164,8 @@ def _broadcast_ride_teardown(ride, action: str):
 
 
 def _promote_next_waitlist_passenger(ride):
-    """
-    If ride has an open spot and waitlist is non-empty,
-    promotes earliest eligible waitlisted student to RideParticipant atomically.
-    """
-    if ride.status in ['COMPLETED', 'CANCELLED']:
-        return None
-
-    if ride.participant_count() < ride.total_spots:
-        with transaction.atomic():
-            waitlist_entries = (
-                RideWaitlist.objects
-                .select_for_update()
-                .filter(ride=ride)
-                .order_by('joined_at')
-            )
-            for entry in waitlist_entries:
-                candidate = entry.user
-                if _user_has_active_ride(candidate) or not _user_can_see_ride(candidate, ride) or ride.kicked_users.filter(id=candidate.id).exists():
-                    entry.delete()
-                    continue
-
-                entry.delete()
-                RideParticipant.objects.get_or_create(
-                    ride=ride,
-                    user=candidate,
-                )
-                record_ride_consent(ride, candidate, share_contact=True)
-                ride.sync_status()
-
-                # Post system chat announcement
-                RideMessage.objects.create(
-                    ride=ride,
-                    author=candidate,
-                    content=f"🔔 Standby Promotion: {candidate.enrollment_number} was automatically moved from standby to confirmed passenger."
-                )
-
-                try:
-                    channel_layer = get_channel_layer()
-                    if channel_layer:
-                        async_to_sync(channel_layer.group_send)(
-                            f'ride_{ride.id}',
-                            {
-                                'type': 'system.notice',
-                                'action': 'waitlist_promoted',
-                                'user': candidate.enrollment_number,
-                                'content': f"🔔 Standby Promotion: {candidate.enrollment_number} joined the ride from standby.",
-                            }
-                        )
-                except Exception:
-                    pass
-
-                return candidate
-    return None
+    """Delegate to centralized lifecycle service without synthesizing consent."""
+    return promote_waitlist_passenger(ride)
 
 
 def _parse_date(value: str):
@@ -495,7 +453,15 @@ def create_ride(request):
                 ride.creator = request.user
                 ride.save()
                 RideParticipant.objects.create(ride=ride, user=request.user)
-                record_ride_consent(ride, request.user, request=request, share_contact=True)
+                disclose_identity = form.cleaned_data.get('disclose_identity', True)
+                share_contact = form.cleaned_data.get('share_contact', False)
+                record_ride_consent(
+                    ride,
+                    request.user,
+                    request=request,
+                    disclose_identity=disclose_identity,
+                    share_contact=share_contact,
+                )
                 ride.sync_status()
 
             messages.success(request, 'Ride created! Share the details with your classmates.')
@@ -516,40 +482,23 @@ def join_ride(request, ride_id):
     """
     RIDE-JOIN-REQ: Students submit a join request that requires host approval.
     """
-    with transaction.atomic():
-        ride = get_object_or_404(
-            RideRequest.objects.select_for_update(),
-            id=ride_id,
-        )
-        if not _user_can_join_ride(request.user, ride):
-            messages.error(request, 'You cannot request to join this ride.')
-            if request.htmx:
-                return HttpResponse(status=204)
-            return redirect('ride_list')
+    disclose_identity = request.POST.get('disclose_identity', 'true').lower() in ('1', 'true', 'on')
+    share_contact = request.POST.get('share_contact', 'false').lower() in ('1', 'true', 'on')
 
-        join_req, created = RideJoinRequest.objects.get_or_create(
-            ride=ride,
-            user=request.user,
-            status='PENDING',
-        )
-        if created:
-            record_ride_consent(ride, request.user, request=request, share_contact=True)
-            messages.success(request, f'Join request submitted to host {ride.creator.enrollment_number}! Awaiting host approval.')
-            try:
-                channel_layer = get_channel_layer()
-                if channel_layer:
-                    async_to_sync(channel_layer.group_send)(
-                        f'ride_{ride.id}',
-                        {
-                            'type': 'system.notice',
-                            'action': 'join_request',
-                            'content': f"🔔 {request.user.enrollment_number} submitted a request to join the ride.",
-                        }
-                    )
-            except Exception:
-                pass
+    ok, msg, details = request_to_join_ride(
+        ride_id=ride_id,
+        user=request.user,
+        request=request,
+        disclose_identity=disclose_identity,
+        share_contact=share_contact,
+    )
+    if ok:
+        messages.success(request, msg)
+    else:
+        if details.get("code") == "ALREADY_PENDING":
+            messages.info(request, msg)
         else:
-            messages.info(request, 'You already have a pending join request for this ride.')
+            messages.error(request, msg)
 
     if request.htmx:
         return HttpResponse(status=204)
@@ -561,72 +510,33 @@ def join_ride(request, ride_id):
 @require_POST
 def approve_join_request(request, ride_id, request_id):
     """Host approves a pending join request, atomically adding the participant."""
-    with transaction.atomic():
-        ride = get_object_or_404(
-            RideRequest.objects.select_for_update(),
-            id=ride_id,
-            creator=request.user,
-        )
-        join_req = get_object_or_404(
-            RideJoinRequest.objects.select_for_update(),
-            id=request_id,
-            ride=ride,
-            status='PENDING',
-        )
-
-        if ride.is_full():
-            messages.error(request, 'Cannot approve request: ride is already full.')
-            return redirect('ride_detail', ride_id=ride.id)
-
-        if _user_has_active_ride(join_req.user):
-            messages.warning(request, f'{join_req.user.enrollment_number} already joined another active ride.')
-            join_req.status = 'DECLINED'
-            join_req.reviewed_at = timezone.now()
-            join_req.save(update_fields=['status', 'reviewed_at'])
-            return redirect('ride_detail', ride_id=ride.id)
-
-        RideParticipant.objects.get_or_create(ride=ride, user=join_req.user)
-        record_ride_consent(ride, join_req.user, request=request, share_contact=True)
-        join_req.status = 'APPROVED'
-        join_req.reviewed_at = timezone.now()
-        join_req.save(update_fields=['status', 'reviewed_at'])
-
-        # Remove from waitlist if present
-        RideWaitlist.objects.filter(ride=ride, user=join_req.user).delete()
-
-        ride.sync_status()
-
-        try:
-            channel_layer = get_channel_layer()
-            if channel_layer:
-                async_to_sync(channel_layer.group_send)(
-                    f'ride_{ride.id}',
-                    {
-                        'type': 'system.notice',
-                        'action': 'approved',
-                        'content': f"🎉 Host approved {join_req.user.enrollment_number} to join the ride!",
-                    }
-                )
-        except Exception:
-            pass
-
-    messages.success(request, f'Approved {join_req.user.enrollment_number} to join.')
-    return redirect('ride_detail', ride_id=ride.id)
+    ok, msg, details = approve_ride_join_request(
+        ride_id=ride_id,
+        request_id=request_id,
+        host_user=request.user,
+        request=request,
+    )
+    if ok:
+        messages.success(request, msg)
+    else:
+        messages.error(request, msg)
+    return redirect('ride_detail', ride_id=ride_id)
 
 
 @login_required
 @require_POST
 def decline_join_request(request, ride_id, request_id):
     """Host declines a pending join request."""
-    ride = get_object_or_404(RideRequest, id=ride_id, creator=request.user)
-    join_req = get_object_or_404(RideJoinRequest, id=request_id, ride=ride, status='PENDING')
-
-    join_req.status = 'DECLINED'
-    join_req.reviewed_at = timezone.now()
-    join_req.save(update_fields=['status', 'reviewed_at'])
-
-    messages.info(request, f'Declined request from {join_req.user.enrollment_number}.')
-    return redirect('ride_detail', ride_id=ride.id)
+    ok, msg, details = decline_ride_join_request(
+        ride_id=ride_id,
+        request_id=request_id,
+        host_user=request.user,
+    )
+    if ok:
+        messages.info(request, msg)
+    else:
+        messages.error(request, msg)
+    return redirect('ride_detail', ride_id=ride_id)
 
 
 @login_required
@@ -643,71 +553,22 @@ def cancel_join_request(request, ride_id):
 @login_required
 @require_POST
 def leave_ride(request, ride_id):
-    with transaction.atomic():
-        ride = get_object_or_404(
-            RideRequest.objects.select_for_update(),
-            id=ride_id,
-        )
-        if ride.status in ['COMPLETED', 'CANCELLED']:
-            messages.error(request, 'Cannot leave a completed or cancelled ride.')
-            return redirect('ride_detail', ride_id=ride.id)
-
-        participant = RideParticipant.objects.filter(ride=ride, user=request.user).first()
-        if not participant:
-            messages.error(request, 'You are not a participant in this ride.')
-            return redirect('ride_detail', ride_id=ride.id)
-
-        participant.delete()
-        revoke_ride_consent(ride, request.user)
-        ride.left_users.add(request.user)
-
-        try:
-            channel_layer = get_channel_layer()
-            if channel_layer:
-                async_to_sync(channel_layer.group_send)(
-                    f'ride_{ride.id}',
-                    {
-                        'type': 'system.notice',
-                        'action': 'user_left',
-                        'user': request.user.enrollment_number,
-                        'content': f"{request.user.enrollment_number} left the ride.",
-                    }
-                )
-        except Exception:
-            pass
-
-        remaining = RideParticipant.objects.filter(ride=ride).count()
-        if remaining == 0:
-            # Preserve ride if it has chat history or completed; otherwise clean up
-            if ride.messages.exists() or ride.status == 'COMPLETED':
-                ride.status = 'CANCELLED'
-                ride.save(update_fields=['status'])
-                _broadcast_ride_teardown(ride, 'cancelled')
-            else:
-                _broadcast_ride_teardown(ride, 'cancelled')
-                ride.delete()
-
-            if request.htmx:
-                return HttpResponse(status=204)
-            return redirect('ride_list')
-
-        # If host leaves but others remain, transfer host status to next passenger
-        if ride.creator == request.user:
-            next_host = RideParticipant.objects.filter(ride=ride).first()
-            if next_host:
-                ride.creator = next_host.user
-                ride.save(update_fields=['creator'])
-
-        ride.sync_status()
-        _promote_next_waitlist_passenger(ride)
+    ok, msg, details = leave_ride_service(ride_id=ride_id, user=request.user)
+    if ok:
+        messages.success(request, msg)
+    else:
+        messages.error(request, msg)
 
     if request.htmx:
-        ride.refresh_from_db()
-        return render(request, 'coordinate/partials/ride_actions.html', {
-            'ride': ride,
-            'joined': False,
-            'has_active_ride': _user_has_active_ride(request.user),
-        })
+        try:
+            ride = RideRequest.objects.get(id=ride_id)
+            return render(request, 'coordinate/partials/ride_actions.html', {
+                'ride': ride,
+                'joined': False,
+                'has_active_ride': _user_has_active_ride(request.user),
+            })
+        except RideRequest.DoesNotExist:
+            return HttpResponse(status=204)
 
     return redirect('ride_list')
 
@@ -716,26 +577,11 @@ def leave_ride(request, ride_id):
 @require_POST
 def terminate_ride(request, ride_id):
     """Creator terminates their own ride. Cancels rather than deletes to preserve history and audit log."""
-    with transaction.atomic():
-        ride = get_object_or_404(
-            RideRequest.objects.select_for_update(),
-            id=ride_id,
-            creator=request.user,
-        )
-
-        if ride.status in ['COMPLETED', 'CANCELLED']:
-            messages.error(request, f'Cannot terminate a {ride.status.lower()} ride.')
-            return redirect('ride_detail', ride_id=ride.id)
-
-        ride.status = 'CANCELLED'
-        ride.save(update_fields=['status'])
-
-        # Revoke all affirmative consents for this ride
-        RideConsent.objects.filter(ride=ride).delete()
-
-        transaction.on_commit(lambda: _broadcast_ride_teardown(ride, 'cancelled'))
-        messages.info(request, 'Ride cancelled and closed.')
-
+    ok, msg = cancel_ride_service(ride_id=ride_id, host_user=request.user)
+    if ok:
+        messages.info(request, msg)
+    else:
+        messages.error(request, msg)
     return redirect('ride_list')
 
 
@@ -747,12 +593,12 @@ def reschedule_ride(request, ride_id):
 
     if ride.status in ['COMPLETED', 'CANCELLED']:
         messages.error(request, 'Completed or cancelled rides cannot be rescheduled.')
-        return redirect('ride_detail', ride_id=ride.id)
+        return redirect('ride_detail', ride_id=ride_id)
 
     new_time_raw = request.POST.get('departure_time')
     if not new_time_raw:
         messages.error(request, 'Please provide a new departure date and time.')
-        return redirect('ride_detail', ride_id=ride.id)
+        return redirect('ride_detail', ride_id=ride_id)
 
     try:
         new_dep_time = datetime.datetime.fromisoformat(new_time_raw)
@@ -760,16 +606,16 @@ def reschedule_ride(request, ride_id):
             new_dep_time = timezone.make_aware(new_dep_time, timezone.get_current_timezone())
     except (ValueError, TypeError):
         messages.error(request, 'Invalid date/time format.')
-        return redirect('ride_detail', ride_id=ride.id)
+        return redirect('ride_detail', ride_id=ride_id)
 
     now = timezone.now()
     if new_dep_time <= now:
         messages.error(request, 'Departure time must be in the future.')
-        return redirect('ride_detail', ride_id=ride.id)
+        return redirect('ride_detail', ride_id=ride_id)
 
     if new_dep_time > now + datetime.timedelta(days=30):
         messages.error(request, 'Cannot schedule more than 30 days in advance.')
-        return redirect('ride_detail', ride_id=ride.id)
+        return redirect('ride_detail', ride_id=ride_id)
 
     ride.departure_time = new_dep_time
     ride.save(update_fields=['departure_time'])
@@ -799,7 +645,7 @@ def reschedule_ride(request, ride_id):
         pass
 
     messages.success(request, f'Ride successfully rescheduled to {formatted_time}.')
-    return redirect('ride_detail', ride_id=ride.id)
+    return redirect('ride_detail', ride_id=ride_id)
 
 
 @login_required
@@ -818,7 +664,7 @@ def join_waitlist(request, ride_id):
     except IntegrityError:
         messages.info(request, 'You are already on the standby list for this ride.')
 
-    return redirect('ride_detail', ride_id=ride.id)
+    return redirect('ride_detail', ride_id=ride_id)
 
 
 @login_required
@@ -848,7 +694,7 @@ def ride_detail(request, ride_id):
     is_waitlisted = RideWaitlist.objects.filter(ride=ride, user=request.user).exists()
     has_join_request = RideJoinRequest.objects.filter(ride=ride, user=request.user, status='PENDING').exists()
 
-    if not (is_creator or is_participant or is_waitlisted or has_join_request):
+    if not can_view_ride(request.user, ride):
         raise Http404
 
     participants = list(
@@ -953,43 +799,13 @@ def ride_detail(request, ride_id):
 @login_required
 @require_POST
 def kick_participant(request, ride_id, participant_id):
-    with transaction.atomic():
-        ride = get_object_or_404(
-            RideRequest.objects.select_for_update(),
-            id=ride_id,
-            creator=request.user,
-        )
-        participant = get_object_or_404(RideParticipant, id=participant_id, ride=ride)
-
-        if participant.user == request.user:
-            messages.error(request, "You can't kick yourself. Use 'Leave Ride' instead.")
-            return redirect('ride_detail', ride_id=ride.id)
-
-        # RIDE-04: Record kick so removed user cannot rejoin and can be reviewed immediately
-        kicked_enrollment = participant.user.enrollment_number
-        revoke_ride_consent(ride, participant.user)
-        ride.kicked_users.add(participant.user)
-        participant.delete()
-        ride.sync_status()
-        _promote_next_waitlist_passenger(ride)
-
-        try:
-            channel_layer = get_channel_layer()
-            if channel_layer:
-                async_to_sync(channel_layer.group_send)(
-                    f'ride_{ride.id}',
-                    {
-                        'type': 'system.notice',
-                        'action': 'user_kicked',
-                        'user': kicked_enrollment,
-                        'content': f"🚫 {kicked_enrollment} was removed by host.",
-                    }
-                )
-        except Exception:
-            pass
-
-    messages.success(request, f'{participant.user} has been removed from the ride.')
-    return redirect('ride_detail', ride_id=ride.id)
+    participant = get_object_or_404(RideParticipant, id=participant_id, ride_id=ride_id)
+    ok, msg = kick_passenger_service(ride_id=ride_id, host_user=request.user, passenger_user=participant.user)
+    if ok:
+        messages.success(request, msg)
+    else:
+        messages.error(request, msg)
+    return redirect('ride_detail', ride_id=ride_id)
 
 
 @login_required
@@ -1004,11 +820,11 @@ def complete_ride(request, ride_id):
 
         if ride.status in ['COMPLETED', 'CANCELLED']:
             messages.error(request, f'Cannot complete a {ride.status.lower()} ride.')
-            return redirect('ride_detail', ride_id=ride.id)
+            return redirect('ride_detail', ride_id=ride_id)
 
         if ride.departure_time > timezone.now():
             messages.error(request, 'Cannot complete a ride before its departure time.')
-            return redirect('ride_detail', ride_id=ride.id)
+            return redirect('ride_detail', ride_id=ride_id)
 
         ride.status = 'COMPLETED'
         ride.save(update_fields=['status'])
@@ -1028,7 +844,7 @@ def complete_ride(request, ride_id):
                 rp.user.save(update_fields=['rides_completed', 'on_time_count'])
 
     messages.success(request, 'Ride marked as completed. You can now review your fellow passengers.')
-    return redirect('ride_detail', ride_id=ride.id)
+    return redirect('ride_detail', ride_id=ride_id)
 
 
 # ---------------------------------------------------------------------------
@@ -1078,7 +894,7 @@ def review_user(request, ride_id, user_id):
     ).exists()
     if already_reviewed:
         messages.info(request, 'You have already reviewed this participant.')
-        return redirect('ride_detail', ride_id=ride.id)
+        return redirect('ride_detail', ride_id=ride_id)
 
     if request.method == 'POST':
         form = RideReviewForm(request.POST)
@@ -1113,7 +929,7 @@ def review_user(request, ride_id, user_id):
                 reviewed_user.save(update_fields=update_fields)
 
             messages.success(request, 'Review submitted successfully.')
-            return redirect('ride_detail', ride_id=ride.id)
+            return redirect('ride_detail', ride_id=ride_id)
     else:
         form = RideReviewForm()
 
@@ -1147,7 +963,7 @@ def send_message(request, ride_id):
     else:
         messages.error(request, 'Message could not be sent.')
 
-    return redirect('ride_detail', ride_id=ride.id)
+    return redirect('ride_detail', ride_id=ride_id)
 
 
 # ---------------------------------------------------------------------------
@@ -1178,7 +994,7 @@ def report_incident(request, ride_id):
 
     if not statement:
         messages.error(request, "A detailed statement describing the incident is required.")
-        return redirect('ride_detail', ride_id=ride.id)
+        return redirect('ride_detail', ride_id=ride_id)
 
     reported_user = None
     if reported_enrollment:
@@ -1221,5 +1037,5 @@ def report_incident(request, ride_id):
         f"Your statement {'and chat transcript ' if include_chat else ''}have been compiled for the "
         f"Institute Proctorial Board. Platform staff do not mediate disputes internally."
     )
-    return redirect('ride_detail', ride_id=ride.id)
+    return redirect('ride_detail', ride_id=ride_id)
 

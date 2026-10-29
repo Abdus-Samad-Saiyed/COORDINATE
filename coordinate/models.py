@@ -349,8 +349,11 @@ class RideConsent(models.Model):
 
     ride = models.ForeignKey(RideRequest, on_delete=models.CASCADE, related_name='consents')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ride_consents')
-    consent_version = models.CharField(max_length=20, default='v1.0')
-    share_contact_details = models.BooleanField(default=True)
+    consent_version = models.CharField(max_length=20, default='v2.0')
+    disclose_ride_identity = models.BooleanField(default=False)
+    share_contact_details = models.BooleanField(default=False)
+    is_revoked = models.BooleanField(default=False)
+    revoked_at = models.DateTimeField(null=True, blank=True)
     granted_at = models.DateTimeField(auto_now_add=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
 
@@ -365,5 +368,6 @@ class RideConsent(models.Model):
         verbose_name_plural = 'Ride Consents'
 
     def __str__(self) -> str:
-        return f"Consent for {self.user.enrollment_number} in Ride #{self.ride_id} ({self.consent_version})"
+        status = "REVOKED" if self.is_revoked else "ACTIVE"
+        return f"Consent ({status}) for {self.user.enrollment_number} in Ride #{self.ride_id} ({self.consent_version})"
 
