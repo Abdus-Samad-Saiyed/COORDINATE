@@ -1,10 +1,11 @@
-# COORDINATE — Development & Debug Accounts
+# Campus Nexus / COORDINATE — Development & Debug Accounts
 
 These accounts are seeded automatically using the management command:
 
 ```bash
 python manage.py create_debug_accounts
 ```
+
 To wipe and recreate:
 ```bash
 python manage.py create_debug_accounts --reset
@@ -18,23 +19,33 @@ All accounts use the password: `Debug@123`
 
 | Enrollment No. | Full Name | Branch & Degree | Gender | Roles / Privileges | Purpose |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| **`2024BCSE001`** | Abdus Samad | CSE (Bachelors) | M | **Superuser**, Staff, Verified | Admin dashboard, approvals, management |
-| **`2024BCSE002`** | Raza Khan | CSE (Bachelors) | M | Verified Student | Creating & joining rides, peer testing |
-| **`2024BCSE003`** | Aisha Wani | CSE (Bachelors) | F | Verified Student | Girls Only rides, mixed rides testing |
-| **`2024BECE004`** | Umar Farooq | ECE (Bachelors) | M | Verified Student | Friend requests, social graph testing |
-| **`2024BECE005`** | Fatima Sheikh | ECE (Bachelors) | F | Verified Student | Reviews, multi-passenger ride validation |
-| **`2024BCIV006`** | Bilal Ahmad | Civil (Bachelors) | M | Verified Student | Edge cases (leave, kick, terminate ride) |
+| **`2024BCSE065`** | Abdus Samad Saiyed | CSE (Bachelors) | M | **Superuser**, Staff, Verified | Primary Administrator, Operations, Superuser Control |
+| **`20XXBCSE001`** | Debug CSE Student | CSE (Bachelors) | M | Verified Student | Creating & joining rides, driver / peer testing |
+| **`20XXBECE001`** | Debug ECE Student | ECE (Bachelors) | F | Verified Student | Girls Only rides, mixed rides, multi-passenger ride validation |
+| **`20XXBCIV001`** | Debug Civil Student | Civil (Bachelors) | M | Verified Student | Friend requests, social graph testing, chat |
+| **`20XXBELE001`** | Debug Electrical Student | Electrical (Bachelors) | F | Verified Student | Reviews, grievances, attendance metrics |
+| **`20XXBMEC001`** | Debug Mechanical Student | Mechanical (Bachelors) | M | Verified Student | Lifecycle edge cases (leave, kick, waitlist, terminate) |
 
 ---
 
-### Test Credentials Quick Reference
+### Quick Reference Sign-In Credentials
 
-- **Admin Login:**
-  - Enrollment Number: `2024BCSE001`
+- **Primary Superuser / Admin Login:**
+  - Enrollment Number: `2024BCSE065`
   - Password: `Debug@123`
-- **Student Login 1:**
-  - Enrollment Number: `2024BCSE002`
+  - 2FA: Disabled by default in dev (can be enabled via profile)
+- **Student Login 1 (Male - CSE):**
+  - Enrollment Number: `20XXBCSE001`
   - Password: `Debug@123`
-- **Student Login 2 (Female):**
-  - Enrollment Number: `2024BCSE003`
+- **Student Login 2 (Female - ECE):**
+  - Enrollment Number: `20XXBECE001`
+  - Password: `Debug@123`
+- **Student Login 3 (Male - Civil):**
+  - Enrollment Number: `20XXBCIV001`
+  - Password: `Debug@123`
+- **Student Login 4 (Female - Electrical):**
+  - Enrollment Number: `20XXBELE001`
+  - Password: `Debug@123`
+- **Student Login 5 (Male - Mechanical):**
+  - Enrollment Number: `20XXBMEC001`
   - Password: `Debug@123`

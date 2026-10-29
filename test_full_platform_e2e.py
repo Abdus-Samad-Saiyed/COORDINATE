@@ -86,7 +86,7 @@ def run_comprehensive_audit():
             "first_name": "Abdus",
             "last_name": "Samad Saiyed",
             "email": "asaiyed_2024bcse065@nitsri.ac.in",
-            "phone_number": "+917355463857",
+            "phone_number": os.environ.get("PERSONAL_SUPERACCOUNT_PHONE", "+919999999999"),
             "gender": "M",
             "is_staff": True,
             "is_superuser": True,
@@ -203,6 +203,7 @@ def run_comprehensive_audit():
             'phone_otp': app_code,
             'gender': 'M',
             'password': 'SecurePass@123',
+            'confirm_password': 'SecurePass@123',
         }
     )
     assert_test(res_apply.status_code == 200, "POST apply_account returns HTTP 200 (Success view)")

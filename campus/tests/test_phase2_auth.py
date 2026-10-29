@@ -96,6 +96,8 @@ class ApplicationWorkflowSecurityTests(TestCase):
             'phone_number': '9999999999',
             'gender': 'M',
             'password': 'ValidPassword123',
+            'confirm_password': 'ValidPassword123',
+            'email': 'valid_test@nitsri.ac.in',
         })
         self.assertContains(response, 'Invalid enrollment number format')
         self.assertFalse(AccountApplication.objects.filter(full_name='Test Student').exists())
@@ -108,6 +110,8 @@ class ApplicationWorkflowSecurityTests(TestCase):
             'phone_number': '9999999999',
             'gender': 'M',
             'password': 'ValidPassword123',
+            'confirm_password': 'ValidPassword123',
+            'email': 'valid_test@nitsri.ac.in',
         })
         self.assertContains(response, 'already registered')
 
@@ -126,6 +130,8 @@ class ApplicationWorkflowSecurityTests(TestCase):
             'phone_number': '9999999991',
             'gender': 'M',
             'password': 'ValidPassword123',
+            'confirm_password': 'ValidPassword123',
+            'email': 'valid_test@nitsri.ac.in',
         })
         self.assertContains(response, 'already pending')
 

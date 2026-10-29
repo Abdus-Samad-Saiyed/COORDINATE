@@ -105,7 +105,7 @@ def enforce_single_session_login(request, user: User):
     Ensure each account can only have one active session at a time.
     Invalidates any previous session across other devices/browsers, and records current session key.
     """
-    if user.current_session_key:
+    if user.current_session_key and user.current_session_key != request.session.session_key:
         try:
             Session.objects.filter(session_key=user.current_session_key).delete()
             log_audit_event(
@@ -164,7 +164,9 @@ def custom_login_view(request, extra_context=None):
                 request.session['pre_2fa_user_id'] = user.id
                 request.session['pre_2fa_redirect'] = redirect_to
                 request.session['pre_2fa_time'] = timezone.now().timestamp()
-                otp, raw_code = create_phone_otp(user, purpose='2FA')
+                can_resend, _ = can_resend_otp(user, purpose='2FA')
+                if can_resend:
+                    otp, raw_code = create_phone_otp(user, purpose='2FA')
                 return redirect('two_factor_verify')
 
             auth_login(request, user)
@@ -227,7 +229,9 @@ def two_factor_verify(request):
         if action == 'resend':
             can_resend, wait_seconds = can_resend_otp(user, purpose='2FA')
             if can_resend:
-                otp, raw_code = create_phone_otp(user, purpose='2FA')
+                can_resend, _ = can_resend_otp(user, purpose='2FA')
+                if can_resend:
+                    otp, raw_code = create_phone_otp(user, purpose='2FA')
                 messages.info(request, "A new 6-digit verification code has been dispatched to your email and phone.")
             else:
                 messages.warning(request, f"Please wait {wait_seconds} seconds before requesting a new code.")
@@ -576,13 +580,18 @@ def forgot_password_view(request):
                 messages.info(request, "This is a debug account. Password is 'Debug@123'.")
                 return redirect('login')
             else:
-                otp, raw_code = create_phone_otp(user, purpose='PASSWORD_RESET')
+                can_resend, wait_sec = can_resend_otp(user, purpose='PASSWORD_RESET')
+                if can_resend:
+                    otp, raw_code = create_phone_otp(user, purpose='PASSWORD_RESET')
                 request.session['reset_user_id'] = user.id
                 e = user.email or ''
                 masked_email = f"{e[:2]}***@{e.split('@')[1]}" if '@' in e else e
                 p = user.phone_number or ''
                 masked_phone = f"***-***-{p[-4:]}" if len(p) >= 4 else p
-                messages.success(request, f"A 6-digit reset code was dispatched to your registered email ({masked_email}) and mobile ({masked_phone}).")
+                if can_resend:
+                    messages.success(request, f"A 6-digit reset code was dispatched to your registered email ({masked_email}) and mobile ({masked_phone}).")
+                else:
+                    messages.info(request, f"A reset code was already dispatched recently. Please check your email or wait {wait_sec}s before requesting a new code.")
                 return render(request, 'registration/forgot_password.html', {
                     'step': 'verify_otp',
                     'enrollment_number': user.enrollment_number,
@@ -865,6 +874,15 @@ def profile_view(request, enrollment_number):
         profile_user.save()
 
         if password_changed:
+            current_key = request.session.session_key
+            for s in Session.objects.filter(expire_date__gt=timezone.now()):
+                try:
+                    if s.session_key != current_key:
+                        data = s.get_decoded()
+                        if str(data.get('_auth_user_id')) == str(profile_user.id):
+                            s.delete()
+                except Exception:
+                    pass
             update_session_auth_hash(request, profile_user)
             enforce_single_session_login(request, profile_user)
 
@@ -1158,7 +1176,7 @@ def approve_application(request, application_id):
                 f'Hi {user.first_name},\n\n'
                 f'Your account for enrollment number {user.enrollment_number} '
                 f'has been verified and approved by campus administrators.\n\n'
-                f'You can now log in at https://campusnexus.nitsri.ac.in/login/\n\n'
+                f'You can now log in at https://campusnexus.nitsri.ac.in/login/ (or your local environment)\n\n'
                 f'— The Campus Nexus Team, NIT Srinagar'
             ),
             from_email=None,   # uses DEFAULT_FROM_EMAIL

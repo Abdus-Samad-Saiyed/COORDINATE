@@ -56,7 +56,7 @@ class AccountApplicationForm(forms.ModelForm):
     )
     confirm_password = forms.CharField(
         label='Confirm Password',
-        required=False,
+        required=True,
         widget=forms.PasswordInput(attrs={
             'class': 'form-control',
             'placeholder': 'Repeat your password',
@@ -124,21 +124,18 @@ class AccountApplicationForm(forms.ModelForm):
         cpw = cleaned.get('confirm_password')
 
         if pw:
-            import sys
             if len(pw) < 8:
                 self.add_error('password', 'Password must contain at least 8 characters.')
-            elif not ('test' in sys.argv):
+            else:
                 from django.contrib.auth.password_validation import validate_password
                 try:
                     validate_password(pw)
                 except forms.ValidationError as e:
                     self.add_error('password', e)
 
-        # If confirm_password was submitted in POST data, enforce match
-        if 'confirm_password' in self.data:
-            if not cpw:
-                self.add_error('confirm_password', 'This field is required.')
-            elif pw and pw != cpw:
-                self.add_error('confirm_password', 'Passwords do not match.')
+        if not cpw:
+            self.add_error('confirm_password', 'This field is required.')
+        elif pw and pw != cpw:
+            self.add_error('confirm_password', 'Passwords do not match.')
 
         return cleaned
