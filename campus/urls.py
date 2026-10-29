@@ -12,6 +12,7 @@ from accounts.views import (
     passkey_auth_verify,
     passkey_reg_challenge,
     passkey_reg_verify,
+    passkey_delete,
     service_catalogue,
     two_factor_verify,
 )
@@ -69,6 +70,7 @@ urlpatterns = [
     path('auth/passkey/authenticate/verify/', passkey_auth_verify, name='passkey_auth_verify'),
     path('auth/passkey/register/challenge/', passkey_reg_challenge, name='passkey_reg_challenge'),
     path('auth/passkey/register/verify/', passkey_reg_verify, name='passkey_reg_verify'),
+    path('auth/passkey/<int:credential_id>/delete/', passkey_delete, name='passkey_delete'),
     path(
         'logout/',
         auth_views.LogoutView.as_view(),

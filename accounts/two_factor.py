@@ -356,50 +356,45 @@ def verify_passkey_registration(
     """
     Verify WebAuthn attestation response during passkey registration.
     Returns (success, message, result_dict).
+    Strictly requires full library-backed cryptographic verification.
     """
     if not data or not session_challenge:
         return False, "Missing registration payload or challenge.", {}
 
-    # Check for py_webauthn attestationObject
     has_attestation = ('response' in data and 'attestationObject' in data['response'])
-    if has_attestation:
-        try:
-            import webauthn
-            parsed_cred = webauthn.helpers.parse_registration_credential_json(json.dumps(data))
-            expected_challenge_bytes = webauthn.helpers.base64url_to_bytes(session_challenge)
+    if not has_attestation:
+        return False, "Missing or invalid WebAuthn attestation payload.", {}
 
-            import sys
-            allowed_origins = [expected_origin] if expected_origin else []
-            if getattr(settings, 'DEBUG', False) or 'test' in sys.argv:
-                allowed_origins.extend(['http://localhost:8000', 'http://127.0.0.1:8000', 'http://testserver'])
+    try:
+        import webauthn
+        parsed_cred = webauthn.helpers.parse_registration_credential_json(json.dumps(data))
+        expected_challenge_bytes = webauthn.helpers.base64url_to_bytes(session_challenge)
 
-            verified_reg = webauthn.verify_registration_response(
-                credential=parsed_cred,
-                expected_challenge=expected_challenge_bytes,
-                expected_rp_id=expected_rp_id or 'localhost',
-                expected_origin=allowed_origins or ['http://localhost:8000'],
-                require_user_verification=False,
-            )
-            return True, "Passkey registered successfully.", {
-                'credential_id': webauthn.helpers.bytes_to_base64url(verified_reg.credential_id),
-                'public_key': webauthn.helpers.bytes_to_base64url(verified_reg.credential_public_key),
-                'sign_count': verified_reg.sign_count,
-            }
-        except Exception as exc:
-            logger.warning("Passkey registration cryptographic verification failed: %s", exc)
-            return False, f"Passkey registration failed: {exc}", {}
+        allowed_origins = list(getattr(settings, 'WEBAUTHN_ALLOWED_ORIGINS', []))
+        if expected_origin and expected_origin in allowed_origins:
+            verify_origins = [expected_origin]
+        elif expected_origin and getattr(settings, 'DEBUG', False):
+            verify_origins = [expected_origin]
+        else:
+            verify_origins = allowed_origins
 
-    # Fallback/mock registration for test compatibility
-    credential_id = data.get('credential_id', '').strip()
-    public_key = data.get('public_key', '').strip()
-    if not credential_id:
-        return False, "Credential ID is required.", {}
+        rp_id = expected_rp_id or getattr(settings, 'WEBAUTHN_RP_ID', 'localhost')
 
-    return True, "Passkey registered successfully.", {
-        'credential_id': credential_id,
-        'public_key': public_key or 'webauthn_mock_public_key',
-        'sign_count': 0,
-    }
+        verified_reg = webauthn.verify_registration_response(
+            credential=parsed_cred,
+            expected_challenge=expected_challenge_bytes,
+            expected_rp_id=rp_id,
+            expected_origin=verify_origins,
+            require_user_verification=False,
+        )
+        return True, "Passkey registered successfully.", {
+            'credential_id': webauthn.helpers.bytes_to_base64url(verified_reg.credential_id),
+            'public_key': webauthn.helpers.bytes_to_base64url(verified_reg.credential_public_key),
+            'sign_count': verified_reg.sign_count,
+        }
+    except Exception as exc:
+        logger.warning("Passkey registration cryptographic verification failed: %s", type(exc).__name__)
+        return False, "Passkey registration verification failed.", {}
 
 
 def verify_passkey_assertion(
@@ -414,9 +409,8 @@ def verify_passkey_assertion(
     expected_origin: str = None,
 ) -> Tuple[bool, str]:
     """
-    Validate WebAuthn client assertion against session challenge, origin, type,
-    and user's registered keys. Supports both full py_webauthn cryptographic verification
-    and clientDataJSON verification for backward compatibility.
+    Validate WebAuthn client assertion using py_webauthn library verification.
+    Requires complete cryptographic assertion with signature verification.
     """
     if full_credential:
         credential_id = full_credential.get('id') or credential_id
@@ -428,69 +422,63 @@ def verify_passkey_assertion(
     if not credential_id or not client_data_json_b64 or not session_challenge:
         return False, "Missing cryptographic assertion payload."
 
+    if not signature or not authenticator_data_b64:
+        return False, "Missing assertion signature or authenticator data."
+
     # Look up registered credential for this user
     credential = PasskeyCredential.objects.filter(user=user, credential_id=credential_id).first()
     if not credential:
         return False, "Passkey credential not recognized for this user account."
 
-    # 1. Full py_webauthn cryptographic verification if full payload is present and public key is real
-    is_mock_key = (
+    # Reject legacy or mock passkeys that lack verifiable COSE public keys
+    if (
         not credential.public_key
         or credential.public_key.startswith('test_')
         or credential.public_key.startswith('webauthn_')
-    )
-    if full_credential and not is_mock_key:
-        try:
-            import sys
-            import webauthn
-            parsed_cred = webauthn.helpers.parse_authentication_credential_json(json.dumps(full_credential))
-            expected_challenge_bytes = webauthn.helpers.base64url_to_bytes(session_challenge)
-            pubkey_bytes = webauthn.helpers.base64url_to_bytes(credential.public_key)
+    ):
+        return False, "Passkey credential requires re-enrollment. Please sign in with OTP."
 
-            allowed_origins = [expected_origin] if expected_origin else []
-            if getattr(settings, 'DEBUG', False) or 'test' in sys.argv:
-                allowed_origins.extend(['http://localhost:8000', 'http://127.0.0.1:8000', 'http://testserver'])
+    if not full_credential:
+        full_credential = {
+            'id': credential_id,
+            'rawId': credential_id,
+            'type': 'public-key',
+            'response': {
+                'clientDataJSON': client_data_json_b64,
+                'authenticatorData': authenticator_data_b64,
+                'signature': signature,
+            }
+        }
 
-            verified_auth = webauthn.verify_authentication_response(
-                credential=parsed_cred,
-                expected_challenge=expected_challenge_bytes,
-                expected_rp_id=expected_rp_id or 'localhost',
-                expected_origin=allowed_origins or ['http://localhost:8000'],
-                credential_public_key=pubkey_bytes,
-                credential_current_sign_count=credential.sign_count,
-                require_user_verification=False,
-            )
-            credential.sign_count = verified_auth.new_sign_count
-            credential.last_used_at = timezone.now()
-            credential.save(update_fields=['sign_count', 'last_used_at'])
-            return True, "Biometric / Windows Hello passkey authenticated successfully."
-        except Exception as exc:
-            logger.warning("Cryptographic passkey assertion verification failed: %s", exc)
-            return False, f"Passkey assertion failed: {exc}"
-
-    # 2. Structured assertion check (for test suite or legacy credentials)
     try:
-        padding = '=' * (-len(client_data_json_b64) % 4)
-        raw_json = base64.urlsafe_b64decode(client_data_json_b64 + padding).decode('utf-8')
-        client_data = json.loads(raw_json)
+        import webauthn
+        parsed_cred = webauthn.helpers.parse_authentication_credential_json(json.dumps(full_credential))
+        expected_challenge_bytes = webauthn.helpers.base64url_to_bytes(session_challenge)
+        pubkey_bytes = webauthn.helpers.base64url_to_bytes(credential.public_key)
 
-        # Validate type
-        op_type = client_data.get('type')
-        if op_type and op_type != 'webauthn.get':
-            return False, f"Invalid WebAuthn operation type: '{op_type}'."
+        allowed_origins = list(getattr(settings, 'WEBAUTHN_ALLOWED_ORIGINS', []))
+        if expected_origin and expected_origin in allowed_origins:
+            verify_origins = [expected_origin]
+        elif expected_origin and getattr(settings, 'DEBUG', False):
+            verify_origins = [expected_origin]
+        else:
+            verify_origins = allowed_origins
 
-        # Verify challenge matches session
-        received_challenge = client_data.get('challenge', '')
-        if not hmac.compare_digest(received_challenge.rstrip('='), session_challenge.rstrip('=')):
-            return False, "WebAuthn challenge mismatch or replay detected."
+        rp_id = expected_rp_id or getattr(settings, 'WEBAUTHN_RP_ID', 'localhost')
 
-        # Increment sign counter and record last used
-        credential.sign_count += 1
+        verified_auth = webauthn.verify_authentication_response(
+            credential=parsed_cred,
+            expected_challenge=expected_challenge_bytes,
+            expected_rp_id=rp_id,
+            expected_origin=verify_origins,
+            credential_public_key=pubkey_bytes,
+            credential_current_sign_count=credential.sign_count,
+            require_user_verification=False,
+        )
+        credential.sign_count = verified_auth.new_sign_count
         credential.last_used_at = timezone.now()
         credential.save(update_fields=['sign_count', 'last_used_at'])
-
         return True, "Biometric / Windows Hello passkey authenticated successfully."
-
     except Exception as exc:
-        logger.warning("Passkey verification error: %s", exc)
-        return False, "Invalid WebAuthn client signature payload."
+        logger.warning("Cryptographic passkey assertion verification failed: %s", type(exc).__name__)
+        return False, "Passkey assertion verification failed."

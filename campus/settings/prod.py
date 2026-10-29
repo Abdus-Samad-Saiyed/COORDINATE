@@ -123,3 +123,19 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+
+# --- 9. WebAuthn Passkey Production Configuration ----------------------------
+WEBAUTHN_RP_ID = env('WEBAUTHN_RP_ID', default=valid_hosts[0] if valid_hosts else '')
+_INSECURE_RP_IDS = {'*', 'localhost', '127.0.0.1', 'testserver', ''}
+if not WEBAUTHN_RP_ID or WEBAUTHN_RP_ID in _INSECURE_RP_IDS:
+    raise ImproperlyConfigured('WEBAUTHN_RP_ID must be set to a valid production domain.')
+
+WEBAUTHN_ALLOWED_ORIGINS = env.list(
+    'WEBAUTHN_ALLOWED_ORIGINS',
+    default=[f'https://{h}' for h in valid_hosts]
+)
+if not WEBAUTHN_ALLOWED_ORIGINS:
+    raise ImproperlyConfigured('WEBAUTHN_ALLOWED_ORIGINS must contain valid production origins.')
+for origin in WEBAUTHN_ALLOWED_ORIGINS:
+    if not origin.startswith('https://'):
+        raise ImproperlyConfigured(f'WebAuthn origin {origin} must use HTTPS in production.')

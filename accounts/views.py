@@ -362,7 +362,22 @@ def passkey_auth_verify(request):
 @login_required
 @rate_limit(key_prefix='passkey_reg_chal', limit=10, period_seconds=60)
 def passkey_reg_challenge(request):
-    """Generate registration challenge for saving a biometric / Windows Hello key."""
+    """Generate registration challenge for saving a biometric / Windows Hello key. Requires recent reauthentication."""
+    sec_until = request.session.get('security_otp_verified_until')
+    grace_active = False
+    if sec_until:
+        try:
+            from datetime import datetime as dt_cls
+            grace_active = timezone.now() < dt_cls.fromisoformat(sec_until)
+        except Exception:
+            pass
+    if not grace_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'Recent re-authentication required to register passkeys. Please verify your identity first.',
+            'requires_step_up': True,
+        }, status=403)
+
     challenge = generate_webauthn_challenge()
     request.session['passkey_reg_challenge'] = challenge
     request.session['passkey_reg_challenge_time'] = timezone.now().timestamp()
@@ -379,7 +394,22 @@ def passkey_reg_challenge(request):
 @rate_limit(key_prefix='passkey_reg_ver', limit=10, period_seconds=60)
 @require_POST
 def passkey_reg_verify(request):
-    """Register and store new PasskeyCredential for the authenticated student."""
+    """Register and store new PasskeyCredential for the authenticated student. Requires recent reauthentication."""
+    sec_until = request.session.get('security_otp_verified_until')
+    grace_active = False
+    if sec_until:
+        try:
+            from datetime import datetime as dt_cls
+            grace_active = timezone.now() < dt_cls.fromisoformat(sec_until)
+        except Exception:
+            pass
+    if not grace_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'Recent re-authentication required to register passkeys.',
+            'requires_step_up': True,
+        }, status=403)
+
     now_ts = timezone.now().timestamp()
     challenge = request.session.pop('passkey_reg_challenge', '')
     challenge_time = request.session.pop('passkey_reg_challenge_time', None)
@@ -424,7 +454,39 @@ def passkey_reg_verify(request):
 
         return JsonResponse({'success': True, 'message': 'Passkey registered successfully!'})
     except Exception as exc:
-        return JsonResponse({'success': False, 'error': str(exc)}, status=400)
+        return JsonResponse({'success': False, 'error': 'Passkey registration error.'}, status=400)
+
+
+@login_required
+@rate_limit(key_prefix='passkey_del', limit=10, period_seconds=60)
+@require_POST
+def passkey_delete(request, credential_id):
+    """Delete a registered passkey credential after verifying recent reauthentication."""
+    sec_until = request.session.get('security_otp_verified_until')
+    grace_active = False
+    if sec_until:
+        try:
+            from datetime import datetime as dt_cls
+            grace_active = timezone.now() < dt_cls.fromisoformat(sec_until)
+        except Exception:
+            pass
+    if not grace_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'Recent re-authentication required to delete passkeys.',
+            'requires_step_up': True,
+        }, status=403)
+
+    cred = get_object_or_404(PasskeyCredential, id=credential_id, user=request.user)
+    cred_name = cred.name
+    cred.delete()
+
+    log_audit_event(
+        event_type='SECURITY_SETTINGS_UPDATED',
+        actor_enrollment=request.user.enrollment_number,
+        description=f'Deleted passkey credential: {cred_name[:50]}',
+    )
+    return JsonResponse({'success': True, 'message': 'Passkey deleted successfully.'})
 
 
 

@@ -100,29 +100,58 @@ class TwoFactorAndPasskeyTests(TestCase):
         self.assertGreater(wait_sec, 0)
 
     def test_passkey_assertion_verification(self):
-        credential_id = "test_cred_id_123"
+        from webauthn.helpers import bytes_to_base64url
+        from campus.tests.webauthn_test_utils import generate_test_keypair, make_assertion_response
+        priv_key, cose_key_bytes, pubkey_b64 = generate_test_keypair()
+        cred_bytes = b"test_cred_id_123"
+        cred_b64 = bytes_to_base64url(cred_bytes)
         passkey = PasskeyCredential.objects.create(
             user=self.user,
-            credential_id=credential_id,
-            public_key="test_public_key",
+            credential_id=cred_b64,
+            public_key=pubkey_b64,
             name="My Windows Hello Key",
         )
 
         challenge = generate_webauthn_challenge()
-        client_data = json.dumps({"challenge": challenge, "origin": "http://testserver"})
-        client_data_b64 = base64.urlsafe_b64encode(client_data.encode("utf-8")).decode("utf-8").rstrip("=")
+        assertion = make_assertion_response(
+            private_key=priv_key,
+            challenge_b64=challenge,
+            credential_id=cred_bytes,
+            origin='http://testserver',
+            rp_id='testserver',
+        )
 
-        # Valid assertion
-        success, msg = verify_passkey_assertion(self.user, credential_id, client_data_b64, challenge)
+        # Valid cryptographic assertion
+        success, msg = verify_passkey_assertion(
+            user=self.user,
+            credential_id=cred_b64,
+            full_credential=assertion,
+            session_challenge=challenge,
+            expected_rp_id='testserver',
+            expected_origin='http://testserver',
+        )
         self.assertTrue(success)
         passkey.refresh_from_db()
         self.assertEqual(passkey.sign_count, 1)
         self.assertIsNotNone(passkey.last_used_at)
 
-        # Invalid challenge (replay or tamper)
-        bad_client_data = json.dumps({"challenge": "wrong_challenge", "origin": "http://testserver"})
-        bad_b64 = base64.urlsafe_b64encode(bad_client_data.encode("utf-8")).decode("utf-8").rstrip("=")
-        fail_success, fail_msg = verify_passkey_assertion(self.user, credential_id, bad_b64, challenge)
+        # Tampered signature fails
+        bad_assertion = make_assertion_response(
+            private_key=priv_key,
+            challenge_b64=challenge,
+            credential_id=cred_bytes,
+            origin='http://testserver',
+            rp_id='testserver',
+            tamper_signature=True,
+        )
+        fail_success, fail_msg = verify_passkey_assertion(
+            user=self.user,
+            credential_id=cred_b64,
+            full_credential=bad_assertion,
+            session_challenge=challenge,
+            expected_rp_id='testserver',
+            expected_origin='http://testserver',
+        )
         self.assertFalse(fail_success)
 
 
