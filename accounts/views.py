@@ -105,7 +105,7 @@ def enforce_single_session_login(request, user: User):
     Ensure each account can only have one active session at a time.
     Invalidates any previous session across other devices/browsers, and records current session key.
     """
-    if user.current_session_key:
+    if user.current_session_key and user.current_session_key != request.session.session_key:
         try:
             Session.objects.filter(session_key=user.current_session_key).delete()
             log_audit_event(
@@ -164,7 +164,11 @@ def custom_login_view(request, extra_context=None):
                 request.session['pre_2fa_user_id'] = user.id
                 request.session['pre_2fa_redirect'] = redirect_to
                 request.session['pre_2fa_time'] = timezone.now().timestamp()
-                otp, raw_code = create_phone_otp(user, purpose='2FA')
+                can_resend, _ = can_resend_otp(user, purpose='2FA')
+                if can_resend:
+                    otp, raw_code = create_phone_otp(user, purpose='2FA')
+                    if not getattr(otp, 'any_delivered', True):
+                        messages.warning(request, "Unable to deliver verification code to your email or SMS. If you have registered a passkey, you may authenticate using it below.")
                 return redirect('two_factor_verify')
 
             auth_login(request, user)
@@ -228,7 +232,12 @@ def two_factor_verify(request):
             can_resend, wait_seconds = can_resend_otp(user, purpose='2FA')
             if can_resend:
                 otp, raw_code = create_phone_otp(user, purpose='2FA')
-                messages.info(request, "A new 6-digit verification code has been dispatched to your email and phone.")
+                if not getattr(otp, 'any_delivered', True):
+                    messages.warning(request, "Delivery failed. Could not dispatch verification code to your email or mobile. You may authenticate using your passkey if registered.")
+                elif getattr(otp, 'email_sent', False) and not getattr(otp, 'sms_sent', False):
+                    messages.info(request, f"A new 6-digit verification code has been dispatched to your email ({masked_email}). (SMS delivery is currently unavailable).")
+                else:
+                    messages.info(request, "A new 6-digit verification code has been dispatched to your email and phone.")
             else:
                 messages.warning(request, f"Please wait {wait_seconds} seconds before requesting a new code.")
             return redirect('two_factor_verify')
@@ -362,7 +371,22 @@ def passkey_auth_verify(request):
 @login_required
 @rate_limit(key_prefix='passkey_reg_chal', limit=10, period_seconds=60)
 def passkey_reg_challenge(request):
-    """Generate registration challenge for saving a biometric / Windows Hello key."""
+    """Generate registration challenge for saving a biometric / Windows Hello key. Requires recent reauthentication."""
+    sec_until = request.session.get('security_otp_verified_until')
+    grace_active = False
+    if sec_until:
+        try:
+            from datetime import datetime as dt_cls
+            grace_active = timezone.now() < dt_cls.fromisoformat(sec_until)
+        except Exception:
+            pass
+    if not grace_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'Recent re-authentication required to register passkeys. Please verify your identity first.',
+            'requires_step_up': True,
+        }, status=403)
+
     challenge = generate_webauthn_challenge()
     request.session['passkey_reg_challenge'] = challenge
     request.session['passkey_reg_challenge_time'] = timezone.now().timestamp()
@@ -379,7 +403,22 @@ def passkey_reg_challenge(request):
 @rate_limit(key_prefix='passkey_reg_ver', limit=10, period_seconds=60)
 @require_POST
 def passkey_reg_verify(request):
-    """Register and store new PasskeyCredential for the authenticated student."""
+    """Register and store new PasskeyCredential for the authenticated student. Requires recent reauthentication."""
+    sec_until = request.session.get('security_otp_verified_until')
+    grace_active = False
+    if sec_until:
+        try:
+            from datetime import datetime as dt_cls
+            grace_active = timezone.now() < dt_cls.fromisoformat(sec_until)
+        except Exception:
+            pass
+    if not grace_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'Recent re-authentication required to register passkeys.',
+            'requires_step_up': True,
+        }, status=403)
+
     now_ts = timezone.now().timestamp()
     challenge = request.session.pop('passkey_reg_challenge', '')
     challenge_time = request.session.pop('passkey_reg_challenge_time', None)
@@ -424,7 +463,39 @@ def passkey_reg_verify(request):
 
         return JsonResponse({'success': True, 'message': 'Passkey registered successfully!'})
     except Exception as exc:
-        return JsonResponse({'success': False, 'error': str(exc)}, status=400)
+        return JsonResponse({'success': False, 'error': 'Passkey registration error.'}, status=400)
+
+
+@login_required
+@rate_limit(key_prefix='passkey_del', limit=10, period_seconds=60)
+@require_POST
+def passkey_delete(request, credential_id):
+    """Delete a registered passkey credential after verifying recent reauthentication."""
+    sec_until = request.session.get('security_otp_verified_until')
+    grace_active = False
+    if sec_until:
+        try:
+            from datetime import datetime as dt_cls
+            grace_active = timezone.now() < dt_cls.fromisoformat(sec_until)
+        except Exception:
+            pass
+    if not grace_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'Recent re-authentication required to delete passkeys.',
+            'requires_step_up': True,
+        }, status=403)
+
+    cred = get_object_or_404(PasskeyCredential, id=credential_id, user=request.user)
+    cred_name = cred.name
+    cred.delete()
+
+    log_audit_event(
+        event_type='SECURITY_SETTINGS_UPDATED',
+        actor_enrollment=request.user.enrollment_number,
+        description=f'Deleted passkey credential: {cred_name[:50]}',
+    )
+    return JsonResponse({'success': True, 'message': 'Passkey deleted successfully.'})
 
 
 
@@ -450,12 +521,15 @@ def send_signup_otp(request):
         return JsonResponse({'success': False, 'error': f'Please wait {wait_sec} seconds before requesting a new code.'}, status=429)
 
     otp, raw_code = create_phone_otp(phone_number=phone, email=email, purpose='SIGNUP')
+    if not getattr(otp, 'any_delivered', True):
+        return JsonResponse({'success': False, 'error': 'Unable to deliver verification code via SMS or email. Please check your contact details or try again.'}, status=502)
+
     dest_parts = []
-    if email:
+    if getattr(otp, 'email_sent', False) or (email and not getattr(otp, 'sms_sent', False)):
         dest_parts.append(f"email ({email})")
-    if phone:
+    if getattr(otp, 'sms_sent', False):
         dest_parts.append(f"mobile ({phone[-4:]})")
-    dest_str = " and ".join(dest_parts) or "your contacts"
+    dest_str = " and ".join(dest_parts) or f"email ({email})"
     return JsonResponse({
         'success': True,
         'message': f'Verification code dispatched to {dest_str}. Check your email inbox or SMS.',
@@ -483,12 +557,15 @@ def send_security_otp(request):
         return JsonResponse({'success': False, 'error': f'Please wait {wait_sec} seconds before requesting a new code.'}, status=429)
 
     otp, raw_code = create_phone_otp(user=user, phone_number=target_phone, email=target_email, purpose='SECURITY_CHANGE')
+    if not getattr(otp, 'any_delivered', True):
+        return JsonResponse({'success': False, 'error': 'Unable to deliver security code to your registered contacts. Please try again later.'}, status=502)
+
     dest_parts = []
-    if target_email:
+    if getattr(otp, 'email_sent', False) or (target_email and not getattr(otp, 'sms_sent', False)):
         dest_parts.append(f"email ({target_email})")
-    if target_phone:
+    if getattr(otp, 'sms_sent', False):
         dest_parts.append(f"mobile ({target_phone[-4:]})")
-    dest_str = " and ".join(dest_parts)
+    dest_str = " and ".join(dest_parts) or "your registered contacts"
     return JsonResponse({
         'success': True,
         'message': f'Verification code dispatched to {dest_str}. Check your email or SMS.',
@@ -514,13 +591,23 @@ def forgot_password_view(request):
                 messages.info(request, "This is a debug account. Password is 'Debug@123'.")
                 return redirect('login')
             else:
-                otp, raw_code = create_phone_otp(user, purpose='PASSWORD_RESET')
+                can_resend, wait_sec = can_resend_otp(user, purpose='PASSWORD_RESET')
+                if can_resend:
+                    otp, raw_code = create_phone_otp(user, purpose='PASSWORD_RESET')
                 request.session['reset_user_id'] = user.id
                 e = user.email or ''
                 masked_email = f"{e[:2]}***@{e.split('@')[1]}" if '@' in e else e
                 p = user.phone_number or ''
                 masked_phone = f"***-***-{p[-4:]}" if len(p) >= 4 else p
-                messages.success(request, f"A 6-digit reset code was dispatched to your registered email ({masked_email}) and mobile ({masked_phone}).")
+                if can_resend:
+                    if not getattr(otp, 'any_delivered', True):
+                        messages.warning(request, "Delivery failed. We could not reach your email or mobile. You can request a reset in-person via the Physical Desk tab below.")
+                    elif getattr(otp, 'email_sent', False) and not getattr(otp, 'sms_sent', False):
+                        messages.success(request, f"A 6-digit reset code was dispatched to your registered email ({masked_email}). (SMS delivery unavailable).")
+                    else:
+                        messages.success(request, f"A 6-digit reset code was dispatched to your registered email ({masked_email}) and mobile ({masked_phone}).")
+                else:
+                    messages.info(request, f"A reset code was already dispatched recently. Please check your email or wait {wait_sec}s before requesting a new code.")
                 return render(request, 'registration/forgot_password.html', {
                     'step': 'verify_otp',
                     'enrollment_number': user.enrollment_number,
@@ -803,6 +890,15 @@ def profile_view(request, enrollment_number):
         profile_user.save()
 
         if password_changed:
+            current_key = request.session.session_key
+            for s in Session.objects.filter(expire_date__gt=timezone.now()):
+                try:
+                    if s.session_key != current_key:
+                        data = s.get_decoded()
+                        if str(data.get('_auth_user_id')) == str(profile_user.id):
+                            s.delete()
+                except Exception:
+                    pass
             update_session_auth_hash(request, profile_user)
             enforce_single_session_login(request, profile_user)
 
@@ -1096,7 +1192,7 @@ def approve_application(request, application_id):
                 f'Hi {user.first_name},\n\n'
                 f'Your account for enrollment number {user.enrollment_number} '
                 f'has been verified and approved by campus administrators.\n\n'
-                f'You can now log in at https://campusnexus.nitsri.ac.in/login/\n\n'
+                f'You can now log in at https://campusnexus.nitsri.ac.in/login/ (or your local environment)\n\n'
                 f'— The Campus Nexus Team, NIT Srinagar'
             ),
             from_email=None,   # uses DEFAULT_FROM_EMAIL

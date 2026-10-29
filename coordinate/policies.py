@@ -117,7 +117,8 @@ def can_view_ride(viewer: Optional[User], ride) -> bool:
 def can_view_ride_contact(viewer: Optional[User], ride, target_user: User) -> bool:
     """
     Expose contact (phone/email) ONLY to confirmed participants of an active,
-    non-cancelled ride where both viewer and target have granted affirmative RideConsent.
+    non-cancelled ride where both viewer and target have granted affirmative RideConsent,
+    within the allowed coordination window (departure + 2 hours).
     """
     if not viewer or not viewer.is_authenticated:
         return False
@@ -128,8 +129,13 @@ def can_view_ride_contact(viewer: Optional[User], ride, target_user: User) -> bo
     if viewer.is_staff or viewer.is_superuser:
         return True
 
-    # Ride must not be cancelled
-    if ride.status in ('CANCELLED',):
+    # Ride must not be cancelled or completed
+    if ride.status in ('CANCELLED', 'COMPLETED'):
+        return False
+
+    # Coordination window: cannot retrieve contacts 2+ hours after departure
+    from datetime import timedelta
+    if timezone.now() > ride.departure_time + timedelta(hours=2):
         return False
 
     # Both must be confirmed participants
@@ -138,15 +144,26 @@ def can_view_ride_contact(viewer: Optional[User], ride, target_user: User) -> bo
     if not (viewer_is_participant and target_is_participant):
         return False
 
-    # Both must have granted affirmative consent for this ride
+    # Both must have granted active, non-revoked consent to share contact details
     from .models import RideConsent
-    viewer_has_consent = RideConsent.objects.filter(ride=ride, user=viewer, share_contact_details=True).exists()
-    target_has_consent = RideConsent.objects.filter(ride=ride, user=target_user, share_contact_details=True).exists()
+    viewer_has_consent = RideConsent.objects.filter(
+        ride=ride, user=viewer, share_contact_details=True, is_revoked=False
+    ).exists()
+    target_has_consent = RideConsent.objects.filter(
+        ride=ride, user=target_user, share_contact_details=True, is_revoked=False
+    ).exists()
 
     return bool(viewer_has_consent and target_has_consent)
 
 
-def record_ride_consent(ride, user: User, request=None, share_contact: bool = True) -> 'RideConsent':
+def record_ride_consent(
+    ride,
+    user: User,
+    request=None,
+    disclose_identity: bool = True,
+    share_contact: bool = False,
+    consent_version: str = 'v2.0',
+) -> 'RideConsent':
     """Record or update explicit affirmative consent for a ride."""
     from .models import RideConsent
     ip_addr = None
@@ -158,8 +175,11 @@ def record_ride_consent(ride, user: User, request=None, share_contact: bool = Tr
         ride=ride,
         user=user,
         defaults={
-            'consent_version': 'v1.0',
-            'share_contact_details': share_contact,
+            'consent_version': consent_version,
+            'disclose_ride_identity': bool(disclose_identity),
+            'share_contact_details': bool(share_contact),
+            'is_revoked': False,
+            'revoked_at': None,
             'ip_address': ip_addr,
         }
     )
@@ -169,4 +189,8 @@ def record_ride_consent(ride, user: User, request=None, share_contact: bool = Tr
 def revoke_ride_consent(ride, user: User) -> None:
     """Revoke ride consent when a user leaves or is removed from a ride."""
     from .models import RideConsent
-    RideConsent.objects.filter(ride=ride, user=user).delete()
+    RideConsent.objects.filter(ride=ride, user=user).update(
+        is_revoked=True,
+        revoked_at=timezone.now(),
+        share_contact_details=False,
+    )

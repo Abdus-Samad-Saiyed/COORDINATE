@@ -362,6 +362,14 @@ class PasskeyCredential(models.Model):
         return f'{self.name} — {self.user.enrollment_number}'
 
 
+class ImmutableAuditQuerySet(models.QuerySet):
+    def update(self, *args, **kwargs):
+        raise PermissionError("AuditEvent records are append-only and cannot be updated in bulk.")
+
+    def delete(self, *args, **kwargs):
+        raise PermissionError("AuditEvent records are append-only and cannot be deleted in bulk.")
+
+
 class AuditEvent(models.Model):
     """Minimal, privacy-preserving operational audit log."""
 
@@ -394,6 +402,8 @@ class AuditEvent(models.Model):
     actor_enrollment = models.CharField(max_length=20, blank=True)
     description = models.CharField(max_length=255)
     target_id = models.CharField(max_length=50, blank=True)
+
+    objects = ImmutableAuditQuerySet.as_manager()
 
     class Meta:
         ordering = ['-timestamp']

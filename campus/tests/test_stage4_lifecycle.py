@@ -172,8 +172,11 @@ class Stage4LifecycleTests(TestCase):
         ride.refresh_from_db()
         self.assertEqual(ride.status, "CANCELLED")
 
-        # Consents revoked
-        self.assertFalse(RideConsent.objects.filter(ride=ride).exists())
+        # Active consents revoked while keeping historical record for audit
+        self.assertFalse(RideConsent.objects.filter(ride=ride, is_revoked=False).exists())
+        self.assertTrue(RideConsent.objects.filter(ride=ride, is_revoked=True).exists())
+        # Another user cannot view contacts for a cancelled ride
+        self.assertFalse(can_view_ride_contact(self.passenger1, ride, self.host))
 
     def test_waitlist_promotion_on_passenger_leave(self):
         """When a passenger leaves a full ride, standby passenger is promoted and receives consent."""
@@ -199,11 +202,17 @@ class Stage4LifecycleTests(TestCase):
         resp = self.client.post(reverse("leave_ride", kwargs={"ride_id": ride.id}))
         self.assertEqual(resp.status_code, 302)
 
-        # Passenger 1 consent revoked
-        self.assertFalse(RideConsent.objects.filter(ride=ride, user=self.passenger1).exists())
+        # Passenger 1 consent revoked (soft-revocation keeps historical audit)
+        self.assertTrue(RideConsent.objects.filter(ride=ride, user=self.passenger1, is_revoked=True).exists())
+        self.assertFalse(can_view_ride_contact(self.host, ride, self.passenger1))
 
         # Passenger 2 automatically promoted from waitlist to participant
         self.assertTrue(RideParticipant.objects.filter(ride=ride, user=self.passenger2).exists())
         self.assertFalse(RideWaitlist.objects.filter(ride=ride, user=self.passenger2).exists())
         self.assertTrue(RideConsent.objects.filter(ride=ride, user=self.passenger2).exists())
+        # Standby promotion never synthesizes contact sharing consent
+        self.assertFalse(can_view_ride_contact(self.host, ride, self.passenger2))
+
+        # Explicit affirmative opt-in enables contact visibility
+        record_ride_consent(ride, self.passenger2, share_contact=True)
         self.assertTrue(can_view_ride_contact(self.host, ride, self.passenger2))

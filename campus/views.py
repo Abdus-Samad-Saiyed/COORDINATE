@@ -1,3 +1,4 @@
+from accounts.throttling import rate_limit
 """Campus Nexus platform views: About, Contributors, and Feedback/Bug Reporting."""
 
 from django.contrib import messages
@@ -43,6 +44,16 @@ def nominate_contributor(request: HttpRequest) -> HttpResponse:
     github_url = request.POST.get("github_url", "").strip()
     linkedin_url = request.POST.get("linkedin_url", "").strip()
     bio = request.POST.get("bio", "").strip()
+
+    def _clean_safe_url(u: str) -> str:
+        if not u:
+            return ""
+        if u.startswith(("https://", "http://")):
+            return u
+        return ""
+
+    github_url = _clean_safe_url(github_url)
+    linkedin_url = _clean_safe_url(linkedin_url)
 
     if not name:
         messages.error(request, "Name is required to add a contributor.")
@@ -99,6 +110,7 @@ def remove_contributor(request: HttpRequest, contributor_id: int) -> HttpRespons
     return redirect("contributors")
 
 
+@rate_limit(key_prefix='feedback', limit=5, period_seconds=60)
 def feedback_view(request: HttpRequest) -> HttpResponse:
     """Feedback & Bug Reporting: Allows students and staff to submit bugs, feature ideas, and proposals."""
     if request.method == "POST":

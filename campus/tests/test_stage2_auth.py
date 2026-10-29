@@ -192,19 +192,29 @@ class Stage2PasskeyLifecycleTests(TestCase):
         self.client.force_login(self.user)
 
     def test_passkey_reg_challenge_and_verification(self):
-        """Passkey registration options must issue a challenge and store credential safely."""
+        """Passkey registration requires recent reauthentication, valid attestation, and single-use challenge."""
+        from datetime import timedelta
+        from campus.tests.webauthn_test_utils import make_registration_response
+
+        # 1. Registration challenge without recent reauthentication is rejected (403)
+        chal_fail = self.client.get(reverse("passkey_reg_challenge"))
+        self.assertEqual(chal_fail.status_code, 403)
+        self.assertTrue(chal_fail.json().get("requires_step_up"))
+
+        # Enable active reauthentication grace window in session
+        session = self.client.session
+        session["security_otp_verified_until"] = (timezone.now() + timedelta(minutes=10)).isoformat()
+        session.save()
+
+        # 2. Challenge generation succeeds with step-up active
         chal_resp = self.client.get(reverse("passkey_reg_challenge"))
         self.assertEqual(chal_resp.status_code, 200)
         chal_data = chal_resp.json()
         challenge = chal_data.get("challenge")
         self.assertTrue(bool(challenge))
 
-        # Verify challenge is stored in session
-        session = self.client.session
-        self.assertEqual(session.get("passkey_reg_challenge"), challenge)
-
-        # Post mock verification payload
-        reg_resp = self.client.post(
+        # 3. Client-supplied mock payload without attestation is strictly rejected
+        mock_resp = self.client.post(
             reverse("passkey_reg_verify"),
             data=json.dumps({
                 "credential_id": "mock_cred_103",
@@ -213,22 +223,40 @@ class Stage2PasskeyLifecycleTests(TestCase):
             }),
             content_type="application/json",
         )
+        self.assertEqual(mock_resp.status_code, 400)
+        self.assertIn("attestation", mock_resp.json().get("error", "").lower())
+
+        # 4. Generate new challenge and register with genuine attestation
+        chal_resp2 = self.client.get(reverse("passkey_reg_challenge"))
+        challenge2 = chal_resp2.json().get("challenge")
+
+        reg_payload, priv_key, cose_pub_b64 = make_registration_response(
+            challenge_b64=challenge2,
+            credential_id=b"real_cred_103",
+            origin="http://testserver",
+            rp_id="testserver",
+        )
+        reg_payload["name"] = "Windows Hello Device"
+
+        reg_resp = self.client.post(
+            reverse("passkey_reg_verify"),
+            data=json.dumps(reg_payload),
+            content_type="application/json",
+        )
         self.assertEqual(reg_resp.status_code, 200)
         self.assertTrue(reg_resp.json().get("success"))
 
         # Verify credential in database
-        cred = PasskeyCredential.objects.filter(user=self.user, credential_id="mock_cred_103").first()
+        cred = PasskeyCredential.objects.filter(user=self.user).first()
         self.assertIsNotNone(cred)
+        self.assertEqual(cred.public_key, cose_pub_b64)
         self.user.refresh_from_db()
         self.assertTrue(self.user.two_factor_enabled)
 
         # Challenge must be consumed (single-use)
         reg_replay = self.client.post(
             reverse("passkey_reg_verify"),
-            data=json.dumps({
-                "credential_id": "mock_cred_103_replay",
-                "public_key": "webauthn_mock_public_key",
-            }),
+            data=json.dumps(reg_payload),
             content_type="application/json",
         )
         self.assertEqual(reg_replay.status_code, 400)

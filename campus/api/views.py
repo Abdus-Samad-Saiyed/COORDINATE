@@ -29,6 +29,12 @@ from coordinate.policies import (
     record_ride_consent,
     revoke_ride_consent,
 )
+from coordinate.services import (
+    approve_ride_join_request,
+    decline_ride_join_request,
+    leave_ride_service,
+    request_to_join_ride,
+)
 from coordinate.views import (
     _are_friends,
     _parse_date,
@@ -429,7 +435,17 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
             status="OPEN",
         )
         RideParticipant.objects.create(ride=ride, user=user)
-        record_ride_consent(ride, user, request=request, share_contact=True)
+        disclose_id = body.get("disclose_identity", True)
+        if not disclose_id:
+            return json_error("Affirmative consent to disclose identity is required.", status=400, code="CONSENT_REQUIRED")
+        share_cont = bool(body.get("share_contact", False))
+        record_ride_consent(
+            ride,
+            user,
+            request=request,
+            disclose_identity=True,
+            share_contact=share_cont,
+        )
         ride.sync_status()
 
     return json_success({"ride": serialize_ride_detail(ride, request_user=user)}, status=201)
@@ -439,41 +455,60 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
 @require_POST
 @api_auth_required
 def api_ride_join(request: HttpRequest, ride_id: int) -> JsonResponse:
-    """Atomically join an open ride."""
+    """Submit a request to join a ride awaiting host approval."""
     user = request.api_user
+    body, _ = parse_json_body(request)
+    disclose_identity = True
+    share_contact = False
+    if body and isinstance(body, dict):
+        disclose_identity = body.get("disclose_identity", True)
+        share_contact = bool(body.get("share_contact", False))
 
-    with transaction.atomic():
-        ride = (
-            RideRequest.objects
-            .select_for_update()
-            .filter(pk=ride_id)
-            .first()
-        )
-        if not ride:
-            return json_error("Ride not found.", status=404, code="RIDE_NOT_FOUND")
+    ok, msg, details = request_to_join_ride(
+        ride_id=ride_id,
+        user=user,
+        request=request,
+        disclose_identity=disclose_identity,
+        share_contact=share_contact,
+    )
+    if not ok:
+        code = details.get("code", "JOIN_REJECTED")
+        if code == "NOT_FOUND":
+            return json_error(msg, status=404, code=code)
+        if code in ("AUDIENCE_MISMATCH", "USER_KICKED", "HOST_SELF_JOIN", "NOT_VERIFIED"):
+            return json_error(msg, status=403, code=code)
+        if code in ("ALREADY_PENDING", "ALREADY_PARTICIPANT", "ACTIVE_RIDE_EXISTS", "RIDE_NOT_OPEN", "RIDE_FULL", "RIDE_DEPARTED"):
+            return json_error(msg, status=409, code=code)
+        return json_error(msg, status=400, code=code)
 
-        if not _user_can_join_ride(user, ride):
-            # Detailed diagnostics
-            if ride.kicked_users.filter(id=user.id).exists():
-                return json_error("You were previously removed from this ride.", status=403, code="USER_KICKED")
-            if _user_has_active_ride(user):
-                return json_error("You already have an active ride.", status=409, code="ACTIVE_RIDE_EXISTS")
-            if ride.status != "OPEN":
-                return json_error(f"Cannot join ride in '{ride.status}' status.", status=409, code="RIDE_NOT_OPEN")
-            if not _user_can_see_ride(user, ride):
-                return json_error("You do not meet the audience criteria for this ride.", status=403, code="AUDIENCE_MISMATCH")
-            return json_error("Unable to join ride.", status=400, code="JOIN_REJECTED")
-
-        try:
-            RideParticipant.objects.create(ride=ride, user=user)
-            record_ride_consent(ride, user, request=request, share_contact=True)
-            ride.sync_status()
-        except IntegrityError:
-            return json_error("You are already a participant in this ride.", status=409, code="ALREADY_PARTICIPANT")
-
-    ride.refresh_from_db()
     return json_success({
-        "message": "Successfully joined ride.",
+        "status": "pending",
+        "message": msg,
+        "request_id": details.get("request_id"),
+        "ride_id": details.get("ride_id"),
+    }, status=202)
+
+
+@csrf_exempt
+@require_POST
+@api_auth_required
+def api_ride_approve_request(request: HttpRequest, ride_id: int, request_id: int) -> JsonResponse:
+    """Host approves a pending join request via API."""
+    user = request.api_user
+    ok, msg, details = approve_ride_join_request(
+        ride_id=ride_id,
+        request_id=request_id,
+        host_user=user,
+        request=request,
+    )
+    if not ok:
+        code = details.get("code", "APPROVAL_FAILED")
+        status = 404 if code in ("FORBIDDEN", "REQUEST_NOT_FOUND") else 400
+        return json_error(msg, status=status, code=code)
+
+    ride = RideRequest.objects.get(id=ride_id)
+    return json_success({
+        "message": msg,
         "ride": serialize_ride_detail(ride, request_user=user),
     })
 
@@ -481,49 +516,40 @@ def api_ride_join(request: HttpRequest, ride_id: int) -> JsonResponse:
 @csrf_exempt
 @require_POST
 @api_auth_required
-def api_ride_leave(request: HttpRequest, ride_id: int) -> JsonResponse:
-    """Atomically leave or cancel a ride."""
+def api_ride_decline_request(request: HttpRequest, ride_id: int, request_id: int) -> JsonResponse:
+    """Host declines a pending join request via API."""
     user = request.api_user
+    ok, msg, details = decline_ride_join_request(
+        ride_id=ride_id,
+        request_id=request_id,
+        host_user=user,
+    )
+    if not ok:
+        code = details.get("code", "DECLINE_FAILED")
+        status = 404 if code in ("FORBIDDEN", "REQUEST_NOT_FOUND") else 400
+        return json_error(msg, status=status, code=code)
 
-    with transaction.atomic():
-        ride = (
-            RideRequest.objects
-            .select_for_update()
-            .filter(pk=ride_id)
-            .first()
-        )
-        if not ride:
-            return json_error("Ride not found.", status=404, code="RIDE_NOT_FOUND")
+    return json_success({"message": msg})
 
-        if ride.status in ["COMPLETED", "CANCELLED"]:
-            return json_error("Cannot leave a completed or cancelled ride.", status=409, code="RIDE_CONCLUDED")
 
-        if ride.creator == user:
-            return json_error("Hosts cannot leave their own ride. Cancel or terminate the ride instead.", status=400, code="HOST_CANNOT_LEAVE")
+@csrf_exempt
+@require_POST
+@api_auth_required
+def api_ride_leave(request: HttpRequest, ride_id: int) -> JsonResponse:
+    """Atomically leave a ride."""
+    user = request.api_user
+    ok, msg, details = leave_ride_service(ride_id=ride_id, user=user)
+    if not ok:
+        code = details.get("code", "LEAVE_FAILED")
+        status = 404 if code == "NOT_FOUND" else (409 if code == "RIDE_CONCLUDED" else 400)
+        return json_error(msg, status=status, code=code)
 
-        participant = RideParticipant.objects.filter(ride=ride, user=user).first()
-        if not participant:
-            return json_error("You are not a participant in this ride.", status=400, code="NOT_A_PARTICIPANT")
+    if details.get("closed"):
+        return json_success({"message": "Ride cancelled and cleared."})
 
-        participant.delete()
-        revoke_ride_consent(ride, user)
-        ride.left_users.add(user)
-
-        remaining = RideParticipant.objects.filter(ride=ride).count()
-        if remaining == 0:
-            if ride.messages.exists() or ride.status == "COMPLETED":
-                ride.status = "CANCELLED"
-                ride.save(update_fields=["status"])
-            else:
-                ride.delete()
-                return json_success({"message": "Ride cancelled and cleared."})
-        else:
-            ride.sync_status()
-            _promote_next_waitlist_passenger(ride)
-
-    ride.refresh_from_db()
+    ride = RideRequest.objects.get(id=ride_id)
     return json_success({
-        "message": "Successfully left ride.",
+        "message": msg,
         "ride": serialize_ride(ride, request_user=user),
     })
 

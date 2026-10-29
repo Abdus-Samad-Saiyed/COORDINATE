@@ -96,6 +96,8 @@ class ApplicationWorkflowSecurityTests(TestCase):
             'phone_number': '9999999999',
             'gender': 'M',
             'password': 'ValidPassword123',
+            'confirm_password': 'ValidPassword123',
+            'email': 'valid_test@nitsri.ac.in',
         })
         self.assertContains(response, 'Invalid enrollment number format')
         self.assertFalse(AccountApplication.objects.filter(full_name='Test Student').exists())
@@ -108,6 +110,8 @@ class ApplicationWorkflowSecurityTests(TestCase):
             'phone_number': '9999999999',
             'gender': 'M',
             'password': 'ValidPassword123',
+            'confirm_password': 'ValidPassword123',
+            'email': 'valid_test@nitsri.ac.in',
         })
         self.assertContains(response, 'already registered')
 
@@ -126,6 +130,8 @@ class ApplicationWorkflowSecurityTests(TestCase):
             'phone_number': '9999999991',
             'gender': 'M',
             'password': 'ValidPassword123',
+            'confirm_password': 'ValidPassword123',
+            'email': 'valid_test@nitsri.ac.in',
         })
         self.assertContains(response, 'already pending')
 
@@ -251,16 +257,21 @@ class PrivacySafeguardTests(TestCase):
         res_stranger = self.client.get(reverse('ride_detail', args=[self.ride.id]))
         self.assertEqual(res_stranger.status_code, 404)
 
-        # Host sees passenger's phone number when affirmative consent is established
+        # Host sees passenger's phone number during active trip when affirmative consent is established
+        from datetime import timedelta
+        from django.utils import timezone
+        self.ride.status = 'OPEN'
+        self.ride.departure_time = timezone.now() + timedelta(hours=2)
+        self.ride.save()
+
         from coordinate.policies import record_ride_consent
-        record_ride_consent(self.ride, self.user_a)
-        record_ride_consent(self.ride, self.user_b)
+        record_ride_consent(self.ride, self.user_a, share_contact=True)
+        record_ride_consent(self.ride, self.user_b, share_contact=True)
 
         self.client.force_login(self.user_a)
         res_host = self.client.get(reverse('ride_detail', args=[self.ride.id]))
         self.assertEqual(res_host.status_code, 200)
         self.assertContains(res_host, self.user_b.phone_number)
-
 
 class ThrottlingBoundaryTests(TestCase):
     """Rate limiting and abuse protection tests."""

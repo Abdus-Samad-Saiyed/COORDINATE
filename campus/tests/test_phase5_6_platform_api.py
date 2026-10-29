@@ -19,6 +19,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
+from django.core.cache import cache
 
 from campus.services import (
     SERVICE_CATALOGUE,
@@ -136,6 +137,7 @@ class Phase6ApiFoundationTests(TestCase):
     """Phase 6 verification: REST API v1, Auth, and COORDINATE Parity."""
 
     def setUp(self):
+        cache.clear()
         self.client = Client()
         self.male_user = User.objects.create_user(
             username="2024BCSE001",
@@ -365,22 +367,31 @@ class Phase6ApiFoundationTests(TestCase):
 
         female_token = self._get_auth_token(enrollment="2024BCSE003")
 
-        # Female user joins
+        # Female user requests to join (202 Accepted, pending host approval)
         res_join = self.client.post(
             reverse("api_ride_join", kwargs={"ride_id": ride.id}),
             HTTP_AUTHORIZATION=f"Bearer {female_token}",
         )
-        self.assertEqual(res_join.status_code, 200)
-        ride.refresh_from_db()
-        self.assertEqual(ride.status, "FULL")
-        self.assertEqual(ride.participants.count(), 2)
+        self.assertEqual(res_join.status_code, 202)
+        request_id = res_join.json()["data"]["request_id"]
 
-        # Duplicate join attempt returns 409
+        # Duplicate join request returns 409
         res_dup_join = self.client.post(
             reverse("api_ride_join", kwargs={"ride_id": ride.id}),
             HTTP_AUTHORIZATION=f"Bearer {female_token}",
         )
         self.assertEqual(res_dup_join.status_code, 409)
+
+        # Host approves the request
+        male_token = self._get_auth_token(enrollment="2024BCSE001")
+        res_approve = self.client.post(
+            reverse("api_ride_approve_request", kwargs={"ride_id": ride.id, "request_id": request_id}),
+            HTTP_AUTHORIZATION=f"Bearer {male_token}",
+        )
+        self.assertEqual(res_approve.status_code, 200)
+        ride.refresh_from_db()
+        self.assertEqual(ride.status, "FULL")
+        self.assertEqual(ride.participants.count(), 2)
 
         # Female user leaves
         res_leave = self.client.post(

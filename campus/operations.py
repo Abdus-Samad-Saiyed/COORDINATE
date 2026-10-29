@@ -693,7 +693,8 @@ def health_check(request: HttpRequest) -> HttpResponse:
         }
     }
     if db_error:
-        payload["error"] = db_error
+        # Sanitize error in non-debug mode to avoid leaking credentials or server IPs
+        payload["error"] = str(db_error) if getattr(settings, 'DEBUG', False) else "Database connection unavailable." 
 
     # Return HTML if explicitly requested via format=html or if a browser sends text/html without format=json
     accept_header = request.headers.get('Accept', '') or ''

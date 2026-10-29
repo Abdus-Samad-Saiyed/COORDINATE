@@ -45,7 +45,8 @@ class AccountWorkflowTests(TestCase):
                 'email': 'applicant2024@nitsri.ac.in',
                 'phone_otp': raw_otp,
                 'gender': 'M',
-                'password': 'password12345',
+                'password': 'CampusPass@2024!',
+                'confirm_password': 'CampusPass@2024!',
             }
         )
 
@@ -63,7 +64,7 @@ class AccountWorkflowTests(TestCase):
         )
         self.assertNotEqual(
             application.password,
-            'password12345'
+            'CampusPass@2024!'
         )
 
     def test_invalid_and_duplicate_applications_are_rejected(self):

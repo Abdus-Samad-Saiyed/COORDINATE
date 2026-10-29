@@ -175,6 +175,16 @@ MESSAGE_TAGS = {
 }
 
 
+# --- WebAuthn / Passkeys -----------------------------------------------------
+
+WEBAUTHN_RP_ID = env('WEBAUTHN_RP_ID', default='localhost')
+WEBAUTHN_RP_NAME = env('WEBAUTHN_RP_NAME', default='Campus Nexus')
+WEBAUTHN_ALLOWED_ORIGINS = env.list(
+    'WEBAUTHN_ALLOWED_ORIGINS',
+    default=['http://localhost:8000', 'http://127.0.0.1:8000', 'http://testserver']
+)
+
+
 # --- Misc --------------------------------------------------------------------
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

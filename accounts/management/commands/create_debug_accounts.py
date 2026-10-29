@@ -18,6 +18,7 @@ DEBUG_USERS = [
         'gender': 'M',
         'verified': True,
         'is_active': True,
+    'two_factor_enabled': False,
     },
     {
         'enrollment_number': '20XXBECE001',
@@ -29,6 +30,7 @@ DEBUG_USERS = [
         'gender': 'F',
         'verified': True,
         'is_active': True,
+    'two_factor_enabled': False,
     },
     {
         'enrollment_number': '20XXBCIV001',
@@ -40,6 +42,7 @@ DEBUG_USERS = [
         'gender': 'M',
         'verified': True,
         'is_active': True,
+    'two_factor_enabled': False,
     },
     {
         'enrollment_number': '20XXBELE001',
@@ -51,6 +54,7 @@ DEBUG_USERS = [
         'gender': 'F',
         'verified': True,
         'is_active': True,
+    'two_factor_enabled': False,
     },
     {
         'enrollment_number': '20XXBMEC001',
@@ -62,6 +66,7 @@ DEBUG_USERS = [
         'gender': 'M',
         'verified': True,
         'is_active': True,
+    'two_factor_enabled': False,
     },
 ]
 
@@ -80,8 +85,9 @@ PERSONAL_SUPERACCOUNT = {
     'is_staff': True,
     'verified': True,
     'is_active': True,
+    'two_factor_enabled': False,
 }
-PERSONAL_PASSWORD = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'DevAdmin@Placeholder123')
+PERSONAL_PASSWORD = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'Debug@123')
 
 
 class Command(BaseCommand):
