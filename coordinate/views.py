@@ -697,6 +697,9 @@ def ride_detail(request, ride_id):
     if not can_view_ride(request.user, ride):
         raise Http404
 
+    if ride.status in ['COMPLETED', 'CANCELLED'] and not (is_creator or is_participant or is_waitlisted or has_join_request or request.user.is_staff or request.user.is_superuser):
+        raise Http404
+
     participants = list(
         RideParticipant.objects
         .filter(ride=ride)

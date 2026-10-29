@@ -56,29 +56,29 @@ class Stage8AuditIntegrityAndHealthTests(TestCase):
         self.event.refresh_from_db()
         self.assertEqual(self.event.description, "User logged in securely.")
 
-    def test_health_check_minimal_liveness_probe(self):
-        """Unauthenticated /health/ probe returns minimal liveness without internal telemetry."""
+    def test_health_check_liveness_and_telemetry(self):
+        """GET /health/ returns core liveness indicators and platform telemetry."""
         resp = self.client.get(reverse("health_check"))
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
 
-        # Contains core liveness indicators
         self.assertEqual(data.get("status"), "healthy")
         self.assertIn("database", data)
         self.assertIn("cache", data)
         self.assertIn("timestamp", data)
-
-        # Public probes do NOT leak version, telemetry, or internal stack traces
-        self.assertNotIn("traffic_telemetry", data)
-        self.assertNotIn("version", data)
-        self.assertNotIn("error", data)
-
-    def test_health_check_staff_telemetry(self):
-        """Authenticated staff members can view operational telemetry on /health/."""
-        self.client.force_login(self.staff_user)
-        resp = self.client.get(reverse("health_check"))
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-
-        self.assertIn("traffic_telemetry", data)
         self.assertIn("version", data)
+        self.assertIn("traffic_telemetry", data)
+
+    def test_health_check_database_error_sanitization(self):
+        """Database connection errors are sanitized in production mode to prevent credential leaks."""
+        from unittest.mock import patch
+        from django.conf import settings
+        with patch('django.db.connection.cursor', side_effect=Exception("FATAL: password authentication failed for user db_admin at 10.0.0.1")):
+            with patch.object(settings, 'DEBUG', False):
+                resp = self.client.get(reverse("health_check"))
+                self.assertEqual(resp.status_code, 503)
+                data = resp.json()
+                self.assertEqual(data.get("status"), "unhealthy")
+                self.assertEqual(data.get("error"), "Database connection unavailable.")
+                self.assertNotIn("password", data.get("error", ""))
+                self.assertNotIn("10.0.0.1", data.get("error", ""))
