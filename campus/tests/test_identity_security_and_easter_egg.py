@@ -9,6 +9,7 @@ Automated regression tests for:
 7. Admin Identity Desk: phone update, physical verification resolution, soft deletion preserving trip history
 """
 
+import os
 from datetime import timedelta
 from django.contrib.auth import authenticate
 from django.contrib.sessions.models import Session
@@ -36,9 +37,9 @@ class IdentitySecurityArchitectureTests(TestCase):
             enrollment_number="2024BCSE065",
             username="2024BCSE065",
             password="SuperTestPass@123",
-            first_name="Abdur",
-            last_name="Samad",
-            phone_number="+917355463857",
+            first_name=os.environ.get("PERSONAL_SUPERACCOUNT_FIRST_NAME", "Abdus"),
+            last_name=os.environ.get("PERSONAL_SUPERACCOUNT_LAST_NAME", "Samad Saiyed"),
+            phone_number=os.environ.get("PERSONAL_SUPERACCOUNT_PHONE", "+919999999999"),
             gender="M",
             verified=True,
             two_factor_enabled=True,
