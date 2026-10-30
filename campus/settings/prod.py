@@ -4,7 +4,10 @@ import environ
 from .base import *  # noqa: F401, F403
 
 
-class ImproperlyConfigured(ValueError):
+from django.core.exceptions import ImproperlyConfigured as DjangoImproperlyConfigured
+
+
+class ImproperlyConfigured(DjangoImproperlyConfigured, ValueError):
     """Configuration error for production environment."""
     pass
 
@@ -38,12 +41,13 @@ if not SECRET_KEY or (not IS_BUILD_PHASE and SECRET_KEY in _INSECURE_DEFAULTS) o
 # --- 2. Allowed Hosts Validation ---------------------------------------------
 ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['build.local'] if IS_BUILD_PHASE else [])
 _INSECURE_HOSTS = {'*', 'localhost', '127.0.0.1', 'testserver'}
+if not IS_BUILD_PHASE:
+    if not ALLOWED_HOSTS or any(h in _INSECURE_HOSTS for h in ALLOWED_HOSTS):
+        raise ImproperlyConfigured(
+            "DJANGO_ALLOWED_HOSTS must contain only valid production hostnames; "
+            "wildcards, localhost, 127.0.0.1, and testserver are forbidden even when mixed."
+        )
 valid_hosts = [h for h in ALLOWED_HOSTS if h not in _INSECURE_HOSTS]
-if not valid_hosts and not IS_BUILD_PHASE:
-    raise ImproperlyConfigured(
-        'DJANGO_ALLOWED_HOSTS must contain valid production hostnames. '
-        'Localhost, testserver, and wildcard hosts are rejected in production.'
-    )
 
 # --- 3. Production Database (PostgreSQL) -------------------------------------
 database_url = env('DATABASE_URL', default='')

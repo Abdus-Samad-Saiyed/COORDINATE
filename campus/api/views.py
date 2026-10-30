@@ -333,6 +333,8 @@ def api_ride_detail(request: HttpRequest, ride_id: int) -> JsonResponse:
 def api_ride_create(request: HttpRequest) -> JsonResponse:
     """Create a new ride request adhering to all domain invariants."""
     user = request.api_user
+    if not (user.is_staff or user.is_superuser or is_verified_student(user)):
+        return json_error("Authentication as a verified student required.", status=403, code="FORBIDDEN")
 
     # One active ride invariant
     if _user_has_active_ride(user):
@@ -423,6 +425,12 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
     if visibility == "BOYS" and user.gender != "M":
         return json_error("Only male students can create Boys Only rides.", status=403, code="GENDER_MISMATCH")
 
+    # Enforce affirmative identity consent BEFORE opening atomic transaction
+    disclose_id = body.get("disclose_identity", True)
+    share_cont = body.get("share_contact", False) is True
+    if disclose_id is False:
+        return json_error("Affirmative consent to disclose identity is required.", status=400, code="CONSENT_REQUIRED")
+
     with transaction.atomic():
         ride = RideRequest.objects.create(
             creator=user,
@@ -435,10 +443,6 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
             status="OPEN",
         )
         RideParticipant.objects.create(ride=ride, user=user)
-        disclose_id = body.get("disclose_identity", True)
-        if not disclose_id:
-            return json_error("Affirmative consent to disclose identity is required.", status=400, code="CONSENT_REQUIRED")
-        share_cont = bool(body.get("share_contact", False))
         record_ride_consent(
             ride,
             user,
@@ -457,12 +461,16 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
 def api_ride_join(request: HttpRequest, ride_id: int) -> JsonResponse:
     """Submit a request to join a ride awaiting host approval."""
     user = request.api_user
+    if not (user.is_staff or user.is_superuser or is_verified_student(user)):
+        return json_error("Authentication as a verified student required.", status=403, code="FORBIDDEN")
     body, _ = parse_json_body(request)
     disclose_identity = True
     share_contact = False
     if body and isinstance(body, dict):
-        disclose_identity = body.get("disclose_identity", True)
-        share_contact = bool(body.get("share_contact", False))
+        if body.get("disclose_identity") is False:
+            return json_error("Explicit consent to associate your identity with this ride is required.", status=400, code="CONSENT_REQUIRED")
+        disclose_identity = bool(body.get("disclose_identity", True) is not False)
+        share_contact = bool(body.get("share_contact") is True)
 
     ok, msg, details = request_to_join_ride(
         ride_id=ride_id,
@@ -538,6 +546,8 @@ def api_ride_decline_request(request: HttpRequest, ride_id: int, request_id: int
 def api_ride_leave(request: HttpRequest, ride_id: int) -> JsonResponse:
     """Atomically leave a ride."""
     user = request.api_user
+    if not (user.is_staff or user.is_superuser or is_verified_student(user)):
+        return json_error("Authentication as a verified student required.", status=403, code="FORBIDDEN")
     ok, msg, details = leave_ride_service(ride_id=ride_id, user=user)
     if not ok:
         code = details.get("code", "LEAVE_FAILED")
@@ -559,6 +569,8 @@ def api_ride_leave(request: HttpRequest, ride_id: int) -> JsonResponse:
 def api_my_rides(request: HttpRequest) -> JsonResponse:
     """Return user's active ride and historical rides."""
     user = request.api_user
+    if not (user.is_staff or user.is_superuser or is_verified_student(user)):
+        return json_error("Authentication as a verified student required.", status=403, code="FORBIDDEN")
     participations = (
         RideParticipant.objects
         .filter(user=user)

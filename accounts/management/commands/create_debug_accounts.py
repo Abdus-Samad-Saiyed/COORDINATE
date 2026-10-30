@@ -72,22 +72,11 @@ DEBUG_USERS = [
 
 import os
 
-DEBUG_PASSWORD = os.environ.get('DEBUG_ACCOUNT_PASSWORD', 'Debug@123')
-PERSONAL_SUPERACCOUNT = {
-    'enrollment_number': os.environ.get('PERSONAL_SUPERACCOUNT_ENROLLMENT', '2024BCSE065'),
-    'username': os.environ.get('PERSONAL_SUPERACCOUNT_ENROLLMENT', '2024BCSE065'),
-    'first_name': os.environ.get('PERSONAL_SUPERACCOUNT_FIRST_NAME', 'Abdus Samad'),
-    'last_name': os.environ.get('PERSONAL_SUPERACCOUNT_LAST_NAME', 'Saiyed'),
-    'email': os.environ.get('PERSONAL_SUPERACCOUNT_EMAIL', 'asaiyed_2024bcse065@nitsri.ac.in'),
-    'phone_number': os.environ.get('PERSONAL_SUPERACCOUNT_PHONE', '+919999999999'),
-    'gender': 'M',
-    'is_superuser': True,
-    'is_staff': True,
-    'verified': True,
-    'is_active': True,
-    'two_factor_enabled': False,
-}
-PERSONAL_PASSWORD = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'Debug@123')
+import secrets
+
+DEBUG_PASSWORD = os.environ.get('DEBUG_ACCOUNT_PASSWORD')
+PERSONAL_SUPERACCOUNT_ENROLLMENT = os.environ.get('PERSONAL_SUPERACCOUNT_ENROLLMENT')
+PERSONAL_PASSWORD = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD')
 
 
 class Command(BaseCommand):
@@ -107,28 +96,48 @@ class Command(BaseCommand):
                 'Refusing to create debug accounts in a production environment.'
             )
 
-        # 1. Create or update personal superaccount: 2024BCSE065
-        super_user, created_super = User.objects.get_or_create(
-            enrollment_number=PERSONAL_SUPERACCOUNT['enrollment_number'],
-            defaults={
-                **PERSONAL_SUPERACCOUNT,
-                'password': make_password(PERSONAL_PASSWORD),
-            }
-        )
-        if not created_super:
-            for k, v in PERSONAL_SUPERACCOUNT.items():
-                setattr(super_user, k, v)
-            super_user.set_password(PERSONAL_PASSWORD)
-            super_user.save()
-            self.stdout.write(self.style.SUCCESS(f'Updated superaccount {super_user.enrollment_number}'))
-        else:
-            self.stdout.write(self.style.SUCCESS(f'Created superaccount {super_user.enrollment_number}'))
+        # 1. Create or update personal superaccount if configured in environment / settings
+        super_user = None
+        super_enrollment = PERSONAL_SUPERACCOUNT_ENROLLMENT or getattr(settings, 'PERSONAL_SUPERACCOUNT_ENROLLMENT', None)
+        super_pw = PERSONAL_PASSWORD or getattr(settings, 'PERSONAL_SUPERACCOUNT_PASSWORD', None)
 
-        # 2. Reassign rides and participations from 2024BCSE001 to 2024BCSE065 before deletion
+        if super_enrollment and super_pw:
+            personal_account_data = {
+                'enrollment_number': super_enrollment,
+                'username': super_enrollment,
+                'first_name': os.environ.get('PERSONAL_SUPERACCOUNT_FIRST_NAME') or getattr(settings, 'PERSONAL_SUPERACCOUNT_FIRST_NAME', 'Campus'),
+                'last_name': os.environ.get('PERSONAL_SUPERACCOUNT_LAST_NAME') or getattr(settings, 'PERSONAL_SUPERACCOUNT_LAST_NAME', 'Admin'),
+                'email': os.environ.get('PERSONAL_SUPERACCOUNT_EMAIL') or getattr(settings, 'PERSONAL_SUPERACCOUNT_EMAIL', f'{super_enrollment.lower()}@nitsri.ac.in'),
+                'phone_number': os.environ.get('PERSONAL_SUPERACCOUNT_PHONE') or getattr(settings, 'PERSONAL_SUPERACCOUNT_PHONE', '+919999999999'),
+                'gender': 'M',
+                'is_superuser': True,
+                'is_staff': True,
+                'verified': True,
+                'is_active': True,
+                'two_factor_enabled': False,
+            }
+            super_user, created_super = User.objects.get_or_create(
+                enrollment_number=super_enrollment,
+                defaults={
+                    **personal_account_data,
+                    'password': make_password(super_pw),
+                }
+            )
+            if not created_super:
+                for k, v in personal_account_data.items():
+                    setattr(super_user, k, v)
+                super_user.set_password(super_pw)
+                super_user.save()
+                self.stdout.write(self.style.SUCCESS(f'Updated superaccount {super_user.enrollment_number}'))
+            else:
+                self.stdout.write(self.style.SUCCESS(f'Created superaccount {super_user.enrollment_number}'))
+        else:
+            self.stdout.write('PERSONAL_SUPERACCOUNT not configured; skipping superaccount creation.')
+
+        # 2. Reassign rides and participations from 2024BCSE001 if superaccount exists
         old_admin = User.objects.filter(enrollment_number='2024BCSE001').first()
-        if old_admin:
+        if old_admin and super_user:
             RideRequest.objects.filter(creator=old_admin).update(creator=super_user)
-            # Reassign participations
             for p in RideParticipant.objects.filter(user=old_admin):
                 if not RideParticipant.objects.filter(ride=p.ride, user=super_user).exists():
                     p.user = super_user
@@ -136,7 +145,7 @@ class Command(BaseCommand):
                 else:
                     p.delete()
             old_admin.delete()
-            self.stdout.write(self.style.WARNING('Dropped legacy superaccount 2024BCSE001 and migrated rides to 2024BCSE065.'))
+            self.stdout.write(self.style.WARNING(f'Dropped legacy superaccount 2024BCSE001 and migrated rides to {super_user.enrollment_number}.'))
 
         # 3. Clean up other legacy 2024 and 2099 debug accounts
         legacy_debug_enrollments = [
@@ -154,7 +163,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f'Reset {deleted_reset} existing 20XX debug account(s).'))
 
         # 4. Create 20XX branch debug accounts
-        hashed_debug_pw = make_password(DEBUG_PASSWORD)
+        resolved_debug_pw = DEBUG_PASSWORD or getattr(settings, 'DEBUG_ACCOUNT_PASSWORD', None) or 'Debug@123'
+        hashed_debug_pw = make_password(resolved_debug_pw)
         created = 0
         skipped = 0
 
@@ -173,5 +183,6 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'Done. Created {created} 20XX debug accounts, skipped {skipped}.'
         ))
-        self.stdout.write(self.style.SUCCESS('Active Superaccount configured: 2024BCSE065 (superuser credentials provisioned).'))
+        if super_user:
+            self.stdout.write(self.style.SUCCESS(f'Active Superaccount configured: {super_user.enrollment_number} (superuser credentials provisioned).'))
 

@@ -144,10 +144,19 @@ def operational_dashboard(request: HttpRequest) -> HttpResponse:
         route_labels = ["Hazratbal", "Lal Chowk", "Airport", "Railway Station"]
         route_series = [0, 0, 0, 0]
 
-    # Hourly Departure Distribution (06:00 to 22:00)
+    # Hourly Departure Distribution (06:00 to 22:00) via database aggregation
+    from django.db.models.functions import ExtractHour
     hourly_buckets = [0] * 24
-    for r in RideRequest.objects.all():
-        hourly_buckets[r.departure_time.hour] += 1
+    hourly_counts = (
+        RideRequest.objects
+        .annotate(h=ExtractHour("departure_time"))
+        .values("h")
+        .annotate(total=Count("id"))
+    )
+    for row in hourly_counts:
+        h = row.get("h")
+        if h is not None and 0 <= h < 24:
+            hourly_buckets[h] = row["total"]
     hourly_labels = [f"{h:02d}:00" for h in range(6, 23)]
     hourly_series = [hourly_buckets[h] for h in range(6, 23)]
 
@@ -616,34 +625,42 @@ def export_users_csv(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
-@user_passes_test(_is_staff_or_superuser)
+@user_passes_test(_is_superuser)
 def export_applications_csv(request: HttpRequest) -> HttpResponse:
-    """Export application queue with formula-injection sanitation."""
+    """Export application queue with formula-injection sanitation. Superuser only; phone redacted by default."""
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="campus_nexus_applications_export.csv"'
 
+    include_phone = request.GET.get("include_phone") == "1"
+    headers = ["ID", "Application Number", "Enrollment", "Full Name", "Gender"]
+    if include_phone:
+        headers.append("Phone Number")
+    headers.extend(["Created At", "Approved"])
+
     writer = csv.writer(response)
-    writer.writerow([
-        "ID", "Application Number", "Enrollment", "Full Name", "Gender", "Phone Number", "Created At", "Approved"
-    ])
+    writer.writerow(headers)
 
     apps = AccountApplication.objects.order_by("-created_at")[:1000]
     for a in apps:
-        writer.writerow([
+        row = [
             a.id,
             sanitize_csv_cell(a.application_number),
             sanitize_csv_cell(a.enrollment_number),
             sanitize_csv_cell(a.full_name),
             sanitize_csv_cell(a.gender),
-            sanitize_csv_cell(a.phone_number),
+        ]
+        if include_phone:
+            row.append(sanitize_csv_cell(a.phone_number))
+        row.extend([
             a.created_at.isoformat() if a.created_at else "",
             a.approved,
         ])
+        writer.writerow(row)
 
     log_audit_event(
         event_type="EXPORT_GENERATED",
         actor_enrollment=request.user.enrollment_number,
-        description=f"Exported {apps.count()} applications to CSV",
+        description=f"Exported {apps.count()} applications to CSV (phone included: {include_phone})",
     )
     return response
 
@@ -677,12 +694,13 @@ def health_check(request: HttpRequest) -> HttpResponse:
     except Exception:
         cache_ok = False
 
-    status_code = 200 if db_ok else 503
+    is_ready = db_ok and cache_ok
+    status_code = 200 if is_ready else 503
     traffic = get_traffic_telemetry()
     payload = {
-        "status": "healthy" if db_ok else "unhealthy",
+        "status": "healthy" if is_ready else "unhealthy",
         "database": "connected" if db_ok else "disconnected",
-        "cache": "connected" if cache_ok else "degraded",
+        "cache": "connected" if cache_ok else "disconnected",
         "timestamp": timezone.now().isoformat(),
         "version": "2.4.0",
         "traffic_telemetry": {
@@ -692,9 +710,11 @@ def health_check(request: HttpRequest) -> HttpResponse:
             "uptime": traffic['uptime_display'],
         }
     }
-    if db_error:
-        # Sanitize error in non-debug mode to avoid leaking credentials or server IPs
-        payload["error"] = str(db_error) if getattr(settings, 'DEBUG', False) else "Database connection unavailable." 
+    if not is_ready:
+        if not db_ok:
+            payload["error"] = str(db_error) if getattr(settings, 'DEBUG', False) else "Database connection unavailable."
+        elif not cache_ok:
+            payload["error"] = "Cache connection unavailable." 
 
     # Return HTML if explicitly requested via format=html or if a browser sends text/html without format=json
     accept_header = request.headers.get('Accept', '') or ''

@@ -162,7 +162,7 @@ def dispatch_email_otp(email: str, code: str, purpose: str = '2FA', user: User =
     """
 
     try:
-        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'Campus Nexus <noreply@campusnexus.nitsri.ac.in>')
+        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'Campus Nexus <noreply.campus.nexus@gmail.com>')
         msg = EmailMultiAlternatives(subject, plain_content, from_email, [email])
         msg.attach_alternative(html_content, "text/html")
         msg.send(fail_silently=False)
@@ -386,8 +386,6 @@ def verify_passkey_registration(
         allowed_origins = list(getattr(settings, 'WEBAUTHN_ALLOWED_ORIGINS', []))
         if expected_origin and expected_origin in allowed_origins:
             verify_origins = [expected_origin]
-        elif expected_origin and getattr(settings, 'DEBUG', False):
-            verify_origins = [expected_origin]
         else:
             verify_origins = allowed_origins
 
@@ -471,8 +469,6 @@ def verify_passkey_assertion(
 
         allowed_origins = list(getattr(settings, 'WEBAUTHN_ALLOWED_ORIGINS', []))
         if expected_origin and expected_origin in allowed_origins:
-            verify_origins = [expected_origin]
-        elif expected_origin and getattr(settings, 'DEBUG', False):
             verify_origins = [expected_origin]
         else:
             verify_origins = allowed_origins

@@ -41,6 +41,7 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
         user_hides_online = await self._user_hides_online()
         if not user_hides_online:
             count = await self._incr_user_connection(self.user.id)
+            self._presence_incremented = True
             if count == 1:
                 await self.channel_layer.group_send(
                     self.group_name,
@@ -51,11 +52,22 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
                     }
                 )
 
+        # Send initial peer presence to self if friend is active and unhidden
+        friend_hides = await self._friend_hides_online()
+        if not friend_hides:
+            friend_online = await self._is_user_online(self.friend.id)
+            if friend_online:
+                await self.send(text_data=json.dumps({
+                    'type': 'presence',
+                    'sender': self.friend.enrollment_number,
+                    'status': 'online',
+                }))
+
     async def disconnect(self, close_code):
         if hasattr(self, 'group_name'):
-            user_hides_online = await self._user_hides_online()
-            if not user_hides_online:
+            if getattr(self, '_presence_incremented', False):
                 count = await self._decr_user_connection(self.user.id)
+                self._presence_incremented = False
                 if count <= 0:
                     await self.channel_layer.group_send(
                         self.group_name,
@@ -76,7 +88,17 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
         except (json.JSONDecodeError, TypeError):
             return
 
+        if getattr(self, '_presence_incremented', False):
+            await self._refresh_presence_lease(self.user.id)
+
         event_type = data.get('type')
+
+        # Read receipt
+        if event_type == 'mark_read':
+            msg_id = data.get('message_id')
+            if msg_id:
+                await self._mark_message_read(msg_id)
+            return
 
         # Real-time typing indicator (suppressed if user hid online status)
         if event_type == 'typing':
@@ -207,16 +229,54 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
             return False
 
     @database_sync_to_async
+    def _friend_hides_online(self) -> bool:
+        from accounts.models import User
+        try:
+            return User.objects.filter(id=self.friend.id, hide_online_status=True).exists()
+        except Exception:
+            return False
+
+    @database_sync_to_async
+    def _is_user_online(self, user_id: int) -> bool:
+        from django.core.cache import cache
+        key = f"ws_presence_{user_id}"
+        return bool(cache.get(key, 0) > 0)
+
+    @database_sync_to_async
+    def _refresh_presence_lease(self, user_id: int):
+        from django.core.cache import cache
+        key = f"ws_presence_{user_id}"
+        try:
+            cache.touch(key, 120)
+        except Exception:
+            pass
+
+    @database_sync_to_async
+    def _mark_message_read(self, message_id):
+        from accounts.models import DirectMessage
+        try:
+            DirectMessage.objects.filter(
+                id=message_id,
+                sender=self.friend,
+                recipient=self.user,
+                is_read=False,
+            ).update(is_read=True)
+        except Exception:
+            pass
+
+    @database_sync_to_async
     def _incr_user_connection(self, user_id: int) -> int:
         from django.core.cache import cache
         key = f"ws_presence_{user_id}"
         try:
-            cache.add(key, 0, timeout=86400)
-            return cache.incr(key)
+            cache.add(key, 0, timeout=120)
+            val = cache.incr(key)
+            cache.touch(key, 120)
+            return val
         except Exception:
             try:
                 val = cache.get(key, 0) + 1
-                cache.set(key, val, timeout=86400)
+                cache.set(key, val, timeout=120)
                 return val
             except Exception:
                 return 1
@@ -230,6 +290,7 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
             if val <= 0:
                 cache.delete(key)
                 return 0
+            cache.touch(key, 120)
             return val
         except (ValueError, Exception):
             cache.delete(key)

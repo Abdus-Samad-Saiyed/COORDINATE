@@ -13,6 +13,7 @@ from accounts.views import (
     passkey_reg_challenge,
     passkey_reg_verify,
     passkey_delete,
+    verify_security_step_up,
     service_catalogue,
     two_factor_verify,
 )
@@ -32,6 +33,59 @@ from campus.views import about_view, contact_view, contributors_view, feedback_v
 
 # Enforce platform 2FA and single-session on Django admin
 admin.site.login = custom_login_view
+
+
+from django.contrib.auth.views import PasswordChangeView
+from django.contrib.sessions.models import Session
+from django.utils import timezone
+from django.http import Http404, HttpResponseForbidden, FileResponse
+from django.contrib.auth.decorators import login_required
+from accounts.models import log_audit_event, User
+from accounts.two_factor import hash_otp
+from coordinate.policies import can_view_profile_field
+
+class CustomPasswordChangeView(PasswordChangeView):
+    template_name = 'registration/password_change_form.html'
+    success_url = '/password_change/done/'
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        user = self.request.user
+        current_key = self.request.session.session_key
+        for s in Session.objects.filter(expire_date__gt=timezone.now()):
+            try:
+                data = s.get_decoded()
+                if str(data.get('_auth_user_id')) == str(user.id) and s.session_key != current_key:
+                    s.delete()
+            except Exception:
+                pass
+        if current_key:
+            user.current_session_key = current_key
+            user.save(update_fields=['current_session_key'])
+        log_audit_event(
+            event_type='SECURITY_SETTINGS_UPDATED',
+            actor_enrollment=user.enrollment_number,
+            description='Password changed via web password_change view; concurrent sessions revoked',
+        )
+        return response
+
+@login_required
+def serve_protected_media(request, path):
+    safe_path = os.path.normpath(path).lstrip('/\\')
+    if safe_path.startswith('..') or os.path.isabs(safe_path):
+        raise Http404("Invalid media path.")
+    
+    full_path = os.path.join(settings.MEDIA_ROOT, safe_path)
+    if not os.path.isfile(full_path):
+        raise Http404("Media file not found.")
+
+    normalized_rel = safe_path.replace('\\', '/')
+    if normalized_rel.startswith('profiles/'):
+        owner = User.objects.filter(profile_photo=normalized_rel).first()
+        if owner and not can_view_profile_field(request.user, owner, 'profile_photo'):
+            return HttpResponseForbidden("Access to this profile media is restricted.")
+
+    return FileResponse(open(full_path, 'rb'))
 
 urlpatterns = [
     # Django admin & Operational Dashboard
@@ -78,12 +132,10 @@ urlpatterns = [
     ),
     path(
         'password_change/',
-        auth_views.PasswordChangeView.as_view(
-            template_name='registration/password_change_form.html',
-            success_url='/password_change/done/',
-        ),
+        CustomPasswordChangeView.as_view(),
         name='password_change',
     ),
+    path('auth/passkey/step-up/', verify_security_step_up, name='passkey_step_up'),
     path(
         'password_change/done/',
         auth_views.PasswordChangeDoneView.as_view(
@@ -103,8 +155,7 @@ from django.conf import settings
 from django.urls import re_path
 from django.views.static import serve
 
-if settings.DEBUG:
-    urlpatterns += [
-        re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
-    ]
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve_protected_media, name='serve_protected_media'),
+]
 

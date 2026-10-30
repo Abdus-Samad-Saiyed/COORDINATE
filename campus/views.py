@@ -45,15 +45,22 @@ def nominate_contributor(request: HttpRequest) -> HttpResponse:
     linkedin_url = request.POST.get("linkedin_url", "").strip()
     bio = request.POST.get("bio", "").strip()
 
-    def _clean_safe_url(u: str) -> str:
-        if not u:
-            return ""
-        if u.startswith(("https://", "http://")):
-            return u
-        return ""
+    from django.core.validators import URLValidator
+    from django.core.exceptions import ValidationError
 
-    github_url = _clean_safe_url(github_url)
-    linkedin_url = _clean_safe_url(linkedin_url)
+    validator = URLValidator(schemes=['http', 'https'])
+    for u in (github_url, linkedin_url):
+        if u:
+            try:
+                validator(u)
+            except ValidationError:
+                messages.error(request, "Invalid URL format for GitHub or LinkedIn.")
+                return redirect("contributors")
+
+    name = name[:100]
+    enrollment = enrollment[:20]
+    role = (role or "Open Source Contributor")[:100]
+    bio = bio[:255]
 
     if not name:
         messages.error(request, "Name is required to add a contributor.")
@@ -63,17 +70,23 @@ def nominate_contributor(request: HttpRequest) -> HttpResponse:
     if enrollment:
         linked_user = User.objects.filter(enrollment_number=enrollment).first()
 
-    contributor = Contributor.objects.create(
+    contributor = Contributor(
         user=linked_user,
         name=name,
         enrollment_number=enrollment,
-        role=role or "Open Source Contributor",
+        role=role,
         github_url=github_url,
         linkedin_url=linkedin_url,
         bio=bio,
         nominated_by=request.user,
         is_active=True,
     )
+    try:
+        contributor.full_clean()
+    except ValidationError as e:
+        messages.error(request, f"Validation error: {e}")
+        return redirect("contributors")
+    contributor.save()
 
     log_audit_event(
         event_type="CONTRIBUTOR_NOMINATED",
@@ -120,6 +133,27 @@ def feedback_view(request: HttpRequest) -> HttpResponse:
         submitter_name = request.POST.get("submitter_name", "").strip()
         submitter_contact = request.POST.get("submitter_contact", "").strip()
         system_info = request.META.get("HTTP_USER_AGENT", "")[:250]
+
+        valid_feedback_types = dict(PlatformFeedback.FEEDBACK_TYPES)
+        if feedback_type not in valid_feedback_types:
+            messages.error(request, "Invalid feedback category selected.")
+            return render(request, "nexus/feedback.html", {
+                "feedback_type": feedback_type,
+                "title": title,
+                "description": description,
+                "submitter_name": submitter_name,
+                "submitter_contact": submitter_contact,
+            }, status=400)
+
+        if len(title) > 200 or len(submitter_name) > 100 or len(submitter_contact) > 100 or len(description) > 5000:
+            messages.error(request, "One or more feedback fields exceeded maximum allowed length.")
+            return render(request, "nexus/feedback.html", {
+                "feedback_type": feedback_type,
+                "title": title,
+                "description": description,
+                "submitter_name": submitter_name,
+                "submitter_contact": submitter_contact,
+            }, status=400)
 
         if not title or not description:
             messages.error(request, "Title and description are required to submit feedback.")

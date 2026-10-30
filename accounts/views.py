@@ -18,6 +18,7 @@ import json
 import os
 import sys
 import uuid
+from functools import wraps
 from datetime import timedelta
 from PIL import Image
 
@@ -54,6 +55,20 @@ from .models import (
     log_audit_event,
 )
 from .throttling import rate_limit
+
+def verified_student_required(view_func):
+    """Decorator to ensure user is active, verified, and not soft-deleted."""
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+        from coordinate.policies import is_verified_student
+        if request.user.is_staff or request.user.is_superuser or is_verified_student(request.user):
+            return view_func(request, *args, **kwargs)
+        messages.error(request, "Access restricted to verified students. Your account verification is pending.")
+        return redirect('dashboard')
+    return _wrapped
+
 from .two_factor import (
     can_resend_otp,
     create_phone_otp,
@@ -61,6 +76,7 @@ from .two_factor import (
     verify_passkey_assertion,
     verify_passkey_registration,
     verify_phone_otp,
+    normalize_phone_number,
 )
 
 from campus.services import get_all_services
@@ -103,22 +119,26 @@ def service_catalogue(request):
 def enforce_single_session_login(request, user: User):
     """
     Ensure each account can only have one active session at a time.
-    Invalidates any previous session across other devices/browsers, and records current session key.
+    Invalidates any previous session across other devices/browsers, and records current session key digest.
     """
-    if user.current_session_key and user.current_session_key != request.session.session_key:
+    if not request.session.session_key:
+        request.session.save()
+    current_key = request.session.session_key
+
+    for s in Session.objects.filter(expire_date__gt=timezone.now()):
         try:
-            Session.objects.filter(session_key=user.current_session_key).delete()
-            log_audit_event(
-                event_type='SESSION_TERMINATED_CONCURRENT',
-                actor_enrollment=user.enrollment_number,
-                description='Prior session invalidated on concurrent device/browser login',
-            )
+            data = s.get_decoded()
+            if str(data.get('_auth_user_id')) == str(user.id) and s.session_key != current_key:
+                s.delete()
+                log_audit_event(
+                    event_type='SESSION_TERMINATED_CONCURRENT',
+                    actor_enrollment=user.enrollment_number,
+                    description='Prior session invalidated on concurrent device/browser login',
+                )
         except Exception:
             pass
 
-    if not request.session.session_key:
-        request.session.save()
-    user.current_session_key = request.session.session_key
+    user.current_session_key = current_key
     user.save(update_fields=['current_session_key'])
 
 
@@ -252,8 +272,6 @@ def two_factor_verify(request):
 
                 auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
                 enforce_single_session_login(request, user)
-                # 10-minute grace window for modifying security details
-                request.session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=10)).isoformat()
                 log_audit_event(
                     event_type='LOGIN_SUCCESS',
                     actor_enrollment=user.enrollment_number,
@@ -355,7 +373,6 @@ def passkey_auth_verify(request):
 
             auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
             enforce_single_session_login(request, user)
-            request.session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=10)).isoformat()
             log_audit_event(
                 event_type='LOGIN_SUCCESS',
                 actor_enrollment=user.enrollment_number,
@@ -365,7 +382,8 @@ def passkey_auth_verify(request):
         else:
             return JsonResponse({'success': False, 'error': msg}, status=400)
     except Exception as exc:
-        return JsonResponse({'success': False, 'error': str(exc)}, status=400)
+        logger.warning("Passkey assertion error: %s", type(exc).__name__)
+        return JsonResponse({'success': False, 'error': 'Invalid passkey assertion request.'}, status=400)
 
 
 @login_required
@@ -442,6 +460,9 @@ def passkey_reg_verify(request):
         if not success:
             return JsonResponse({'success': False, 'error': msg}, status=400)
 
+        if PasskeyCredential.objects.filter(credential_id=cred_info['credential_id']).exclude(user=request.user).exists():
+            return JsonResponse({'success': False, 'error': 'Unable to register this passkey.'}, status=400)
+
         PasskeyCredential.objects.update_or_create(
             user=request.user,
             credential_id=cred_info['credential_id'],
@@ -465,6 +486,28 @@ def passkey_reg_verify(request):
     except Exception as exc:
         return JsonResponse({'success': False, 'error': 'Passkey registration error.'}, status=400)
 
+
+@login_required
+@rate_limit(key_prefix='passkey_del', limit=10, period_seconds=60)
+@require_POST
+
+@login_required
+@rate_limit(key_prefix='step_up', limit=5, period_seconds=60)
+@require_POST
+def verify_security_step_up(request):
+    """Validate current password and security OTP to unlock sensitive security actions for 5 minutes."""
+    current_pw = request.POST.get('current_password', '').strip()
+    if not current_pw or not request.user.check_password(current_pw):
+        return JsonResponse({'success': False, 'error': 'Current password is required and must be correct.'}, status=400)
+
+    if not request.user.is_debug_account:
+        otp_code = request.POST.get('otp_code', '').strip()
+        ok, msg = verify_phone_otp(request.user, submitted_code=otp_code, purpose='SECURITY_CHANGE')
+        if not ok:
+            return JsonResponse({'success': False, 'error': msg}, status=400)
+
+    request.session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=5)).isoformat()
+    return JsonResponse({'success': True, 'message': 'Security verification confirmed.'})
 
 @login_required
 @rate_limit(key_prefix='passkey_del', limit=10, period_seconds=60)
@@ -545,6 +588,7 @@ def send_security_otp(request):
     """
     user = request.user
     if user.is_debug_account:
+        request.session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=5)).isoformat()
         return JsonResponse({'success': True, 'message': 'Debug account: OTP bypassed.'})
 
     target_phone = user.phone_number
@@ -585,42 +629,34 @@ def forgot_password_view(request):
         if action == 'request_otp':
             enrollment = request.POST.get('enrollment_number', '').strip().upper()
             user = User.objects.filter(enrollment_number=enrollment, is_deleted=False).first()
-            if not user:
-                messages.error(request, "No active student account found with that enrollment number.")
-            elif user.is_debug_account and getattr(settings, 'DEBUG', False):
-                messages.info(request, "This is a debug account. Password is 'Debug@123'.")
-                return redirect('login')
-            else:
+            if user:
                 can_resend, wait_sec = can_resend_otp(user, purpose='PASSWORD_RESET')
                 if can_resend:
-                    otp, raw_code = create_phone_otp(user, purpose='PASSWORD_RESET')
+                    create_phone_otp(user, purpose='PASSWORD_RESET')
                 request.session['reset_user_id'] = user.id
-                e = user.email or ''
-                masked_email = f"{e[:2]}***@{e.split('@')[1]}" if '@' in e else e
-                p = user.phone_number or ''
-                masked_phone = f"***-***-{p[-4:]}" if len(p) >= 4 else p
-                if can_resend:
-                    if not getattr(otp, 'any_delivered', True):
-                        messages.warning(request, "Delivery failed. We could not reach your email or mobile. You can request a reset in-person via the Physical Desk tab below.")
-                    elif getattr(otp, 'email_sent', False) and not getattr(otp, 'sms_sent', False):
-                        messages.success(request, f"A 6-digit reset code was dispatched to your registered email ({masked_email}). (SMS delivery unavailable).")
-                    else:
-                        messages.success(request, f"A 6-digit reset code was dispatched to your registered email ({masked_email}) and mobile ({masked_phone}).")
-                else:
-                    messages.info(request, f"A reset code was already dispatched recently. Please check your email or wait {wait_sec}s before requesting a new code.")
-                return render(request, 'registration/forgot_password.html', {
-                    'step': 'verify_otp',
-                    'enrollment_number': user.enrollment_number,
-                    'masked_phone': masked_phone,
-                    'masked_email': masked_email,
-                })
+                request.session['reset_requested_at'] = timezone.now().timestamp()
+            
+            messages.info(
+                request,
+                "If an active account matches that enrollment number, a verification code has been dispatched to its registered contact channels."
+            )
+            return render(request, 'registration/forgot_password.html', {
+                'step': 'verify_otp',
+                'enrollment_number': enrollment,
+            })
 
         elif action == 'verify_reset':
             user_id = request.session.get('reset_user_id')
-            user = get_object_or_404(User, id=user_id) if user_id else None
-            if not user:
-                messages.error(request, "Session expired. Please request a new reset code.")
+            reset_req_at = request.session.get('reset_requested_at')
+            now_ts = timezone.now().timestamp()
+
+            if not user_id or not reset_req_at or (now_ts - reset_req_at) > 300:
+                request.session.pop('reset_user_id', None)
+                request.session.pop('reset_requested_at', None)
+                messages.error(request, "Password reset session expired. Please request a new code.")
                 return redirect('forgot_password')
+
+            user = get_object_or_404(User, id=user_id)
 
             otp_code = request.POST.get('otp_code', '').strip()
             new_password = request.POST.get('new_password', '').strip()
@@ -656,7 +692,8 @@ def forgot_password_view(request):
                         pass
                 user.current_session_key = ''
                 user.save()
-                del request.session['reset_user_id']
+                request.session.pop('reset_user_id', None)
+                request.session.pop('reset_requested_at', None)
                 log_audit_event(
                     event_type='SECURITY_SETTINGS_UPDATED',
                     actor_enrollment=user.enrollment_number,
@@ -673,19 +710,14 @@ def forgot_password_view(request):
 
         elif action == 'physical_request':
             enrollment = request.POST.get('enrollment_number', '').strip().upper()
-            contact_email = request.POST.get('contact_email', '').strip()
-            contact_phone = request.POST.get('contact_phone', '').strip()
-            student_notes = request.POST.get('student_notes', '').strip()
+            contact_email = request.POST.get('contact_email', '').strip()[:254]
+            contact_phone = normalize_phone_number(request.POST.get('contact_phone', '').strip())[:20]
+            student_notes = request.POST.get('student_notes', '').strip()[:500]
 
             user = User.objects.filter(enrollment_number=enrollment, is_deleted=False).first()
-            if not user:
-                messages.error(request, "No registered account found with that enrollment number.")
-                active_tab = 'in_person'
-            else:
+            if user:
                 existing = PhysicalVerificationRequest.objects.filter(user=user, status='PENDING').first()
-                if existing:
-                    messages.warning(request, "You already have an active pending physical verification request. Please visit the Campus Operations Desk.")
-                else:
+                if not existing:
                     PhysicalVerificationRequest.objects.create(
                         user=user,
                         contact_email=contact_email,
@@ -698,8 +730,11 @@ def forgot_password_view(request):
                         actor_enrollment=user.enrollment_number,
                         description='Physical In-Person Verification request submitted',
                     )
-                    messages.success(request, "In-Person Verification Request submitted! Please visit the Campus Operations Desk with your official Institute ID card.")
-                return redirect('login')
+            messages.success(
+                request,
+                "If the enrollment number is valid, your in-person verification request has been queued. Please visit the Campus Operations Desk with your official Institute ID card."
+            )
+            return redirect('login')
 
     return render(request, 'registration/forgot_password.html', {
         'step': 'request_otp',
@@ -723,26 +758,27 @@ def apply_account(request):
         is_debug = enrollment.startswith('20XX') and (getattr(settings, 'DEBUG', False) or 'test' in sys.argv)
         phone_verified = False
 
-        if is_debug:
-            phone_verified = True
-        else:
-            if not phone_otp:
-                form.add_error(None, "Phone verification code is required. Please verify your phone number via OTP.")
+        if form.is_valid():
+            if is_debug:
+                phone_verified = True
             else:
-                phone_verified, otp_err = verify_phone_otp(phone_number=phone_num, email=email_addr, submitted_code=phone_otp, purpose='SIGNUP')
-                if not phone_verified:
-                    form.add_error(None, f"Phone verification failed: {otp_err}")
+                if not phone_otp:
+                    form.add_error(None, "Phone verification code is required. Please verify your phone number via OTP.")
+                else:
+                    phone_verified, otp_err = verify_phone_otp(phone_number=phone_num, email=email_addr, submitted_code=phone_otp, purpose='SIGNUP')
+                    if not phone_verified:
+                        form.add_error(None, f"Phone verification failed: {otp_err}")
 
-        if form.is_valid() and phone_verified:
-            with transaction.atomic():
-                application = form.save(commit=False)
-                application.application_number = uuid.uuid4().hex[:8].upper()
-                application.password = make_password(form.cleaned_data['password'])
-                application.phone_verified = True
-                application.save()
-            return render(request, 'accounts/application_success.html', {
-                'application': application,
-            })
+            if phone_verified:
+                with transaction.atomic():
+                    application = form.save(commit=False)
+                    application.application_number = uuid.uuid4().hex[:8].upper()
+                    application.password = make_password(form.cleaned_data['password'])
+                    application.phone_verified = True
+                    application.save()
+                return render(request, 'accounts/application_success.html', {
+                    'application': application,
+                })
     else:
         form = AccountApplicationForm()
 
@@ -777,6 +813,7 @@ def dashboard(request):
 
 
 @login_required
+@verified_student_required
 def profile_view(request, enrollment_number):
     """View any verified user's profile with privacy safeguards, password change, and 10-minute grace window."""
     profile_user = get_object_or_404(
@@ -811,17 +848,27 @@ def profile_view(request, enrollment_number):
         two_factor_changed = (new_2fa != profile_user.two_factor_enabled)
         security_changed = phone_changed or email_changed or password_changed or two_factor_changed
 
+        if security_changed:
+            if not profile_user.is_debug_account and not grace_active:
+                sec_otp = request.POST.get('security_otp_code', '').strip()
+                otp_valid, otp_msg = verify_phone_otp(profile_user, submitted_code=sec_otp, purpose='SECURITY_CHANGE')
+                if not otp_valid:
+                    messages.error(request, f"Security verification required: {otp_msg}")
+                    return redirect('profile', enrollment_number=profile_user.enrollment_number)
+                request.session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=5)).isoformat()
+                grace_active = True
+
+            current_password = request.POST.get('current_password', '').strip()
+            if not current_password or not profile_user.check_password(current_password):
+                messages.error(request, "Current password is required and must be correct to modify security settings or contact information.")
+                return redirect('profile', enrollment_number=profile_user.enrollment_number)
+
         if email_changed:
             if User.objects.filter(email=new_email, is_deleted=False).exclude(id=profile_user.id).exists():
                 messages.error(request, "This email address is already registered to another active account.")
                 return redirect('profile', enrollment_number=profile_user.enrollment_number)
 
         if password_changed:
-            current_password = request.POST.get('current_password', '').strip()
-            if not current_password or not profile_user.check_password(current_password):
-                messages.error(request, "Current password is required and must be correct to set a new password.")
-                return redirect('profile', enrollment_number=profile_user.enrollment_number)
-
             if new_password != confirm_password:
                 messages.error(request, "New passwords do not match. Please re-enter.")
                 return redirect('profile', enrollment_number=profile_user.enrollment_number)
@@ -832,17 +879,6 @@ def profile_view(request, enrollment_number):
                 for error in e.messages:
                     messages.error(request, error)
                 return redirect('profile', enrollment_number=profile_user.enrollment_number)
-
-        # Non-debug accounts require OTP if security details changed and grace period expired
-        if security_changed and not profile_user.is_debug_account and not grace_active:
-            sec_otp = request.POST.get('security_otp_code', '').strip()
-            otp_valid, otp_msg = verify_phone_otp(profile_user, submitted_code=sec_otp, purpose='SECURITY_CHANGE')
-            if not otp_valid:
-                messages.error(request, f"Security verification required: {otp_msg}")
-                return redirect('profile', enrollment_number=profile_user.enrollment_number)
-            # Renew grace window
-            request.session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=10)).isoformat()
-            grace_active = True
 
         # Profile photo upload with strict validation
         if 'profile_photo' in request.FILES:
@@ -872,7 +908,11 @@ def profile_view(request, enrollment_number):
             profile_user.profile_photo = photo
         # Phone number update
         if new_phone:
-            profile_user.phone_number = new_phone
+            norm_phone = normalize_phone_number(new_phone)
+            if len(norm_phone) > 15:
+                messages.error(request, "Phone number exceeds maximum length of 15 digits.")
+                return redirect('profile', enrollment_number=profile_user.enrollment_number)
+            profile_user.phone_number = norm_phone
         # Email update
         if new_email:
             profile_user.email = new_email
@@ -886,6 +926,8 @@ def profile_view(request, enrollment_number):
         profile_user.show_friends_publicly = (request.POST.get('show_friends_publicly') == 'on')
         profile_user.hide_online_status = (request.POST.get('hide_online_status') == 'on')
         profile_user.hide_from_search = (request.POST.get('hide_from_search') == 'on')
+        profile_user.hide_profile_photo = (request.POST.get('hide_profile_photo') == 'on')
+        profile_user.show_contact_on_profile = (request.POST.get('show_contact_on_profile') == 'on')
         profile_user.two_factor_enabled = new_2fa
         profile_user.save()
 
@@ -1023,35 +1065,40 @@ def user_search(request):
 
 
 @login_required
+@verified_student_required
 @require_POST
 def unfriend_user(request, enrollment_number):
     """Remove a connection between friends."""
     target_user = get_object_or_404(User, enrollment_number=enrollment_number.strip().upper())
-    deleted, _ = Friendship.objects.filter(
-        Q(user1=request.user, user2=target_user) |
-        Q(user1=target_user, user2=request.user)
-    ).delete()
-    if deleted:
-        try:
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
-            channel_layer = get_channel_layer()
-            if channel_layer:
-                u1_id, u2_id = sorted([request.user.id, target_user.id])
-                async_to_sync(channel_layer.group_send)(
-                    f'direct_chat_{u1_id}_{u2_id}',
-                    {
-                        'type': 'chat.unfriended',
-                        'message': f'Friendship connection ended.',
-                    }
-                )
-        except Exception:
-            pass
-        messages.info(request, f'Removed {target_user.enrollment_number} from your friends.')
+    with transaction.atomic():
+        deleted, _ = Friendship.objects.filter(
+            Q(user1=request.user, user2=target_user) |
+            Q(user1=target_user, user2=request.user)
+        ).delete()
+        if deleted:
+            def _broadcast_unfriend():
+                try:
+                    from channels.layers import get_channel_layer
+                    from asgiref.sync import async_to_sync
+                    channel_layer = get_channel_layer()
+                    if channel_layer:
+                        u1_id, u2_id = sorted([request.user.id, target_user.id])
+                        async_to_sync(channel_layer.group_send)(
+                            f'direct_chat_{u1_id}_{u2_id}',
+                            {
+                                'type': 'chat.unfriended',
+                                'message': 'Friendship connection ended.',
+                            }
+                        )
+                except Exception:
+                    pass
+            transaction.on_commit(_broadcast_unfriend)
+            messages.info(request, f'Removed {target_user.enrollment_number} from your friends.')
     return redirect('profile', enrollment_number=target_user.enrollment_number)
 
 
 @login_required
+@verified_student_required
 def direct_chat_view(request, enrollment_number):
     """1-on-1 WebSocket chat room between confirmed friends."""
     friend = get_object_or_404(User, enrollment_number=enrollment_number.strip().upper())
@@ -1063,9 +1110,17 @@ def direct_chat_view(request, enrollment_number):
         Q(user1=request.user, user2=friend) | Q(user1=friend, user2=request.user)
     ).exists()
 
+    has_history = DirectMessage.objects.filter(
+        Q(sender=request.user, recipient=friend) | Q(sender=friend, recipient=request.user)
+    ).exists()
+
     if not is_friend:
-        messages.error(request, "Direct messaging is reserved for confirmed friends.")
-        return redirect('profile', enrollment_number=friend.enrollment_number)
+        if request.method == 'POST':
+            messages.error(request, "Direct messaging is reserved for confirmed friends.")
+            return redirect('profile', enrollment_number=friend.enrollment_number)
+        if not has_history:
+            messages.error(request, "Direct messaging is reserved for confirmed friends.")
+            return redirect('profile', enrollment_number=friend.enrollment_number)
 
     if request.method == 'POST':
         content = request.POST.get('content', '').strip()
@@ -1096,19 +1151,29 @@ def direct_chat_view(request, enrollment_number):
     return render(request, 'accounts/friend_chat.html', {
         'friend': friend,
         'chat_messages': chat_messages,
+        'is_friend': is_friend,
+        'read_only': not is_friend,
     })
 
 
 @login_required
+@verified_student_required
 def messages_inbox(request):
     """Overview of all friend conversations with latest snippet and unread badges."""
     friendships = Friendship.objects.filter(
         Q(user1=request.user) | Q(user2=request.user)
     ).select_related('user1', 'user2')
-    friends = [f.user2 if f.user1 == request.user else f.user1 for f in friendships]
+    friends_list = [f.user2 if f.user1 == request.user else f.user1 for f in friendships]
+    friend_ids = {f.id for f in friends_list}
+
+    # Include former friends with chat history
+    dm_sent_to = set(DirectMessage.objects.filter(sender=request.user).values_list('recipient_id', flat=True))
+    dm_rcvd_from = set(DirectMessage.objects.filter(recipient=request.user).values_list('sender_id', flat=True))
+    all_chat_partner_ids = friend_ids | dm_sent_to | dm_rcvd_from
+    all_chat_users = User.objects.filter(id__in=all_chat_partner_ids).distinct()
 
     conversations = []
-    for friend in friends:
+    for friend in all_chat_users:
         latest = (
             DirectMessage.objects
             .filter(Q(sender=request.user, recipient=friend) | Q(sender=friend, recipient=request.user))
@@ -1183,6 +1248,12 @@ def approve_application(request, application_id):
         application.approved = True
         application.save()
         application.delete()
+        log_audit_event(
+            event_type='APP_APPROVED',
+            actor_enrollment=request.user.enrollment_number,
+            description=f'Application approved for {user.enrollment_number}',
+            target_id=user.enrollment_number,
+        )
 
     # Send approval email (fire-and-forget; console backend in dev, SMTP in prod)
     try:
@@ -1221,6 +1292,12 @@ def reject_application(request, application_id):
         application = get_object_or_404(AccountApplication, id=application_id, approved=False)
         enrollment = application.enrollment_number
         application.delete()
+        log_audit_event(
+            event_type='APP_REJECTED',
+            actor_enrollment=request.user.enrollment_number,
+            description=f'Application rejected for {enrollment}',
+            target_id=enrollment,
+        )
 
     if request.htmx:
         return HttpResponse('')
@@ -1296,6 +1373,7 @@ def admin_analytics(request):
 
 @require_POST
 @login_required
+@verified_student_required
 def send_friend_request(request, enrollment_number):
     target = get_object_or_404(
         User,
@@ -1322,6 +1400,7 @@ def send_friend_request(request, enrollment_number):
 
 @require_POST
 @login_required
+@verified_student_required
 def accept_friend_request(request, request_id):
     friend_request = get_object_or_404(
         FriendRequest,
@@ -1346,6 +1425,7 @@ def accept_friend_request(request, request_id):
 
 @require_POST
 @login_required
+@verified_student_required
 def decline_friend_request(request, request_id):
     friend_request = get_object_or_404(
         FriendRequest,

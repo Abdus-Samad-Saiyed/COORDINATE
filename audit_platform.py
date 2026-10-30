@@ -49,7 +49,8 @@ def run_audit():
             "verified": True,
         }
     )
-    admin_user.set_password("AuditPass123!")
+    import secrets; audit_pw = os.environ.get("AUDIT_USER_PASSWORD", secrets.token_urlsafe(16))
+    admin_user.set_password(audit_pw)
     admin_user.is_superuser = True
     admin_user.is_staff = True
     admin_user.verified = True
@@ -68,7 +69,7 @@ def run_audit():
             "verified": True,
         }
     )
-    female_user.set_password("AuditPass123!")
+    female_user.set_password(audit_pw)
     female_user.verified = True
     female_user.save()
 
@@ -85,7 +86,7 @@ def run_audit():
             "verified": True,
         }
     )
-    male_user.set_password("AuditPass123!")
+    male_user.set_password(audit_pw)
     male_user.verified = True
     male_user.save()
 
@@ -232,4 +233,15 @@ def run_audit():
                 print(f" - {r['name']} ({r['url']}): got {r['status']}, expected {r['expected']}")
 
 if __name__ == "__main__":
-    run_audit()
+    from django.test.utils import setup_databases, teardown_databases
+    from django.db import connection
+
+    old_db_config = setup_databases(verbosity=0, interactive=False)
+    try:
+        db_name = connection.settings_dict.get('NAME', '')
+        if not ('memory' in db_name or 'test' in db_name):
+            print("REFUSING TO RUN: audit_platform.py must only run against an isolated test database.", file=sys.stderr)
+            sys.exit(1)
+        run_audit()
+    finally:
+        teardown_databases(old_db_config, verbosity=0)

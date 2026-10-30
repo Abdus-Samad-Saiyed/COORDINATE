@@ -79,14 +79,17 @@ def run_comprehensive_audit():
     # PART 1: IDENTITY & DATABASE FIXTURES
     # =========================================================================
     print("\n--- 1. SEEDING AUDIT FIXTURES ---")
+    import secrets
+    admin_enrollment = os.environ.get('TEST_ADMIN_ENROLLMENT', '20XXBCSE999')
+    admin_pw = os.environ.get('TEST_ADMIN_PASSWORD', secrets.token_urlsafe(16))
     admin, _ = User.objects.get_or_create(
-        enrollment_number="2024BCSE065",
+        enrollment_number=admin_enrollment,
         defaults={
-            "username": "2024BCSE065",
-            "first_name": "Abdus",
-            "last_name": "Samad Saiyed",
-            "email": "asaiyed_2024bcse065@nitsri.ac.in",
-            "phone_number": os.environ.get("PERSONAL_SUPERACCOUNT_PHONE", "+919999999999"),
+            "username": admin_enrollment,
+            "first_name": "Audit",
+            "last_name": "Admin",
+            "email": f"{admin_enrollment.lower()}@nitsri.ac.in",
+            "phone_number": "+919999999999",
             "gender": "M",
             "is_staff": True,
             "is_superuser": True,
@@ -94,18 +97,14 @@ def run_comprehensive_audit():
             "verified": True,
         }
     )
-    admin_pw = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD', 'Debug@123')
     admin.set_password(admin_pw)
-    admin.first_name = os.environ.get('PERSONAL_SUPERACCOUNT_FIRST_NAME', 'Abdus')
-    admin.last_name = os.environ.get('PERSONAL_SUPERACCOUNT_LAST_NAME', 'Samad Saiyed')
     admin.is_staff = True
     admin.is_superuser = True
-    admin.email = os.environ.get('PERSONAL_SUPERACCOUNT_EMAIL', 'asaiyed_2024bcse065@nitsri.ac.in')
-    admin.phone_number = os.environ.get('PERSONAL_SUPERACCOUNT_PHONE', '+919999999999')
+    admin.verified = True
     admin.current_session_key = ''
     admin.save()
-    assert_test(admin.get_full_name() == "Abdus Samad Saiyed", "Superaccount full name is 'Abdus Samad Saiyed'")
-    assert_test(admin.email == "asaiyed_2024bcse065@nitsri.ac.in", "Superaccount email is 'asaiyed_2024bcse065@nitsri.ac.in'")
+    assert_test(admin.is_superuser, "Admin user is superuser")
+    assert_test(admin.verified, "Admin user is verified student")
 
     def force_login_sync(cl, u):
         cl.force_login(u)
@@ -425,5 +424,16 @@ def run_comprehensive_audit():
 
 
 if __name__ == '__main__':
-    success = run_comprehensive_audit()
-    sys.exit(0 if success else 1)
+    from django.test.utils import setup_databases, teardown_databases
+    from django.db import connection
+
+    old_db_config = setup_databases(verbosity=0, interactive=False)
+    try:
+        db_name = connection.settings_dict.get('NAME', '')
+        if not ('memory' in db_name or 'test' in db_name):
+            print("REFUSING TO RUN: test_full_platform_e2e.py must only run against an isolated test database.", file=sys.stderr)
+            sys.exit(1)
+        success = run_comprehensive_audit()
+        sys.exit(0 if success else 1)
+    finally:
+        teardown_databases(old_db_config, verbosity=0)

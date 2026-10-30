@@ -5,29 +5,37 @@ against brute-force and resource exhaustion attacks.
 """
 
 from functools import wraps
+import logging
+from django.conf import settings
 from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 
+logger = logging.getLogger(__name__)
+
 
 def get_client_ip(request):
     """Extract client IP address safely from request.
-    In reverse-proxied production environments (nginx/gunicorn), intermediate proxies
-    append to HTTP_X_FORWARDED_FOR. The rightmost IP represents the client connected
-    to our trusted ingress reverse proxy.
+    Only inspects HTTP_X_FORWARDED_FOR if TRUST_X_FORWARDED_FOR is True and the immediate
+    REMOTE_ADDR is in TRUSTED_PROXY_IPS.
     """
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        parts = [p.strip() for p in x_forwarded_for.split(',') if p.strip()]
-        if parts:
-            return parts[-1]
-    return request.META.get('REMOTE_ADDR', '127.0.0.1')
+    remote_addr = request.META.get('REMOTE_ADDR', '127.0.0.1')
+    if getattr(settings, 'TRUST_X_FORWARDED_FOR', False):
+        trusted_proxies = getattr(settings, 'TRUSTED_PROXY_IPS', ['127.0.0.1'])
+        if remote_addr in trusted_proxies:
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                parts = [p.strip() for p in x_forwarded_for.split(',') if p.strip()]
+                if parts:
+                    return parts[-1]
+    return remote_addr
 
 
 def rate_limit(key_prefix: str, limit: int, period_seconds: int, message: str = None):
     """
     Decorator to rate limit POST requests by client IP and identifier.
     Uses atomic cache.add and cache.incr to prevent race conditions and TTL resets.
+    Wraps cache operations in try/except to prevent 500s on temporary cache outage.
     """
     if message is None:
         message = 'Too many requests. Please wait a few minutes before trying again.'
@@ -37,19 +45,45 @@ def rate_limit(key_prefix: str, limit: int, period_seconds: int, message: str = 
         def _wrapped_view(request, *args, **kwargs):
             if request.method == 'POST':
                 ip = get_client_ip(request)
-                cache_key = f'ratelimit:{key_prefix}:{ip}'
+                cache_key_ip = f'ratelimit:{key_prefix}:{ip}'
 
-                # Atomic counter: cache.add sets initial 1 with period_seconds TTL.
-                # If key already exists, cache.incr increments count without resetting TTL.
-                if not cache.add(cache_key, 1, timeout=period_seconds):
-                    try:
-                        current_count = cache.incr(cache_key)
-                    except ValueError:
-                        current_count = cache.get(cache_key, 1)
-                else:
-                    current_count = 1
+                # Extract identifier if available
+                ident = ''
+                for field in ('username', 'enrollment_number', 'phone_number', 'email'):
+                    val = request.POST.get(field, '').strip().upper()
+                    if val:
+                        ident = val
+                        break
 
-                if current_count > limit:
+                current_count_ip = 1
+                current_count_id = 1
+
+                try:
+                    # IP throttling counter
+                    if not cache.add(cache_key_ip, 1, timeout=period_seconds):
+                        try:
+                            current_count_ip = cache.incr(cache_key_ip)
+                        except ValueError:
+                            current_count_ip = cache.get(cache_key_ip, 1)
+                    else:
+                        current_count_ip = 1
+
+                    # Identifier throttling counter
+                    if ident:
+                        cache_key_id = f'ratelimit:{key_prefix}:id:{ident}'
+                        if not cache.add(cache_key_id, 1, timeout=period_seconds):
+                            try:
+                                current_count_id = cache.incr(cache_key_id)
+                            except ValueError:
+                                current_count_id = cache.get(cache_key_id, 1)
+                        else:
+                            current_count_id = 1
+                except Exception as exc:
+                    logger.warning("Cache backend unavailable in rate_limit: %s", type(exc).__name__)
+                    current_count_ip = 1
+                    current_count_id = 1
+
+                if current_count_ip > limit or current_count_id > limit:
                     # Check if client expects JSON
                     accept = request.headers.get('accept', '') or ''
                     content_type = request.content_type or ''

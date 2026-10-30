@@ -50,10 +50,12 @@ class User(AbstractUser):
     show_friends_publicly = models.BooleanField(default=True)
     hide_online_status = models.BooleanField(default=False)
     hide_from_search = models.BooleanField(default=False)
+    hide_profile_photo = models.BooleanField(default=False)
+    show_contact_on_profile = models.BooleanField(default=True)
     two_factor_enabled = models.BooleanField(default=False)
 
-    # Single active session security key
-    current_session_key = models.CharField(max_length=40, blank=True, default='')
+    # Single active session security key (HMAC digest or raw key)
+    current_session_key = models.CharField(max_length=64, blank=True, default='')
 
     # Soft deletion / Account closed state
     is_deleted = models.BooleanField(default=False)
@@ -77,6 +79,10 @@ class User(AbstractUser):
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._initial_profile_photo_name = self.profile_photo.name if (self.pk and self.profile_photo) else ''
+
     def save(self, *args, **kwargs):
         if self.email:
             self.email = self.email.strip().lower()
@@ -89,21 +95,25 @@ class User(AbstractUser):
             self.branch = e[5:8]
             self.roll_number = e[8:]
 
-        # Delete old profile photo from storage when updating with a new photo
-        if self.pk:
-            try:
-                old_user = User.objects.filter(pk=self.pk).only('profile_photo').first()
-                if (
-                    old_user
-                    and old_user.profile_photo
-                    and old_user.profile_photo.name
-                    and old_user.profile_photo != self.profile_photo
-                ):
-                    old_user.profile_photo.storage.delete(old_user.profile_photo.name)
-            except Exception:
-                pass
+        update_fields = kwargs.get('update_fields')
+        old_photo_to_delete = None
+        if self.pk and (update_fields is None or 'profile_photo' in update_fields):
+            current_photo_name = self.profile_photo.name if self.profile_photo else ''
+            if self._initial_profile_photo_name and self._initial_profile_photo_name != current_photo_name:
+                old_photo_to_delete = self._initial_profile_photo_name
 
         super().save(*args, **kwargs)
+        self._initial_profile_photo_name = self.profile_photo.name if self.profile_photo else ''
+
+        if old_photo_to_delete:
+            def _delete_old_file(name=old_photo_to_delete, storage=self.profile_photo.storage):
+                try:
+                    if not User.objects.filter(profile_photo=name).exists():
+                        storage.delete(name)
+                except Exception:
+                    pass
+            from django.db import transaction
+            transaction.on_commit(_delete_old_file)
 
     # ------------------------------------------------------------------
     # Properties
@@ -130,12 +140,14 @@ class User(AbstractUser):
         Only visible to:
           - Self
           - Staff / superusers
-          - Connected friends
+          - Connected friends when target user enables contact visibility
         """
         if not viewer or not viewer.is_authenticated:
             return False
         if viewer == self or viewer.is_staff or viewer.is_superuser:
             return True
+        if not getattr(self, 'show_contact_on_profile', True):
+            return False
         return Friendship.objects.filter(
             models.Q(user1=viewer, user2=self) | models.Q(user1=self, user2=viewer)
         ).exists()
@@ -385,7 +397,13 @@ class AuditEvent(models.Model):
         ('ACCOUNT_DELETED', 'Account Closed / Deleted by Admin'),
         ('PHYSICAL_VERIFICATION_REQUESTED', 'Physical In-Person Verification Filed'),
         ('PHYSICAL_VERIFICATION_RESOLVED', 'Physical In-Person Verification Approved'),
+        ('PHYSICAL_VERIFICATION_REJECTED', 'Physical In-Person Verification Rejected'),
         ('SECURITY_SETTINGS_UPDATED', 'Security Credentials Updated'),
+        ('PASSKEY_REGISTERED', 'Passkey Registered'),
+        ('CONTRIBUTOR_NOMINATED', 'Contributor Nominated'),
+        ('CONTRIBUTOR_REMOVED', 'Contributor Removed'),
+        ('CONSENT_GRANTED', 'Consent Granted'),
+        ('CONSENT_REVOKED', 'Consent Revoked'),
         ('SESSION_TERMINATED_CONCURRENT', 'Session Terminated on Concurrent Login'),
         ('RIDE_CREATED', 'Ride Created'),
         ('RIDE_JOINED', 'Ride Joined'),
@@ -511,3 +529,16 @@ def cleanup_user_profile_photo_on_delete(sender, instance, **kwargs):
             pass
 
 
+
+
+# ---------------------------------------------------------------------------
+# Signals
+# ---------------------------------------------------------------------------
+from django.contrib.auth.signals import user_logged_out
+from django.dispatch import receiver
+
+@receiver(user_logged_out)
+def on_user_logged_out(sender, request, user, **kwargs):
+    if user and hasattr(user, 'current_session_key') and getattr(user, 'pk', None):
+        user.current_session_key = ''
+        user.save(update_fields=['current_session_key'])

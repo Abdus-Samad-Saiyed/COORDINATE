@@ -76,6 +76,11 @@
 
                     <!-- Message Input Form -->
                     <div class="chat-footer pt-3 border-top border-secondary">
+                        {% if read_only %}
+                        <div class="alert alert-secondary mb-0 text-center py-2 text-muted small">
+                            <i class="bi bi-lock-fill me-1"></i> You are no longer connected as friends with this student. Conversation history is read-only.
+                        </div>
+                        {% else %}
                         <form id="direct-chat-form" method="POST" action="{% url 'direct_chat' friend.enrollment_number %}" class="d-flex gap-2 m-0">
                             {% csrf_token %}
                             <input type="text" id="direct-chat-input" name="content" class="form-control"
@@ -85,6 +90,7 @@
                                 <i class="bi bi-send-fill"></i>
                             </button>
                         </form>
+                        {% endif %}
                     </div>
                 </div>
             </div>

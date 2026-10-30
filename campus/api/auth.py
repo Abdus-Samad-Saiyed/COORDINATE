@@ -48,6 +48,8 @@ def json_error(
 
 def get_api_user(request: HttpRequest, allow_cookie: bool = True) -> Optional[Any]:
     """Resolve user from Authorization header or standard session."""
+    from accounts.two_factor import hash_otp
+
     # 1. Check Authorization header: 'Bearer <token>' or 'Token <token>'
     auth_header = request.headers.get("Authorization", "") or request.META.get("HTTP_AUTHORIZATION", "")
     if auth_header:
@@ -61,14 +63,21 @@ def get_api_user(request: HttpRequest, allow_cookie: bool = True) -> Optional[An
                     user_id = session_data.get("_auth_user_id")
                     if user_id:
                         user = User.objects.filter(pk=user_id, is_active=True).first()
-                        if user:
-                            return user
+                        if user and not getattr(user, "is_deleted", False):
+                            token_hash = hash_otp(token)
+                            if not user.current_session_key or user.current_session_key in (token, token_hash):
+                                return user
             except Exception:
                 pass
         return None
 
     # 2. Check standard cookie session authentication only if allowed
-    if allow_cookie and getattr(request, "user", None) and request.user.is_authenticated and request.user.is_active:
+    if allow_cookie and getattr(request, "user", None) and request.user.is_authenticated and request.user.is_active and not getattr(request.user, "is_deleted", False):
+        actual_key = request.session.session_key
+        if actual_key:
+            actual_hash = hash_otp(actual_key)
+            if request.user.current_session_key and request.user.current_session_key not in (actual_key, actual_hash):
+                return None
         return request.user
 
     return None

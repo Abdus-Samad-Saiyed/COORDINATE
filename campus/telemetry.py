@@ -51,34 +51,33 @@ class TrafficTelemetryMiddleware:
         today_key = f"nexus_reqs_day_{now.strftime('%Y%m%d')}"
         hour_key = f"nexus_reqs_hour_{now.strftime('%Y%m%d%H')}"
 
-        with _LOCK:
-            # Increment request counter
-            current = cache.get(KEY_TOTAL_REQUESTS, 0)
-            cache.set(KEY_TOTAL_REQUESTS, current + 1, timeout=None)
+        try:
+            if not cache.add(KEY_TOTAL_REQUESTS, 1, timeout=None):
+                cache.incr(KEY_TOTAL_REQUESTS)
 
-            # Accumulate daily & hourly counter
-            day_cnt = cache.get(today_key, 0)
-            cache.set(today_key, day_cnt + 1, timeout=86400 * 2)
+            if not cache.add(today_key, 1, timeout=86400 * 35):
+                cache.incr(today_key)
 
-            hour_cnt = cache.get(hour_key, 0)
-            cache.set(hour_key, hour_cnt + 1, timeout=3600 * 4)
+            if not cache.add(hour_key, 1, timeout=3600 * 4):
+                cache.incr(hour_key)
 
-            # Accumulate latency
-            tot_lat = cache.get(KEY_TOTAL_LATENCY_MS, 0.0)
-            cache.set(KEY_TOTAL_LATENCY_MS, tot_lat + latency_ms, timeout=None)
+            with _LOCK:
+                tot_lat = cache.get(KEY_TOTAL_LATENCY_MS, 0.0)
+                cache.set(KEY_TOTAL_LATENCY_MS, tot_lat + latency_ms, timeout=None)
 
-            # Peak RPS tracking across 1-second rolling window
-            now_sec = int(time.time())
-            window_ts = cache.get(KEY_LAST_WINDOW_TS, 0)
-            if now_sec == window_ts:
-                win_count = cache.get(KEY_WINDOW_REQ_COUNT, 0) + 1
-                cache.set(KEY_WINDOW_REQ_COUNT, win_count, timeout=10)
-                peak = cache.get(KEY_PEAK_RPS, 0)
-                if win_count > peak:
-                    cache.set(KEY_PEAK_RPS, win_count, timeout=None)
-            else:
-                cache.set(KEY_LAST_WINDOW_TS, now_sec, timeout=10)
-                cache.set(KEY_WINDOW_REQ_COUNT, 1, timeout=10)
+                now_sec = int(time.time())
+                window_ts = cache.get(KEY_LAST_WINDOW_TS, 0)
+                if now_sec == window_ts:
+                    win_count = cache.get(KEY_WINDOW_REQ_COUNT, 0) + 1
+                    cache.set(KEY_WINDOW_REQ_COUNT, win_count, timeout=10)
+                    peak = cache.get(KEY_PEAK_RPS, 0)
+                    if win_count > peak:
+                        cache.set(KEY_PEAK_RPS, win_count, timeout=None)
+                else:
+                    cache.set(KEY_LAST_WINDOW_TS, now_sec, timeout=10)
+                    cache.set(KEY_WINDOW_REQ_COUNT, 1, timeout=10)
+        except Exception:
+            pass
 
 
 def get_traffic_telemetry():
@@ -90,21 +89,33 @@ def get_traffic_telemetry():
     today_key = f"nexus_reqs_day_{now.strftime('%Y%m%d')}"
     hour_key = f"nexus_reqs_hour_{now.strftime('%Y%m%d%H')}"
 
-    recorded_total = cache.get(KEY_TOTAL_REQUESTS, 0)
-    recorded_today = cache.get(today_key, 0)
-    recorded_hour = cache.get(hour_key, 0)
+    recorded_total = cache.get(KEY_TOTAL_REQUESTS, 0) or 0
+    recorded_today = cache.get(today_key, 0) or 0
+    recorded_hour = cache.get(hour_key, 0) or 0
 
     requests_today = recorded_today
     requests_last_hour = recorded_hour
-    requests_7d = cache.get('nexus_telemetry_7d_count', recorded_today)
-    requests_30d = recorded_total
+
+    requests_7d = 0
+    requests_30d = 0
+    for i in range(30):
+        d = today_date - timedelta(days=i)
+        k = f"nexus_reqs_day_{d.strftime('%Y%m%d')}"
+        cnt = cache.get(k, 0) or 0
+        requests_30d += cnt
+        if i < 7:
+            requests_7d += cnt
+
+    if recorded_total > requests_30d:
+        requests_30d = recorded_total
+
     avg_daily_requests = round(requests_30d / 30) if requests_30d > 0 else 0
 
     # Users signed in today
     try:
         active_today_users = User.objects.filter(last_login__date=today_date).count()
         audit_logins_today = AuditEvent.objects.filter(
-            event_type__in=['LOGIN', '2FA_VERIFY'],
+            event_type='LOGIN_SUCCESS',
             timestamp__date=today_date,
         ).values('actor_enrollment').distinct().count()
         users_signin_today = max(active_today_users, audit_logins_today)

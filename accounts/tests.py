@@ -23,7 +23,8 @@ class AccountWorkflowTests(TestCase):
             enrollment_number='2024BCSE011',
             gender='M',
             phone_number='9999999901',
-            password='password123'
+            password='password123',
+            verified=True,
         )
 
         self.friend = User.objects.create_user(
@@ -31,7 +32,8 @@ class AccountWorkflowTests(TestCase):
             enrollment_number='2024BCSE012',
             gender='F',
             phone_number='9999999902',
-            password='password123'
+            password='password123',
+            verified=True,
         )
 
     def test_valid_application_normalizes_and_hashes_password(self):
@@ -230,7 +232,8 @@ class AccountWorkflowTests(TestCase):
         # 2. Upload second photo (replacing first)
         file2 = SimpleUploadedFile('avatar2.jpg', b'image_content_2', content_type='image/jpeg')
         self.user.profile_photo = file2
-        self.user.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.user.save()
 
         path2 = self.user.profile_photo.name
         self.assertNotEqual(path1, path2)

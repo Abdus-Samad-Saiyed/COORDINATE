@@ -24,7 +24,8 @@ class RideWorkflowTests(TestCase):
             enrollment_number='2024BCSE001',
             gender='M',
             phone_number='9999999999',
-            password='password123'
+            password='password123',
+            verified=True,
         )
 
         self.other = User.objects.create_user(
@@ -32,7 +33,8 @@ class RideWorkflowTests(TestCase):
             enrollment_number='2024BCSE002',
             gender='M',
             phone_number='9999999998',
-            password='password123'
+            password='password123',
+            verified=True,
         )
 
         self.girl = User.objects.create_user(
@@ -40,7 +42,8 @@ class RideWorkflowTests(TestCase):
             enrollment_number='2024BCSE003',
             gender='F',
             phone_number='9999999997',
-            password='password123'
+            password='password123',
+            verified=True,
         )
 
     def future_time(self, days=1):
@@ -435,7 +438,8 @@ class RideWorkflowTests(TestCase):
             enrollment_number='2024BCSE099',
             gender='M',
             phone_number='9999999988',
-            password='password123'
+            password='password123',
+            verified=True,
         )
         self.client.force_login(outsider)
         self.assertIn(

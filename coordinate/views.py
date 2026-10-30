@@ -519,6 +519,8 @@ def approve_join_request(request, ride_id, request_id):
     if ok:
         messages.success(request, msg)
     else:
+        if details.get("code") == "FORBIDDEN":
+            return HttpResponseForbidden(msg)
         messages.error(request, msg)
     return redirect('ride_detail', ride_id=ride_id)
 
@@ -535,6 +537,8 @@ def decline_join_request(request, ride_id, request_id):
     if ok:
         messages.info(request, msg)
     else:
+        if details.get("code") == "FORBIDDEN":
+            return HttpResponseForbidden(msg)
         messages.error(request, msg)
     return redirect('ride_detail', ride_id=ride_id)
 
@@ -991,9 +995,14 @@ def report_incident(request, ride_id):
         return HttpResponseForbidden("Only confirmed participants in this ride can file an incident report.")
 
     category = request.POST.get('category', 'OTHER').strip()
-    statement = request.POST.get('statement', '').strip()
+    statement = request.POST.get('statement', '').strip()[:5000]
     reported_enrollment = request.POST.get('reported_user', '').strip().upper()
     include_chat = request.POST.get('include_chat_log') in ['on', 'true', '1', True]
+
+    valid_categories = dict(RideIncidentReport.CATEGORY_CHOICES)
+    if category not in valid_categories:
+        messages.error(request, "Invalid incident report category.")
+        return redirect('ride_detail', ride_id=ride_id)
 
     if not statement:
         messages.error(request, "A detailed statement describing the incident is required.")
@@ -1002,6 +1011,10 @@ def report_incident(request, ride_id):
     reported_user = None
     if reported_enrollment:
         reported_user = User.objects.filter(enrollment_number=reported_enrollment).first()
+        valid_targets = [ride.creator] + [p.user for p in ride.participants.select_related('user').all()]
+        if reported_user not in valid_targets:
+            messages.error(request, "Reported student must be a host or confirmed participant of this ride.")
+            return redirect('ride_detail', ride_id=ride_id)
 
     chat_transcript = ""
     if include_chat:

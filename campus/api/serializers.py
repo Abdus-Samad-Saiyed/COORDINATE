@@ -7,6 +7,7 @@ with strict field minimization and privacy preservation.
 from typing import Any, Dict, List, Optional
 from accounts.models import User
 from coordinate.models import RideRequest
+from coordinate.policies import can_view_ride_identity
 
 
 def serialize_user(user: User, include_stats: bool = False) -> Dict[str, Any]:
@@ -47,8 +48,8 @@ def serialize_ride(ride: RideRequest, request_user: Optional[User] = None) -> Di
         "total_spots": ride.total_spots,
         "available_spots": ride.spots_remaining(),
         "creator": {
-            "enrollment_number": ride.creator.enrollment_number,
-            "name": ride.creator.display_name,
+            "enrollment_number": ride.creator.enrollment_number if not request_user or can_view_ride_identity(request_user, ride, ride.creator) else "PROTECTED",
+            "name": ride.creator.display_name if not request_user or can_view_ride_identity(request_user, ride, ride.creator) else (f"Student ({ride.creator.gender})" if ride.creator.gender else "Student"),
             "gender": ride.creator.gender,
         },
     }
@@ -66,9 +67,10 @@ def serialize_ride_detail(ride: RideRequest, request_user: Optional[User] = None
     participants = []
     for p in ride.participants.select_related('user').all():
         u = p.user
+        can_see_id = not request_user or can_view_ride_identity(request_user, ride, u)
         p_info = {
-            "enrollment_number": u.enrollment_number,
-            "name": u.display_name,
+            "enrollment_number": u.enrollment_number if can_see_id else "PROTECTED",
+            "name": u.display_name if can_see_id else (f"Student ({u.gender})" if u.gender else "Student"),
             "gender": u.gender,
             "is_creator": u.pk == ride.creator_id,
         }

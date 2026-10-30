@@ -54,9 +54,9 @@ def can_view_profile_field(viewer: Optional[User], target_user: User, field_name
         models.Q(user1=viewer, user2=target_user) | models.Q(user1=target_user, user2=viewer)
     ).exists()
 
-    # Direct contact fields require friendship or staff
+    # Direct contact fields require friendship and show_contact_on_profile toggle
     if field_name in ('phone_number', 'email'):
-        return is_friend
+        return is_friend and getattr(target_user, 'show_contact_on_profile', True)
 
     # Public institutional fields (name, enrollment, gender, branch, degree, on-time rating)
     if field_name in ('full_name', 'enrollment_number', 'gender', 'branch', 'degree', 'joining_year', 'on_time_percentage'):
@@ -64,6 +64,8 @@ def can_view_profile_field(viewer: Optional[User], target_user: User, field_name
 
     # Profile photo visibility respects user privacy toggle
     if field_name == 'profile_photo':
+        if getattr(target_user, 'hide_profile_photo', False):
+            return False
         if getattr(target_user, 'hide_from_search', False) and not is_friend:
             return False
         return True
@@ -113,6 +115,21 @@ def can_view_ride(viewer: Optional[User], ride) -> bool:
 
     return False
 
+
+
+def can_view_ride_identity(viewer: Optional[User], ride, target_user: User) -> bool:
+    """Determine whether viewer can see target_user's identity within a ride."""
+    if not viewer or not viewer.is_authenticated:
+        return False
+    if viewer == target_user or viewer.is_staff or viewer.is_superuser:
+        return True
+    if not can_view_ride(viewer, ride):
+        return False
+    from .models import RideConsent
+    consent = RideConsent.objects.filter(ride=ride, user=target_user, is_revoked=False).first()
+    if consent and not consent.disclose_ride_identity:
+        return False
+    return True
 
 def can_view_ride_contact(viewer: Optional[User], ride, target_user: User) -> bool:
     """
