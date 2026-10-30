@@ -852,10 +852,27 @@ def complete_ride(request, ride_id):
             .select_related('user')
         )
         if len(participant_users) >= 2:
+            fifteen_days_ago = timezone.now() - datetime.timedelta(days=15)
             for rp in participant_users:
+                # Rides completed always increments for verified trips
                 rp.user.rides_completed = F('rides_completed') + 1
-                rp.user.on_time_count = F('on_time_count') + 1
-                rp.user.save(update_fields=['rides_completed', 'on_time_count'])
+
+                # Anti-farming reputation rate limit: on-time reliability bonus capped at 3 boosts per 15-day rolling window
+                prior_completed_window = (
+                    RideParticipant.objects
+                    .filter(
+                        user=rp.user,
+                        ride__status='COMPLETED',
+                        ride__departure_time__gte=fifteen_days_ago
+                    )
+                    .exclude(ride=ride)
+                    .count()
+                )
+                if prior_completed_window < 3:
+                    rp.user.on_time_count = F('on_time_count') + 1
+                    rp.user.save(update_fields=['rides_completed', 'on_time_count'])
+                else:
+                    rp.user.save(update_fields=['rides_completed'])
 
     messages.success(request, 'Ride marked as completed. You can now review your fellow passengers.')
     return redirect('ride_detail', ride_id=ride_id)

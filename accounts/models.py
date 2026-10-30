@@ -121,11 +121,9 @@ class User(AbstractUser):
 
     @property
     def is_debug_account(self) -> bool:
-        """Synthetic debug accounts begin with '20XX' and are active only when DEBUG=True or test runner."""
-        from django.conf import settings
-        import sys
-        is_debug_mode = getattr(settings, 'DEBUG', False) or ('test' in sys.argv)
-        return bool(is_debug_mode and self.enrollment_number and self.enrollment_number.startswith('20XX'))
+        """Synthetic debug accounts begin with '20XX' and are active only in debug/test/alpha environments."""
+        from accounts.utils import is_debug_allowed, is_debug_enrollment
+        return bool(is_debug_allowed() and is_debug_enrollment(self.enrollment_number))
 
     @property
     def on_time_percentage(self) -> float:

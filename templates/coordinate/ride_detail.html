@@ -162,6 +162,7 @@
                     </span>
                 </div>
 
+                {% if is_participant or is_creator or request.user.is_staff or request.user.is_superuser %}
                 <div class="d-flex flex-column gap-3">
                     {% for p in participants %}
                         <div class="glass p-3 participant-card border-secondary">
@@ -186,7 +187,14 @@
 
                             <div class="d-flex justify-content-between align-items-center small text-secondary">
                                 {% if p.can_view_contact %}
-                                    <span><i class="bi bi-telephone-fill me-1"></i> {{ p.user.phone_number }}</span>
+                                    <span class="d-flex align-items-center gap-1">
+                                        <a href="tel:{{ p.user.phone_number }}" class="text-secondary text-decoration-none">
+                                            <i class="bi bi-telephone-fill me-1 text-success"></i>{{ p.user.phone_number }}
+                                        </a>
+                                        <a href="https://wa.me/{{ p.user.phone_number|cut:'+'|cut:' ' }}" target="_blank" rel="noopener noreferrer" class="badge bg-success-subtle text-success border border-success-subtle text-decoration-none py-1 px-1 ms-1" title="Chat on WhatsApp">
+                                            <i class="bi bi-whatsapp"></i>
+                                        </a>
+                                    </span>
                                 {% else %}
                                     <span><i class="bi bi-shield-check me-1 text-success"></i> Ride passenger</span>
                                 {% endif %}
@@ -217,6 +225,15 @@
                         </div>
                     {% endfor %}
                 </div>
+                {% else %}
+                <div class="glass p-4 text-center border-secondary">
+                    <i class="bi bi-shield-lock text-secondary fs-3 d-block mb-2"></i>
+                    <h6 class="text-white fw-bold mb-1">{{ participants|length }} Confirmed Student Passenger{{ participants|length|pluralize }}</h6>
+                    <p class="text-secondary small mb-0" style="font-size: 0.8rem;">
+                        Verified student identity and pickup phone numbers are visible to confirmed co-passengers once you join this ride.
+                    </p>
+                </div>
+                {% endif %}
 
                 {% if kicked_users.exists or left_users.exists %}
                     <!-- Departed or Kicked Users Section with Immediate Grievance Access -->

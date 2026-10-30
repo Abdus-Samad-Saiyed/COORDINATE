@@ -247,9 +247,8 @@ class RideWorkflowTests(TestCase):
         self.client.force_login(self.creator)
         self.client.post(reverse('leave_ride', args=[ride.id]))
 
-        self.assertFalse(
-            RideRequest.objects.filter(id=ride.id).exists()
-        )
+        ride.refresh_from_db()
+        self.assertEqual(ride.status, 'CANCELLED')
 
     def test_creator_can_kick_participant_and_cannot_kick_self(self):
 

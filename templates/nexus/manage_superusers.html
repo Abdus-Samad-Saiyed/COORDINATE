@@ -122,7 +122,8 @@
                                             </button>
                                         {% else %}
                                             <form method="POST" action="{% url 'manage_superusers' %}" class="d-inline m-0"
-                                                  onsubmit="return confirm('Revoke superuser privileges from {{ su.enrollment_number }} ({% if su == request.user %}YOUR ACCOUNT{% else %}{{ su.get_full_name }}{% endif %})?');">
+                                                  data-user="{{ su.enrollment_number }}"
+                                                  onsubmit="return confirm('Revoke superuser privileges from ' + this.dataset.user + '?');">
                                                 {% csrf_token %}
                                                 <input type="hidden" name="action" value="revoke">
                                                 <input type="hidden" name="enrollment_number" value="{{ su.enrollment_number }}">

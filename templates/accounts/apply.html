@@ -57,7 +57,7 @@
                     <div class="mb-3">
                         <label for="{{ form.email.id_for_label }}" class="form-label">Institute / Personal Email *</label>
                         {{ form.email }}
-                        <div class="form-text text-secondary small">Verification OTP will be dispatched to both your email inbox and phone.</div>
+                        <div class="form-text text-secondary small">Mandatory for confirmed in-person ride coordination and emergency contact between co-passengers. Direct SMS verification is planned for an upcoming release; your verification code will be sent to your email.</div>
                         {% if form.email.errors %}
                             <div class="text-danger small mt-1">{{ form.email.errors.0 }}</div>
                         {% endif %}

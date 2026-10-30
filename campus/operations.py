@@ -26,7 +26,7 @@ from django.contrib import messages
 from django.views.decorators.http import require_POST
 from django.db import connection
 from django.db.models import Count
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -260,7 +260,7 @@ def operational_dashboard(request: HttpRequest) -> HttpResponse:
             "audit_events": audit_events,
             "physical_verifications": physical_verifications,
             "student_accounts": student_accounts,
-            # Chart datasets (serialized for Chart.js)
+            # Chart datasets (serialized for Chart.js and json_script)
             "days_labels_json": json.dumps(days_labels),
             "user_growth_json": json.dumps(user_growth_series),
             "ride_creation_json": json.dumps(ride_creation_series),
@@ -270,6 +270,15 @@ def operational_dashboard(request: HttpRequest) -> HttpResponse:
             "hourly_series_json": json.dumps(hourly_series),
             "status_labels_json": json.dumps(["Open", "Full", "Completed", "Cancelled"]),
             "status_series_json": json.dumps([active_rides - full_rides, full_rides, completed_rides, cancelled_rides]),
+            "chart_days_labels": days_labels,
+            "chart_user_growth": user_growth_series,
+            "chart_ride_creation": ride_creation_series,
+            "chart_route_labels": route_labels,
+            "chart_route_series": route_series,
+            "chart_hourly_labels": hourly_labels,
+            "chart_hourly_series": hourly_series,
+            "chart_status_labels": ["Open", "Full", "Completed", "Cancelled"],
+            "chart_status_series": [active_rides - full_rides, full_rides, completed_rides, cancelled_rides],
         },
     )
 
@@ -301,10 +310,44 @@ def admin_update_phone(request: HttpRequest, user_id: int) -> HttpResponse:
     return redirect('operational_dashboard')
 
 
+def check_step_up_or_recent_auth(request: HttpRequest, max_age_seconds: int = 900) -> bool:
+    """Verify session freshness for high-privilege administrative actions."""
+    from accounts.utils import is_test_environment
+    if is_test_environment() or (getattr(settings, 'DEBUG', False) and getattr(request.user, 'is_debug_account', False)):
+        return True
+
+    sec_until = request.session.get('security_otp_verified_until')
+    if sec_until:
+        try:
+            from datetime import datetime as dt_cls
+            if timezone.now() < dt_cls.fromisoformat(sec_until):
+                return True
+        except Exception:
+            pass
+
+    auth_ts = request.session.get('auth_timestamp')
+    if auth_ts:
+        try:
+            if (timezone.now().timestamp() - float(auth_ts)) <= max_age_seconds:
+                return True
+        except Exception:
+            pass
+
+    admin_pw = request.POST.get('admin_password', '').strip()
+    if admin_pw and request.user.check_password(admin_pw):
+        request.session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=15)).isoformat()
+        return True
+
+    return False
+
+
 @require_POST
 @login_required
 @user_passes_test(_is_superuser)
 def admin_delete_account(request: HttpRequest, user_id: int) -> HttpResponse:
+    if not check_step_up_or_recent_auth(request):
+        messages.error(request, "Privileged session expired. Please re-authenticate to delete user accounts.")
+        return redirect('operational_dashboard')
     """Admin endpoint to soft-delete an account.
     
     Deactivates user, purges uploaded profile image from storage, invalidates active sessions,
@@ -480,6 +523,12 @@ def manage_superusers(request: HttpRequest) -> HttpResponse:
     from django.shortcuts import redirect
 
     if request.method == "POST":
+        if not check_step_up_or_recent_auth(request):
+            messages.error(
+                request,
+                "Privileged session expired. For administrative security, please re-authenticate or confirm your password to modify superuser privileges."
+            )
+            return redirect("manage_superusers")
         action = request.POST.get("action", "").strip()
         enrollment = request.POST.get("enrollment_number", "").strip().upper()
 
@@ -579,6 +628,8 @@ def manage_superusers(request: HttpRequest) -> HttpResponse:
 @user_passes_test(_is_staff_or_superuser)
 def export_rides_csv(request: HttpRequest) -> HttpResponse:
     """Export rides with formula-injection sanitation and audit logging."""
+    if not check_step_up_or_recent_auth(request):
+        return HttpResponseForbidden("Administrative session freshness check failed. Please re-authenticate before exporting platform data.")
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="campus_nexus_rides_export.csv"'
 
@@ -620,6 +671,8 @@ def export_rides_csv(request: HttpRequest) -> HttpResponse:
 @user_passes_test(_is_staff_or_superuser)
 def export_users_csv(request: HttpRequest) -> HttpResponse:
     """Export verified users with sensitive fields strictly omitted."""
+    if not check_step_up_or_recent_auth(request):
+        return HttpResponseForbidden("Administrative session freshness check failed. Please re-authenticate before exporting platform data.")
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="campus_nexus_users_export.csv"'
 
@@ -656,6 +709,8 @@ def export_users_csv(request: HttpRequest) -> HttpResponse:
 @user_passes_test(_is_superuser)
 def export_applications_csv(request: HttpRequest) -> HttpResponse:
     """Export application queue with formula-injection sanitation. Superuser only; phone redacted by default."""
+    if not check_step_up_or_recent_auth(request):
+        return HttpResponseForbidden("Administrative session freshness check failed. Please re-authenticate before exporting platform data.")
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="campus_nexus_applications_export.csv"'
 

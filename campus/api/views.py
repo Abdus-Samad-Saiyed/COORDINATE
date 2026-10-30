@@ -127,12 +127,15 @@ def api_login(request: HttpRequest) -> JsonResponse:
             code="INVALID_CREDENTIALS",
         )
 
-    # 2FA Enforcement for students with 2FA enabled
-    if user.two_factor_enabled and not (settings.DEBUG and user.is_debug_account):
+    # 2FA Enforcement for students with 2FA enabled, staff, superusers (unless debug account)
+    requires_2fa = (user.two_factor_enabled or user.is_staff or user.is_superuser) and not user.is_debug_account
+    if requires_2fa:
         otp_code = str(body.get("otp", "")).strip()
         if not otp_code:
-            from accounts.two_factor import create_phone_otp
-            create_phone_otp(user, purpose="2FA")
+            from accounts.two_factor import can_resend_otp, create_phone_otp
+            can_resend, _ = can_resend_otp(user, purpose="2FA")
+            if can_resend:
+                create_phone_otp(user, purpose="2FA")
             return json_error(
                 "Two-factor authentication required. An OTP has been dispatched.",
                 status=403,
@@ -153,6 +156,7 @@ def api_login(request: HttpRequest) -> JsonResponse:
         request.session.create()
     login(request, user)
     enforce_single_session_login(request, user)
+    request.session['auth_timestamp'] = timezone.now().timestamp()
     request.session.save()
 
     token = request.session.session_key
@@ -179,8 +183,8 @@ def api_logout(request: HttpRequest) -> JsonResponse:
 
     if token:
         try:
-            Session.objects.filter(session_key=token).delete()
             user = get_api_user(request)
+            Session.objects.filter(session_key=token).delete()
             if user and user.current_session_key == token:
                 user.current_session_key = ""
                 user.save(update_fields=["current_session_key"])

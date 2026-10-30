@@ -55,6 +55,19 @@ def rate_limit(key_prefix: str, limit: int, period_seconds: int, message: str = 
                         ident = val
                         break
 
+                if not ident and 'application/json' in (request.content_type or ''):
+                    try:
+                        import json
+                        body_data = json.loads(request.body.decode('utf-8'))
+                        if isinstance(body_data, dict):
+                            for field in ('username', 'enrollment_number', 'phone_number', 'email', 'enrollment'):
+                                val = str(body_data.get(field, '')).strip().upper()
+                                if val:
+                                    ident = val
+                                    break
+                    except Exception:
+                        pass
+
                 current_count_ip = 1
                 current_count_id = 1
 
@@ -70,7 +83,9 @@ def rate_limit(key_prefix: str, limit: int, period_seconds: int, message: str = 
 
                     # Identifier throttling counter
                     if ident:
-                        cache_key_id = f'ratelimit:{key_prefix}:id:{ident}'
+                        import hashlib
+                        ident_hash = hashlib.sha256(ident.encode('utf-8')).hexdigest()[:16]
+                        cache_key_id = f'ratelimit:{key_prefix}:id:{ident_hash}'
                         if not cache.add(cache_key_id, 1, timeout=period_seconds):
                             try:
                                 current_count_id = cache.incr(cache_key_id)

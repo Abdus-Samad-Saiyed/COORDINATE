@@ -168,10 +168,11 @@ def custom_login_view(request, extra_context=None):
         if form.is_valid():
             user = form.get_user()
 
-            # Synthetic branch debug accounts (20XX...) bypass 2FA only when DEBUG=True or test runner
-            if user.is_debug_account and (settings.DEBUG or 'test' in sys.argv):
+            # Synthetic branch debug accounts (20XX...) bypass 2FA only in debug/test/alpha environments
+            if user.is_debug_account:
                 auth_login(request, user)
                 enforce_single_session_login(request, user)
+                request.session['auth_timestamp'] = timezone.now().timestamp()
                 log_audit_event(
                     event_type='LOGIN_SUCCESS',
                     actor_enrollment=user.enrollment_number,
@@ -179,8 +180,8 @@ def custom_login_view(request, extra_context=None):
                 )
                 return redirect(redirect_to or 'dashboard')
 
-            # Real student accounts with 2FA enabled require 2FA OTP verification
-            if user.two_factor_enabled:
+            # Real accounts: Staff, Superusers, or users with 2FA enabled require 2FA OTP verification
+            if user.two_factor_enabled or user.is_staff or user.is_superuser:
                 request.session['pre_2fa_user_id'] = user.id
                 request.session['pre_2fa_redirect'] = redirect_to
                 request.session['pre_2fa_time'] = timezone.now().timestamp()
@@ -193,6 +194,7 @@ def custom_login_view(request, extra_context=None):
 
             auth_login(request, user)
             enforce_single_session_login(request, user)
+            request.session['auth_timestamp'] = timezone.now().timestamp()
             log_audit_event(
                 event_type='LOGIN_SUCCESS',
                 actor_enrollment=user.enrollment_number,
@@ -278,6 +280,8 @@ def two_factor_verify(request):
 
                 auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
                 enforce_single_session_login(request, user)
+                request.session['auth_timestamp'] = timezone.now().timestamp()
+                request.session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=15)).isoformat()
                 log_audit_event(
                     event_type='LOGIN_SUCCESS',
                     actor_enrollment=user.enrollment_number,

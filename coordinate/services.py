@@ -342,8 +342,9 @@ def leave_ride_service(ride_id: int, user: User) -> Tuple[bool, str, Dict[str, A
 
         remaining_count = RideParticipant.objects.filter(ride=ride).count()
         if remaining_count == 0:
-            ride.delete()
-            return True, "Successfully left ride. Ride deleted as no participants remain.", {"promoted": None, "closed": True}
+            ride.status = 'CANCELLED'
+            ride.save(update_fields=['status'])
+            return True, "Successfully left ride. Ride cancelled as no participants remain.", {"promoted": None, "closed": True}
 
         if ride.creator_id == user.id:
             next_host = RideParticipant.objects.filter(ride=ride).first()

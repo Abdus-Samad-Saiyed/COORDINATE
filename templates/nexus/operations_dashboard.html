@@ -673,11 +673,37 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ chart_days_labels|json_script:"chart-days-labels" }}
+{{ chart_user_growth|json_script:"chart-user-growth" }}
+{{ chart_ride_creation|json_script:"chart-ride-creation" }}
+{{ chart_route_labels|json_script:"chart-route-labels" }}
+{{ chart_route_series|json_script:"chart-route-series" }}
+{{ chart_hourly_labels|json_script:"chart-hourly-labels" }}
+{{ chart_hourly_series|json_script:"chart-hourly-series" }}
+{{ chart_status_labels|json_script:"chart-status-labels" }}
+{{ chart_status_series|json_script:"chart-status-series" }}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // Shared chart dark theme settings
     const fontColor = '#a1a1aa';
     const gridColor = 'rgba(255, 255, 255, 0.05)';
+
+    function getJsonData(id, fallback) {
+        const el = document.getElementById(id);
+        if (el && el.textContent) {
+            try { return JSON.parse(el.textContent); } catch (e) { return fallback; }
+        }
+        return fallback;
+    }
+    const daysLabels = getJsonData('chart-days-labels', []);
+    const userGrowth = getJsonData('chart-user-growth', []);
+    const rideCreation = getJsonData('chart-ride-creation', []);
+    const routeLabels = getJsonData('chart-route-labels', []);
+    const routeSeries = getJsonData('chart-route-series', []);
+    const hourlyLabels = getJsonData('chart-hourly-labels', []);
+    const hourlySeries = getJsonData('chart-hourly-series', []);
+    const statusLabels = getJsonData('chart-status-labels', ['Open', 'Full', 'Completed', 'Cancelled']);
+    const statusSeries = getJsonData('chart-status-series', []);
 
     // 1. Growth & Activity Chart
     const growthCtx = document.getElementById('growthActivityChart');
@@ -685,11 +711,11 @@ document.addEventListener('DOMContentLoaded', function () {
         new Chart(growthCtx, {
             type: 'line',
             data: {
-                labels: {{ days_labels_json|safe }},
+                labels: daysLabels,
                 datasets: [
                     {
                         label: 'New Verified Students',
-                        data: {{ user_growth_json|safe }},
+                        data: userGrowth,
                         borderColor: '#08B74F',
                         backgroundColor: 'rgba(8, 183, 79, 0.1)',
                         fill: true,
@@ -697,7 +723,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     },
                     {
                         label: 'Rides Created',
-                        data: {{ ride_creation_json|safe }},
+                        data: rideCreation,
                         borderColor: '#38bdf8',
                         backgroundColor: 'rgba(56, 189, 248, 0.1)',
                         fill: true,
@@ -725,9 +751,9 @@ document.addEventListener('DOMContentLoaded', function () {
         new Chart(statusCtx, {
             type: 'doughnut',
             data: {
-                labels: {{ status_labels_json|safe }},
+                labels: statusLabels,
                 datasets: [{
-                    data: {{ status_series_json|safe }},
+                    data: statusSeries,
                     backgroundColor: ['#08B74F', '#eab308', '#38bdf8', '#ef4444'],
                     borderWidth: 0,
                 }]
@@ -748,10 +774,10 @@ document.addEventListener('DOMContentLoaded', function () {
         new Chart(routesCtx, {
             type: 'bar',
             data: {
-                labels: {{ route_labels_json|safe }},
+                labels: routeLabels,
                 datasets: [{
                     label: 'Rides',
-                    data: {{ route_series_json|safe }},
+                    data: routeSeries,
                     backgroundColor: 'rgba(8, 183, 79, 0.7)',
                     borderColor: '#08B74F',
                     borderWidth: 1,
@@ -779,10 +805,10 @@ document.addEventListener('DOMContentLoaded', function () {
         new Chart(hourlyCtx, {
             type: 'bar',
             data: {
-                labels: {{ hourly_labels_json|safe }},
+                labels: hourlyLabels,
                 datasets: [{
                     label: 'Departures',
-                    data: {{ hourly_series_json|safe }},
+                    data: hourlySeries,
                     backgroundColor: 'rgba(56, 189, 248, 0.65)',
                     borderColor: '#38bdf8',
                     borderWidth: 1,

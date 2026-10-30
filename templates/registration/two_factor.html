@@ -38,13 +38,13 @@
                             </span>
                             {% endif %}
                             {% if masked_phone %}
-                            <span class="badge bg-dark border border-secondary font-monospace text-success px-2 py-1">
-                                <i class="bi bi-phone me-1"></i>{{ masked_phone }}
+                            <span class="badge bg-dark border border-secondary font-monospace text-secondary px-2 py-1" style="opacity: 0.6; cursor: not-allowed;" title="Direct SMS delivery is planned for an upcoming release. Verification is delivered to your registered email address.">
+                                <i class="bi bi-phone me-1"></i>{{ masked_phone }} <span class="badge bg-secondary text-light ms-1" style="font-size: 0.65rem;">Upcoming Release</span>
                             </span>
                             {% endif %}
                         </div>
                         <span class="d-block text-secondary small" style="font-size: 0.75rem;">
-                            Valid for 5 minutes &bull; Maximum 3 attempts &bull; Check your Email or SMS
+                            Valid for 5 minutes &bull; Maximum 3 attempts &bull; Verification dispatched to your email address
                         </span>
                     </div>
 
@@ -76,7 +76,7 @@
                         {% csrf_token %}
                         <input type="hidden" name="action" value="resend">
                         <button type="submit" class="btn btn-link text-secondary text-decoration-none small p-0">
-                            <i class="bi bi-arrow-repeat me-1"></i> Didn't receive code? Resend SMS OTP
+                            <i class="bi bi-arrow-repeat me-1"></i> Didn't receive code? Resend Email Verification Code
                         </button>
                     </form>
                 </div>

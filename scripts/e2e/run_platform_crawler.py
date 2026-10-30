@@ -8,6 +8,10 @@ import os
 import sys
 import django
 
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'campus.settings.dev')
 import django
 django.setup()
@@ -123,6 +127,10 @@ def run_audit():
 
     admin_client = Client()
     admin_client.force_login(admin_user)
+    admin_session = admin_client.session
+    admin_session['auth_timestamp'] = timezone.now().timestamp()
+    admin_session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=15)).isoformat()
+    admin_session.save()
 
     results = []
 

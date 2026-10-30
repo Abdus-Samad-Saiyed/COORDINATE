@@ -62,6 +62,12 @@ class RideRequest(models.Model):
         ordering = ['-created_at']
         verbose_name = 'Ride Request'
         verbose_name_plural = 'Ride Requests'
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(total_spots__gte=1, total_spots__lte=6),
+                name='check_total_spots_range',
+            ),
+        ]
 
     # ------------------------------------------------------------------
     # Computed helpers

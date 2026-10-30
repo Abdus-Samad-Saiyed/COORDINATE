@@ -35,3 +35,18 @@ class EnrollmentBackend(ModelBackend):
                 return user
 
         return None
+
+    def user_can_authenticate(self, user):
+        """
+        Reject inactive users, soft-deleted users, and reject 20XX synthetic
+        debug accounts when running in production.
+        """
+        is_active = super().user_can_authenticate(user)
+        if not is_active:
+            return False
+        if getattr(user, 'is_deleted', False):
+            return False
+        from accounts.utils import is_debug_enrollment, is_production_environment
+        if is_production_environment() and is_debug_enrollment(getattr(user, 'enrollment_number', '')):
+            return False
+        return True

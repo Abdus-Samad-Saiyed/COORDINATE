@@ -54,12 +54,18 @@ def hash_otp(code: str) -> str:
     return hmac.new(salt, code.strip().encode('utf-8'), hashlib.sha256).hexdigest()
 
 
+SMS_ENABLED = getattr(settings, 'SMS_ENABLED', False)
+
 def dispatch_sms(phone_number: str, message: str) -> bool:
     """
     Dispatch SMS verification message.
-    If TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are set in settings, sends via Twilio API.
-    Masks code in production logs to prevent credential leakage.
+    Preserved Twilio backend infrastructure for upcoming roadmap release.
+    Disabled when SMS_ENABLED is False.
     """
+    from accounts.utils import is_test_environment
+    if not is_test_environment() and not getattr(settings, 'SMS_ENABLED', False):
+        logger.debug("[SMS DISPATCH] Direct SMS gateway is disabled (roadmap feature).")
+        return False
     phone_number = normalize_phone_number(phone_number)
     twilio_sid = getattr(settings, 'TWILIO_ACCOUNT_SID', None)
     twilio_token = getattr(settings, 'TWILIO_AUTH_TOKEN', None)
@@ -118,7 +124,7 @@ def dispatch_email_otp(email: str, code: str, purpose: str = '2FA', user: User =
         'PASSWORD_RESET': 'Password Reset Recovery',
     }
     label = purpose_labels.get(purpose, 'Identity Verification')
-    subject = f"Campus Nexus — Your {label} Code: {code}"
+    subject = f"Campus Nexus — {label} Verification Code"
     user_name = user.display_name if user else "NIT Srinagar Student"
 
     plain_content = (

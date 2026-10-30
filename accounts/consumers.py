@@ -96,6 +96,9 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
         except (json.JSONDecodeError, TypeError):
             return
 
+        if not isinstance(data, dict):
+            return
+
         if getattr(self, '_presence_incremented', False):
             await self._refresh_presence_lease(self.user.id)
 

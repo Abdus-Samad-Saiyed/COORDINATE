@@ -40,53 +40,15 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ['enrollment_number', 'first_name', 'last_name', 'phone_number']
     ordering = ['enrollment_number']
     readonly_fields = ['branch', 'degree', 'joining_year', 'roll_number', 'last_login', 'date_joined']
-    actions = ['promote_to_superuser', 'revoke_superuser']
+    actions = []
 
-    @admin.action(description='Promote selected users to Superuser')
-    def promote_to_superuser(self, request, queryset):
-        actor_enrollment = getattr(request.user, 'enrollment_number', 'admin')
-        promoted = 0
-        for u in queryset:
-            if not u.is_superuser:
-                u.is_superuser = True
-                u.is_staff = True
-                u.save(update_fields=['is_superuser', 'is_staff'])
-                log_audit_event(
-                    event_type='SUPERUSER_PROMOTED',
-                    actor_enrollment=actor_enrollment,
-                    description=f'Promoted {u.enrollment_number} ({u.get_full_name()}) to superuser via Django admin',
-                    target_id=u.enrollment_number,
-                )
-                promoted += 1
-        self.message_user(request, f'Promoted {promoted} user(s) to superuser.', level=messages.SUCCESS)
-
-    @admin.action(description='Revoke Superuser privileges from selected users')
-    def revoke_superuser(self, request, queryset):
-        actor_enrollment = getattr(request.user, 'enrollment_number', 'admin')
-        active_superusers = User.objects.filter(is_superuser=True, is_active=True).count()
-        revoked = 0
-
-        for u in queryset:
-            if u.is_superuser:
-                if active_superusers <= 1 and u.is_active:
-                    self.message_user(
-                        request,
-                        f'Cannot revoke {u.enrollment_number}: at least one active superuser must remain to prevent lockout.',
-                        level=messages.ERROR,
-                    )
-                    continue
-                u.is_superuser = False
-                u.save(update_fields=['is_superuser'])
-                active_superusers -= 1
-                log_audit_event(
-                    event_type='SUPERUSER_REVOKED',
-                    actor_enrollment=actor_enrollment,
-                    description=f'Revoked superuser from {u.enrollment_number} ({u.get_full_name()}) via Django admin',
-                    target_id=u.enrollment_number,
-                )
-                revoked += 1
-        if revoked:
-            self.message_user(request, f'Revoked superuser privileges from {revoked} user(s).', level=messages.SUCCESS)
+    def get_readonly_fields(self, request, obj=None):
+        ro = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser:
+            ro.extend(['is_superuser', 'is_staff', 'user_permissions', 'groups'])
+        else:
+            ro.extend(['user_permissions'])
+        return ro
 
     fieldsets = (
         (None, {'fields': ('enrollment_number', 'password')}),

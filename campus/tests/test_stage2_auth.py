@@ -330,7 +330,6 @@ class Stage2DebugAccountSecurityTests(TestCase):
 
     def test_is_debug_account_property_respects_debug_mode(self):
         """is_debug_account must be False under production settings."""
-        # When DEBUG is False and not in test runner context:
-        with patch.object(settings, "DEBUG", False):
-            with patch("sys.argv", ["manage.py", "runserver"]):
-                self.assertFalse(self.user.is_debug_account)
+        # When DEBUG is False and not in test or alpha context:
+        with patch.object(settings, "DEBUG", False), patch.object(settings, "TESTING", False, create=True), patch.object(settings, "ALPHA_MODE", False, create=True), patch("sys.argv", ["manage.py", "runserver"]):
+            self.assertFalse(self.user.is_debug_account)

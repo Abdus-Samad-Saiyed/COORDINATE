@@ -86,7 +86,17 @@ class Command(BaseCommand):
         parser.add_argument(
             '--reset',
             action='store_true',
-            help='Delete existing debug accounts before recreating them.',
+            help='Delete existing 20XX debug accounts before recreating them.',
+        )
+        parser.add_argument(
+            '--reset-superuser',
+            action='store_true',
+            help='Overwrite existing personal superaccount password and attributes.',
+        )
+        parser.add_argument(
+            '--purge-legacy',
+            action='store_true',
+            help='Purge legacy 2024/2099 debug accounts.',
         )
 
     def handle(self, *args, **options):
@@ -96,7 +106,7 @@ class Command(BaseCommand):
                 'Refusing to create debug accounts in a production environment.'
             )
 
-        # 1. Create or update personal superaccount if configured in environment / settings
+        # 1. Create personal superaccount if configured in environment / settings
         super_user = None
         super_enrollment = PERSONAL_SUPERACCOUNT_ENROLLMENT or getattr(settings, 'PERSONAL_SUPERACCOUNT_ENROLLMENT', None)
         super_pw = PERSONAL_PASSWORD or getattr(settings, 'PERSONAL_SUPERACCOUNT_PASSWORD', None)
@@ -124,38 +134,29 @@ class Command(BaseCommand):
                 }
             )
             if not created_super:
-                for k, v in personal_account_data.items():
-                    setattr(super_user, k, v)
-                super_user.set_password(super_pw)
-                super_user.save()
-                self.stdout.write(self.style.SUCCESS(f'Updated superaccount {super_user.enrollment_number}'))
+                if options.get('reset_superuser'):
+                    for k, v in personal_account_data.items():
+                        setattr(super_user, k, v)
+                    super_user.set_password(super_pw)
+                    super_user.save()
+                    self.stdout.write(self.style.SUCCESS(f'Reset superaccount {super_user.enrollment_number}'))
+                else:
+                    self.stdout.write(f'Superaccount {super_user.enrollment_number} already exists; preserving credentials.')
             else:
                 self.stdout.write(self.style.SUCCESS(f'Created superaccount {super_user.enrollment_number}'))
         else:
             self.stdout.write('PERSONAL_SUPERACCOUNT not configured; skipping superaccount creation.')
 
-        # 2. Reassign rides and participations from 2024BCSE001 if superaccount exists
-        old_admin = User.objects.filter(enrollment_number='2024BCSE001').first()
-        if old_admin and super_user:
-            RideRequest.objects.filter(creator=old_admin).update(creator=super_user)
-            for p in RideParticipant.objects.filter(user=old_admin):
-                if not RideParticipant.objects.filter(ride=p.ride, user=super_user).exists():
-                    p.user = super_user
-                    p.save(update_fields=['user'])
-                else:
-                    p.delete()
-            old_admin.delete()
-            self.stdout.write(self.style.WARNING(f'Dropped legacy superaccount 2024BCSE001 and migrated rides to {super_user.enrollment_number}.'))
-
-        # 3. Clean up other legacy 2024 and 2099 debug accounts
-        legacy_debug_enrollments = [
-            '2024BCSE002', '2024BCSE003', '2024BECE004', '2024BECE005', '2024BCIV006',
-            '2099BCSE001', '2099BCSE002', '2099BCSE003', '2099BECE004', '2099BECE005', '2099BCIV006',
-            '2099BCSE999', '2099BCSE998', '2099BCSE997'
-        ]
-        deleted_legacy, _ = User.objects.filter(enrollment_number__in=legacy_debug_enrollments).delete()
-        if deleted_legacy:
-            self.stdout.write(self.style.WARNING(f'Purged {deleted_legacy} legacy debug account(s) using real student years.'))
+        # 2. Clean up legacy 2024 and 2099 debug accounts only if explicitly requested
+        if options.get('purge_legacy'):
+            legacy_debug_enrollments = [
+                '2024BCSE001', '2024BCSE002', '2024BCSE003', '2024BECE004', '2024BECE005', '2024BCIV006',
+                '2099BCSE001', '2099BCSE002', '2099BCSE003', '2099BECE004', '2099BECE005', '2099BCIV006',
+                '2099BCSE999', '2099BCSE998', '2099BCSE997'
+            ]
+            deleted_legacy, _ = User.objects.filter(enrollment_number__in=legacy_debug_enrollments).delete()
+            if deleted_legacy:
+                self.stdout.write(self.style.WARNING(f'Purged {deleted_legacy} legacy debug account(s).'))
 
         if options['reset']:
             debug_enrollments = [u['enrollment_number'] for u in DEBUG_USERS]

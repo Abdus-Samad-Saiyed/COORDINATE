@@ -60,6 +60,13 @@ class RideChatConsumer(AsyncWebsocketConsumer):
             }))
             return
 
+        if not isinstance(data, dict):
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'error': 'Invalid message format.',
+            }))
+            return
+
         content = (data.get('content') or '').strip()
         if not content:
             return

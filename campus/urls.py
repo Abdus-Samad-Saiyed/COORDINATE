@@ -72,18 +72,27 @@ class CustomPasswordChangeView(PasswordChangeView):
 
 @login_required
 def serve_protected_media(request, path):
+    if not (request.user.is_staff or getattr(request.user, 'verified', False)):
+        return HttpResponseForbidden("Verified student authentication required.")
+
     safe_path = os.path.normpath(path).lstrip('/\\')
     if safe_path.startswith('..') or os.path.isabs(safe_path):
         raise Http404("Invalid media path.")
-    
-    full_path = os.path.join(settings.MEDIA_ROOT, safe_path)
+
+    media_root = os.path.realpath(settings.MEDIA_ROOT)
+    full_path = os.path.realpath(os.path.join(media_root, safe_path))
+    if not full_path.startswith(media_root + os.sep) and full_path != media_root:
+        raise Http404("Invalid media path.")
+
     if not os.path.isfile(full_path):
         raise Http404("Media file not found.")
 
     normalized_rel = safe_path.replace('\\', '/')
     if normalized_rel.startswith('profiles/'):
         owner = User.objects.filter(profile_photo=normalized_rel).first()
-        if owner and not can_view_profile_field(request.user, owner, 'profile_photo'):
+        if not owner:
+            raise Http404("Media file not found.")
+        if not can_view_profile_field(request.user, owner, 'profile_photo'):
             return HttpResponseForbidden("Access to this profile media is restricted.")
 
     return FileResponse(open(full_path, 'rb'))
@@ -102,6 +111,7 @@ urlpatterns = [
 
     # System Health Check
     path('health/', health_check, name='health_check'),
+    path('healthz/', health_check, name='healthz'),
 
     # Campus Nexus Platform Shell, Info & Community
     path('', landing, name='landing'),
