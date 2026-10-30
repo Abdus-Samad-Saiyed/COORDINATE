@@ -3,7 +3,9 @@
 import os
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from django.urls import include, path
+
+from django.conf import settings
+from django.urls import include, path, re_path
 
 from accounts.forms import EnrollmentAuthenticationForm
 from accounts.views import (
@@ -162,9 +164,9 @@ urlpatterns = [
     path('coordinate/', include('coordinate.urls')),
 ]
 
-from django.conf import settings
-from django.urls import re_path
-from django.views.static import serve
+
+
+
 
 urlpatterns += [
     re_path(r'^media/(?P<path>.*)$', serve_protected_media, name='serve_protected_media'),

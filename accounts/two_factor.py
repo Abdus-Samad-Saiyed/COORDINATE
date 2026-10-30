@@ -95,7 +95,7 @@ def dispatch_sms(phone_number: str, message: str) -> bool:
             return False
 
     import sys
-    is_testing = 'test' in sys.argv or getattr(settings, 'TESTING', False)
+    is_testing = is_test_environment() or 'test' in sys.argv or getattr(settings, 'TESTING', False)
     if getattr(settings, 'DEBUG', False) or is_testing:
         logger.info("[SMS DISPATCH] To: %s (dev/test simulation)", phone_number)
         if getattr(settings, 'DEBUG', False):

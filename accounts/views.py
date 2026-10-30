@@ -388,6 +388,8 @@ def passkey_auth_verify(request):
 
             auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
             enforce_single_session_login(request, user)
+            request.session['auth_timestamp'] = timezone.now().timestamp()
+            request.session['security_otp_verified_until'] = (timezone.now() + timedelta(minutes=15)).isoformat()
             log_audit_event(
                 event_type='LOGIN_SUCCESS',
                 actor_enrollment=user.enrollment_number,

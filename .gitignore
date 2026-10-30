@@ -27,6 +27,7 @@ staticfiles/
 project_dump.txt
 dump_project.py
 screenshot_*.png
+*.zip
 
 # IDE
 .idea/

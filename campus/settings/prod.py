@@ -20,8 +20,8 @@ if 'secrets_local' in globals() or 'campus.settings.secrets_local' in sys.module
 
 # --- 1. Secret Key Validation ------------------------------------------------
 SECRET_KEY = env('DJANGO_SECRET_KEY', default='')
-if IS_BUILD_PHASE and not SECRET_KEY:
-    SECRET_KEY = 'build-phase-dummy-secret-key-at-least-32-chars'
+if IS_BUILD_PHASE and (not SECRET_KEY or SECRET_KEY.startswith('django-insecure-')):
+    SECRET_KEY = 'build-phase-dummy-secret-key-for-static-collection-and-checks-50ch!'
 
 _INSECURE_DEFAULTS = {
     'insecure-dev-key-change-me',
@@ -29,10 +29,10 @@ _INSECURE_DEFAULTS = {
     'replace-with-a-long-random-secret-key-at-least-50-chars',
     ''
 }
-if not SECRET_KEY or (not IS_BUILD_PHASE and SECRET_KEY in _INSECURE_DEFAULTS) or len(SECRET_KEY) < 32:
+if not IS_BUILD_PHASE and (not SECRET_KEY or SECRET_KEY in _INSECURE_DEFAULTS or SECRET_KEY.startswith('django-insecure-') or len(SECRET_KEY) < 50):
     raise ImproperlyConfigured(
         'DJANGO_SECRET_KEY is missing, too short, or using an insecure default. '
-        'Set a strong, unique DJANGO_SECRET_KEY environment variable (at least 32 characters) for production.'
+        'Set a strong, unique DJANGO_SECRET_KEY environment variable (at least 50 characters) for production.'
     )
 
 # --- 2. Allowed Hosts Validation ---------------------------------------------
@@ -96,8 +96,8 @@ SECURE_SSL_REDIRECT = env.bool('DJANGO_SECURE_SSL_REDIRECT', default=True)
 SESSION_COOKIE_SECURE = env.bool('DJANGO_SESSION_COOKIE_SECURE', default=True)
 CSRF_COOKIE_SECURE = env.bool('DJANGO_CSRF_COOKIE_SECURE', default=True)
 SECURE_HSTS_SECONDS = env.int('DJANGO_SECURE_HSTS_SECONDS', default=31536000)
-SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool('DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False)
-SECURE_HSTS_PRELOAD = env.bool('DJANGO_SECURE_HSTS_PRELOAD', default=False)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool('DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS', default=True)
+SECURE_HSTS_PRELOAD = env.bool('DJANGO_SECURE_HSTS_PRELOAD', default=True)
 
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 TRUST_X_FORWARDED_FOR = env.bool('DJANGO_TRUST_X_FORWARDED_FOR', default=False)

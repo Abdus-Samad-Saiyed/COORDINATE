@@ -85,7 +85,15 @@ def _user_can_see_ride(user, ride) -> bool:
     return can_view_ride(user, ride)
 
 
-def _user_can_join_ride(user, ride) -> bool:
+def _user_can_join_ride(
+    user,
+    ride,
+    *,
+    is_participant: bool = None,
+    has_pending_request: bool = None,
+    has_active_ride: bool = None,
+    is_kicked: bool = None,
+) -> bool:
     """
     All conditions that must be satisfied to join / request to join:
       1. Ride is OPEN
@@ -102,18 +110,26 @@ def _user_can_join_ride(user, ride) -> bool:
         return False
     if not _user_can_see_ride(user, ride):
         return False
-    if RideParticipant.objects.filter(ride=ride, user=user).exists():
+    if is_participant if is_participant is not None else RideParticipant.objects.filter(ride=ride, user=user).exists():
         return False
-    if _user_has_active_ride(user):
+    if has_active_ride if has_active_ride is not None else _user_has_active_ride(user):
         return False
-    if ride.kicked_users.filter(id=user.id).exists():
+    if is_kicked if is_kicked is not None else ride.kicked_users.filter(id=user.id).exists():
         return False
-    if RideJoinRequest.objects.filter(ride=ride, user=user, status='PENDING').exists():
+    if has_pending_request if has_pending_request is not None else RideJoinRequest.objects.filter(ride=ride, user=user, status='PENDING').exists():
         return False
     return True
 
 
-def _user_can_waitlist(user, ride) -> bool:
+def _user_can_waitlist(
+    user,
+    ride,
+    *,
+    is_participant: bool = None,
+    is_waitlisted: bool = None,
+    has_active_ride: bool = None,
+    is_kicked: bool = None,
+) -> bool:
     """
     Conditions to join standby waitlist:
       1. User is authenticated
@@ -135,13 +151,13 @@ def _user_can_waitlist(user, ride) -> bool:
         return False
     if ride.creator_id == user.pk:
         return False
-    if RideParticipant.objects.filter(ride=ride, user=user).exists():
+    if is_participant if is_participant is not None else RideParticipant.objects.filter(ride=ride, user=user).exists():
         return False
-    if RideWaitlist.objects.filter(ride=ride, user=user).exists():
+    if is_waitlisted if is_waitlisted is not None else RideWaitlist.objects.filter(ride=ride, user=user).exists():
         return False
-    if _user_has_active_ride(user):
+    if has_active_ride if has_active_ride is not None else _user_has_active_ride(user):
         return False
-    if ride.kicked_users.filter(id=user.id).exists():
+    if is_kicked if is_kicked is not None else ride.kicked_users.filter(id=user.id).exists():
         return False
     return True
 
@@ -270,27 +286,79 @@ def ride_list(request):
     # Filter visibility per user
     visible_rides = [r for r in rides_qs if _user_can_see_ride(request.user, r)]
 
-    # Attach spots remaining and join eligibility
+    # Pre-fetch user state and aggregates to eliminate N+1 queries
+    visible_ride_ids = [r.id for r in visible_rides]
+    user_authenticated = request.user.is_authenticated
+    user_active_ride = _user_has_active_ride(request.user) if user_authenticated else False
+
+    user_participant_ride_ids = set(
+        RideParticipant.objects.filter(
+            user=request.user,
+            ride_id__in=visible_ride_ids,
+        ).values_list('ride_id', flat=True)
+    ) if user_authenticated else set()
+
+    user_waitlist_ride_ids = set(
+        RideWaitlist.objects.filter(
+            user=request.user,
+            ride_id__in=visible_ride_ids,
+        ).values_list('ride_id', flat=True)
+    ) if user_authenticated else set()
+
     user_pending_request_ride_ids = set(
         RideJoinRequest.objects.filter(
             user=request.user,
+            ride_id__in=visible_ride_ids,
             status='PENDING',
         ).values_list('ride_id', flat=True)
+    ) if user_authenticated else set()
+
+    user_kicked_ride_ids = set(
+        request.user.kicked_from_rides.filter(id__in=visible_ride_ids).values_list('id', flat=True)
+    ) if user_authenticated else set()
+
+    waitlist_counts = dict(
+        RideWaitlist.objects.filter(ride_id__in=visible_ride_ids)
+        .values('ride_id')
+        .annotate(total=Count('id'))
+        .values_list('ride_id', 'total')
+    )
+
+    pending_counts = dict(
+        RideJoinRequest.objects.filter(
+            ride_id__in=visible_ride_ids,
+            status='PENDING',
+        )
+        .values('ride_id')
+        .annotate(total=Count('id'))
+        .values_list('ride_id', 'total')
     )
 
     for ride in visible_rides:
         ride.spots_left = max(0, ride.total_spots - ride.participants_total)
         ride.has_pending_request = ride.id in user_pending_request_ride_ids
-        ride.can_join = _user_can_join_ride(request.user, ride)
-        ride.is_participant = RideParticipant.objects.filter(
-            ride=ride, user=request.user
-        ).exists()
-        ride.is_waitlisted = RideWaitlist.objects.filter(
-            ride=ride, user=request.user
-        ).exists()
-        ride.can_waitlist = _user_can_waitlist(request.user, ride)
-        ride.waitlist_count = ride.waitlist_entries.count()
-        ride.pending_request_count = ride.join_requests.filter(status='PENDING').count() if ride.creator_id == request.user.id else 0
+        ride.is_participant = ride.id in user_participant_ride_ids
+        ride.is_waitlisted = ride.id in user_waitlist_ride_ids
+        ride.waitlist_count = waitlist_counts.get(ride.id, 0)
+        ride.pending_request_count = pending_counts.get(ride.id, 0) if ride.creator_id == request.user.id else 0
+
+        is_kicked = ride.id in user_kicked_ride_ids
+        ride.can_join = _user_can_join_ride(
+            request.user,
+            ride,
+            is_participant=ride.is_participant,
+            has_pending_request=ride.has_pending_request,
+            has_active_ride=user_active_ride,
+            is_kicked=is_kicked,
+        )
+        ride.can_waitlist = _user_can_waitlist(
+            request.user,
+            ride,
+            is_participant=ride.is_participant,
+            is_waitlisted=ride.is_waitlisted,
+            has_active_ride=user_active_ride,
+            is_kicked=is_kicked,
+        )
 
     # Density calculation across next 14 days
     density_raw = (
