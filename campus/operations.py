@@ -23,6 +23,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.sessions.models import Session
 from django.contrib import messages
+from django.views.decorators.http import require_POST
 from django.db import connection
 from django.db.models import Count
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -273,33 +274,34 @@ def operational_dashboard(request: HttpRequest) -> HttpResponse:
     )
 
 
+@require_POST
 @login_required
 @user_passes_test(_is_superuser)
 def admin_update_phone(request: HttpRequest, user_id: int) -> HttpResponse:
     """Superuser-only endpoint to update student's phone number after in-person ID check."""
-    if request.method == 'POST':
-        target_user = get_object_or_404(User, id=user_id)
-        if target_user.is_superuser:
-            messages.error(request, "Targeting superuser accounts is strictly prohibited.")
-            return redirect('operational_dashboard')
+    target_user = get_object_or_404(User, id=user_id)
+    if target_user.is_superuser:
+        messages.error(request, "Targeting superuser accounts is strictly prohibited.")
+        return redirect('operational_dashboard')
 
-        new_phone = request.POST.get('phone_number', '').strip()
-        if new_phone:
-            from accounts.two_factor import normalize_phone_number
-            target_user.phone_number = normalize_phone_number(new_phone)
-            target_user.save(update_fields=['phone_number'])
-            log_audit_event(
-                event_type='ADMIN_PHONE_UPDATE',
-                actor_enrollment=request.user.enrollment_number,
-                description=f"Admin changed phone for {target_user.enrollment_number} after in-person verification",
-                target_id=str(target_user.id),
-            )
-            messages.success(request, f"Updated phone number for {target_user.enrollment_number}.")
-        else:
-            messages.error(request, "Phone number cannot be blank.")
+    new_phone = request.POST.get('phone_number', '').strip()
+    if new_phone:
+        from accounts.two_factor import normalize_phone_number
+        target_user.phone_number = normalize_phone_number(new_phone)
+        target_user.save(update_fields=['phone_number'])
+        log_audit_event(
+            event_type='ADMIN_PHONE_UPDATE',
+            actor_enrollment=request.user.enrollment_number,
+            description=f"Admin changed phone for {target_user.enrollment_number} after in-person verification",
+            target_id=str(target_user.id),
+        )
+        messages.success(request, f"Updated phone number for {target_user.enrollment_number}.")
+    else:
+        messages.error(request, "Phone number cannot be blank.")
     return redirect('operational_dashboard')
 
 
+@require_POST
 @login_required
 @user_passes_test(_is_superuser)
 def admin_delete_account(request: HttpRequest, user_id: int) -> HttpResponse:
@@ -308,166 +310,164 @@ def admin_delete_account(request: HttpRequest, user_id: int) -> HttpResponse:
     Deactivates user, purges uploaded profile image from storage, invalidates active sessions,
     and preserves their name, enrollment, and ride participation history in past logs.
     """
-    if request.method == 'POST':
-        target_user = get_object_or_404(User, id=user_id)
-        if target_user == request.user:
-            messages.error(request, "You cannot delete your own active superuser account.")
-            return redirect('operational_dashboard')
+    target_user = get_object_or_404(User, id=user_id)
+    if target_user.is_superuser:
+        messages.error(request, "Targeting superuser accounts for deletion is strictly prohibited. Revoke superuser privileges first.")
+        return redirect('operational_dashboard')
 
-        # Purge profile photo from disk/storage
-        if target_user.profile_photo and target_user.profile_photo.name:
-            try:
-                target_user.profile_photo.storage.delete(target_user.profile_photo.name)
-            except Exception:
-                pass
-            target_user.profile_photo = None
+    # Purge profile photo from disk/storage
+    if target_user.profile_photo and target_user.profile_photo.name:
+        try:
+            target_user.profile_photo.storage.delete(target_user.profile_photo.name)
+        except Exception:
+            pass
+        target_user.profile_photo = None
 
-        # 1. Cascade cleanup on active rides hosted by target user
-        from coordinate.services import cancel_ride_service, leave_ride_service
-        hosted_active_rides = RideRequest.objects.filter(
-            creator=target_user,
-            status__in=['OPEN', 'FULL'],
-            departure_time__gt=timezone.now(),
-        )
-        for hr in hosted_active_rides:
-            cancel_ride_service(hr.id, target_user)
+    # 1. Cascade cleanup on active rides hosted by target user
+    from coordinate.services import cancel_ride_service, leave_ride_service
+    hosted_active_rides = RideRequest.objects.filter(
+        creator=target_user,
+        status__in=['OPEN', 'FULL'],
+        departure_time__gt=timezone.now(),
+    )
+    for hr in hosted_active_rides:
+        cancel_ride_service(hr.id, target_user)
 
-        # 2. Leave any active rides where target user is passenger (promotes waitlist)
-        joined_active = list(
-            RideParticipant.objects.filter(
-                user=target_user,
-                ride__status__in=['OPEN', 'FULL'],
-                ride__departure_time__gt=timezone.now(),
-            ).exclude(ride__creator=target_user).values_list('ride_id', flat=True)
-        )
-        for r_id in joined_active:
-            leave_ride_service(r_id, target_user)
+    # 2. Leave any active rides where target user is passenger (promotes waitlist)
+    joined_active = list(
+        RideParticipant.objects.filter(
+            user=target_user,
+            ride__status__in=['OPEN', 'FULL'],
+            ride__departure_time__gt=timezone.now(),
+        ).exclude(ride__creator=target_user).values_list('ride_id', flat=True)
+    )
+    for r_id in joined_active:
+        leave_ride_service(r_id, target_user)
 
-        # 3. Cancel pending join requests and purge waitlist entries
-        RideJoinRequest.objects.filter(user=target_user, status='PENDING').update(status='CANCELLED')
-        RideWaitlist.objects.filter(user=target_user).delete()
+    # 3. Cancel pending join requests and purge waitlist entries
+    RideJoinRequest.objects.filter(user=target_user, status='PENDING').update(status='CANCELLED')
+    RideWaitlist.objects.filter(user=target_user).delete()
 
-        # 4. Terminate any active sessions across devices
-        target_user.current_session_key = ''
-        for s in Session.objects.filter(expire_date__gt=timezone.now()):
-            try:
-                data = s.get_decoded()
-                if str(data.get('_auth_user_id')) == str(target_user.id):
-                    s.delete()
-            except Exception:
-                pass
+    # 4. Terminate any active sessions across devices
+    target_user.current_session_key = ''
+    for s in Session.objects.filter(expire_date__gt=timezone.now()):
+        try:
+            data = s.get_decoded()
+            if str(data.get('_auth_user_id')) == str(target_user.id):
+                s.delete()
+        except Exception:
+            pass
 
-        target_user.is_deleted = True
-        target_user.deleted_at = timezone.now()
-        target_user.is_active = False
-        target_user.save()
+    target_user.is_deleted = True
+    target_user.deleted_at = timezone.now()
+    target_user.is_active = False
+    target_user.save()
 
-        log_audit_event(
-            event_type='ACCOUNT_DELETED',
-            actor_enrollment=request.user.enrollment_number,
-            description=f"Account for {target_user.enrollment_number} was closed / soft-deleted by admin",
-            target_id=str(target_user.id),
-        )
-        messages.success(request, f"Account {target_user.enrollment_number} has been soft-deleted and closed. Past trip logs and reviews are safely retained.")
+    log_audit_event(
+        event_type='ACCOUNT_DELETED',
+        actor_enrollment=request.user.enrollment_number,
+        description=f"Account for {target_user.enrollment_number} was closed / soft-deleted by admin",
+        target_id=str(target_user.id),
+    )
+    messages.success(request, f"Account {target_user.enrollment_number} has been soft-deleted and closed. Past trip logs and reviews are safely retained.")
     return redirect('operational_dashboard')
 
 
+@require_POST
 @login_required
 @user_passes_test(_is_superuser)
 def admin_resolve_physical_verification(request: HttpRequest, request_id: int) -> HttpResponse:
     """Resolve an in-person physical verification request at the Campus Operations Desk. Superuser-only."""
-    if request.method == 'POST':
-        pvr = get_object_or_404(PhysicalVerificationRequest, id=request_id)
-        if pvr.status != 'PENDING':
-            messages.error(request, "This verification request has already been processed and cannot be replayed.")
+    pvr = get_object_or_404(PhysicalVerificationRequest, id=request_id)
+    if pvr.status != 'PENDING':
+        messages.error(request, "This verification request has already been processed and cannot be replayed.")
+        return redirect('operational_dashboard')
+
+    if pvr.user.is_superuser:
+        messages.error(request, "Physical verification of superusers via desk is strictly prohibited.")
+        return redirect('operational_dashboard')
+
+    action = request.POST.get('action')
+    notes = request.POST.get('notes', '').strip()
+
+    if action == 'verify_reset_password':
+        new_password = request.POST.get('new_password', '').strip()
+        if not new_password:
+            messages.error(request, "Password cannot be blank.")
             return redirect('operational_dashboard')
 
-        if pvr.user.is_superuser:
-            messages.error(request, "Physical verification of superusers via desk is strictly prohibited.")
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+        try:
+            validate_password(new_password, pvr.user)
+        except ValidationError as e:
+            for err in e.messages:
+                messages.error(request, err)
             return redirect('operational_dashboard')
 
-        action = request.POST.get('action')
-        notes = request.POST.get('notes', '').strip()
-
-        if action == 'verify_reset_password':
-            new_password = request.POST.get('new_password', '').strip()
-            if not new_password:
-                messages.error(request, "Password cannot be blank.")
-                return redirect('operational_dashboard')
-
-            from django.contrib.auth.password_validation import validate_password
-            from django.core.exceptions import ValidationError
+        pvr.user.set_password(new_password)
+        # Invalidate all active sessions for this user across all devices/API
+        for s in Session.objects.filter(expire_date__gt=timezone.now()):
             try:
-                validate_password(new_password, pvr.user)
-            except ValidationError as e:
-                for err in e.messages:
-                    messages.error(request, err)
-                return redirect('operational_dashboard')
+                data = s.get_decoded()
+                if str(data.get('_auth_user_id')) == str(pvr.user.id):
+                    s.delete()
+            except Exception:
+                pass
+        pvr.user.current_session_key = ''
+        pvr.user.save()
 
-            pvr.user.set_password(new_password)
-            # Invalidate all active sessions for this user across all devices/API
-            for s in Session.objects.filter(expire_date__gt=timezone.now()):
-                try:
-                    data = s.get_decoded()
-                    if str(data.get('_auth_user_id')) == str(pvr.user.id):
-                        s.delete()
-                except Exception:
-                    pass
-            pvr.user.current_session_key = ''
-            pvr.user.save()
+        pvr.status = 'VERIFIED'
+        pvr.verified_by = request.user
+        pvr.resolution_notes = notes or 'Physically verified student ID card & reset password.'
+        pvr.resolved_at = timezone.now()
+        pvr.save()
 
-            pvr.status = 'VERIFIED'
-            pvr.verified_by = request.user
-            pvr.resolution_notes = notes or 'Physically verified student ID card & reset password.'
-            pvr.resolved_at = timezone.now()
-            pvr.save()
+        log_audit_event(
+            event_type='PHYSICAL_VERIFICATION_RESOLVED',
+            actor_enrollment=request.user.enrollment_number,
+            description=f"Admin physically verified {pvr.user.enrollment_number} and reset password",
+            target_id=str(pvr.id),
+        )
+        messages.success(request, f"Physically verified {pvr.user.enrollment_number} and updated password.")
 
-            log_audit_event(
-                event_type='PHYSICAL_VERIFICATION_RESOLVED',
-                actor_enrollment=request.user.enrollment_number,
-                description=f"Admin physically verified {pvr.user.enrollment_number} and reset password",
-                target_id=str(pvr.id),
-            )
-            messages.success(request, f"Physically verified {pvr.user.enrollment_number} and updated password.")
+    elif action == 'verify_update_phone':
+        new_phone = request.POST.get('phone_number', '').strip()
+        if not new_phone:
+            messages.error(request, "Phone number cannot be blank.")
+            return redirect('operational_dashboard')
 
-        elif action == 'verify_update_phone':
-            new_phone = request.POST.get('phone_number', '').strip()
-            if not new_phone:
-                messages.error(request, "Phone number cannot be blank.")
-                return redirect('operational_dashboard')
+        from accounts.two_factor import normalize_phone_number
+        pvr.user.phone_number = normalize_phone_number(new_phone)
+        pvr.user.save(update_fields=['phone_number'])
 
-            from accounts.two_factor import normalize_phone_number
-            pvr.user.phone_number = normalize_phone_number(new_phone)
-            pvr.user.save(update_fields=['phone_number'])
+        pvr.status = 'VERIFIED'
+        pvr.verified_by = request.user
+        pvr.resolution_notes = notes or 'Physically verified ID card & updated phone.'
+        pvr.resolved_at = timezone.now()
+        pvr.save()
 
-            pvr.status = 'VERIFIED'
-            pvr.verified_by = request.user
-            pvr.resolution_notes = notes or 'Physically verified ID card & updated phone.'
-            pvr.resolved_at = timezone.now()
-            pvr.save()
+        log_audit_event(
+            event_type='ADMIN_PHONE_UPDATE',
+            actor_enrollment=request.user.enrollment_number,
+            description=f"Admin physically verified {pvr.user.enrollment_number} and updated phone",
+            target_id=str(pvr.id),
+        )
+        messages.success(request, f"Physically verified {pvr.user.enrollment_number} and updated phone.")
 
-            log_audit_event(
-                event_type='ADMIN_PHONE_UPDATE',
-                actor_enrollment=request.user.enrollment_number,
-                description=f"Admin physically verified {pvr.user.enrollment_number} and updated phone",
-                target_id=str(pvr.id),
-            )
-            messages.success(request, f"Physically verified {pvr.user.enrollment_number} and updated phone.")
-
-        elif action == 'reject':
-            pvr.status = 'REJECTED'
-            pvr.verified_by = request.user
-            pvr.resolution_notes = notes or 'Physical verification rejected by admin.'
-            pvr.resolved_at = timezone.now()
-            pvr.save()
-            log_audit_event(
-                event_type='PHYSICAL_VERIFICATION_REJECTED',
-                actor_enrollment=request.user.enrollment_number,
-                description=f"Admin rejected physical verification for {pvr.user.enrollment_number}",
-                target_id=str(pvr.id),
-            )
-            messages.info(request, f"Physical verification request for {pvr.user.enrollment_number} rejected.")
-            messages.info(request, f"Rejected verification request for {pvr.user.enrollment_number}.")
+    elif action == 'reject':
+        pvr.status = 'REJECTED'
+        pvr.verified_by = request.user
+        pvr.resolution_notes = notes or 'Physical verification rejected by admin.'
+        pvr.resolved_at = timezone.now()
+        pvr.save()
+        log_audit_event(
+            event_type='PHYSICAL_VERIFICATION_REJECTED',
+            actor_enrollment=request.user.enrollment_number,
+            description=f"Admin rejected physical verification for {pvr.user.enrollment_number}",
+            target_id=str(pvr.id),
+        )
+        messages.info(request, f"Physical verification request for {pvr.user.enrollment_number} rejected.")
 
     return redirect('operational_dashboard')
 
@@ -477,7 +477,6 @@ def admin_resolve_physical_verification(request: HttpRequest, request_id: int) -
 @user_passes_test(_is_superuser)
 def manage_superusers(request: HttpRequest) -> HttpResponse:
     """Manage superuser privileges (promote/revoke) with audit logging and lockout protection."""
-    from django.contrib import messages
     from django.shortcuts import redirect
 
     if request.method == "POST":

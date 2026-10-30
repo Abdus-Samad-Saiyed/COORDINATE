@@ -431,6 +431,9 @@ def my_rides(request):
 
 @login_required
 def create_ride(request):
+    if not (request.user.is_staff or request.user.is_superuser or is_verified_student(request.user)):
+        messages.error(request, 'Only verified students can create rides.')
+        return redirect('ride_list')
     if _user_has_active_ride(request.user):
         messages.error(request, 'You already have an active ride. Leave it first.')
         return redirect('ride_list')
@@ -597,6 +600,10 @@ def reschedule_ride(request, ride_id):
 
     if ride.status in ['COMPLETED', 'CANCELLED']:
         messages.error(request, 'Completed or cancelled rides cannot be rescheduled.')
+        return redirect('ride_detail', ride_id=ride_id)
+
+    if ride.departure_time + datetime.timedelta(hours=2) <= timezone.now():
+        messages.error(request, 'Cannot reschedule a ride that has already concluded.')
         return redirect('ride_detail', ride_id=ride_id)
 
     new_time_raw = request.POST.get('departure_time')

@@ -1,6 +1,7 @@
 from django.contrib.auth import authenticate
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import AccountApplication, FriendRequest, Friendship, User
 from .two_factor import create_phone_otp
@@ -245,4 +246,34 @@ class AccountWorkflowTests(TestCase):
         # 3. Deleting the user cleans up the remaining photo
         self.user.delete()
         self.assertFalse(default_storage.exists(path2))
+
+    def test_send_friend_request_to_inactive_or_unverified_rejected(self):
+        """Cannot send friend requests to inactive or unverified users."""
+        unverified_target = User.objects.create_user(
+            username='2024BCSE076',
+            enrollment_number='2024BCSE076',
+            gender='M',
+            phone_number='9999999976',
+            password='password123',
+            verified=False,
+            is_active=True,
+        )
+        self.client.force_login(self.friend)
+        resp = self.client.post(reverse('send_friend_request', args=[unverified_target.enrollment_number]))
+        self.assertRedirects(resp, reverse('user_search'))
+        self.assertFalse(FriendRequest.objects.filter(receiver=unverified_target).exists())
+
+    def test_two_factor_verify_blocks_deactivated_user(self):
+        """User deactivated while pending 2FA cannot complete sign-in."""
+        session = self.client.session
+        session['pre_2fa_user_id'] = self.friend.id
+        session['pre_2fa_time'] = timezone.now().timestamp()
+        session.save()
+
+        self.friend.is_active = False
+        self.friend.save(update_fields=['is_active'])
+
+        resp = self.client.post(reverse('two_factor_verify'), {'action': 'verify', 'otp_code': '123456'})
+        self.assertRedirects(resp, reverse('login'))
+        self.assertNotIn('_auth_user_id', self.client.session)
 

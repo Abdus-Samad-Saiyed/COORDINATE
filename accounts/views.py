@@ -234,6 +234,12 @@ def two_factor_verify(request):
         return redirect('login')
 
     user = get_object_or_404(User, id=user_id)
+    if not user.is_active or getattr(user, 'is_deleted', False):
+        request.session.pop('pre_2fa_user_id', None)
+        request.session.pop('pre_2fa_redirect', None)
+        request.session.pop('pre_2fa_time', None)
+        messages.error(request, "This account is inactive or disabled.")
+        return redirect('login')
     redirect_to = _safe_redirect_url(request, request.session.get('pre_2fa_redirect', 'dashboard'))
 
     p = user.phone_number or ''
@@ -342,6 +348,11 @@ def passkey_auth_verify(request):
         return JsonResponse({'success': False, 'error': 'Session expired. Please sign in again.'}, status=401)
 
     user = get_object_or_404(User, id=user_id)
+    if not user.is_active or getattr(user, 'is_deleted', False):
+        request.session.pop('pre_2fa_user_id', None)
+        request.session.pop('pre_2fa_redirect', None)
+        request.session.pop('pre_2fa_time', None)
+        return JsonResponse({'success': False, 'error': 'Account is inactive or disabled.'}, status=403)
     redirect_to = _safe_redirect_url(request, request.session.get('pre_2fa_redirect', '/dashboard/'), fallback='/dashboard/')
     challenge = request.session.pop('passkey_challenge', '')
     challenge_time = request.session.pop('passkey_challenge_time', None)
@@ -486,10 +497,6 @@ def passkey_reg_verify(request):
     except Exception as exc:
         return JsonResponse({'success': False, 'error': 'Passkey registration error.'}, status=400)
 
-
-@login_required
-@rate_limit(key_prefix='passkey_del', limit=10, period_seconds=60)
-@require_POST
 
 @login_required
 @rate_limit(key_prefix='step_up', limit=5, period_seconds=60)
@@ -1380,6 +1387,10 @@ def send_friend_request(request, enrollment_number):
         enrollment_number=enrollment_number.strip().upper(),
     )
 
+    if not target.is_active or getattr(target, 'is_deleted', False) or not target.verified:
+        messages.error(request, "This student account is not available for friend connections.")
+        return redirect('user_search')
+
     if target == request.user:
         messages.error(request, "You can't send a friend request to yourself.")
         return redirect('profile', enrollment_number=enrollment_number)
@@ -1424,6 +1435,11 @@ def accept_friend_request(request, request_id):
         id=request_id,
         receiver=request.user,
     )
+
+    if not friend_request.sender.is_active or getattr(friend_request.sender, 'is_deleted', False) or not friend_request.sender.verified:
+        friend_request.delete()
+        messages.error(request, "This student account is no longer active.")
+        return redirect('profile', enrollment_number=request.user.enrollment_number)
 
     try:
         with transaction.atomic():

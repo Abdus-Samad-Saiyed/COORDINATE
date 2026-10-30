@@ -601,3 +601,46 @@ class RideWorkflowTests(TestCase):
         remove_resp = self.client.post(reverse('remove_contributor', args=[contrib.id]))
         self.assertRedirects(remove_resp, reverse('contributors'))
         self.assertFalse(Contributor.objects.filter(id=contrib.id).exists())
+
+    def test_unverified_student_cannot_create_ride(self):
+        """Unverified student cannot create a ride."""
+        unverified_user = User.objects.create_user(
+            username='2024BCSE077',
+            enrollment_number='2024BCSE077',
+            gender='M',
+            phone_number='9999999977',
+            password='password123',
+            verified=False,
+            is_active=True,
+        )
+        self.client.force_login(unverified_user)
+        dep_time = (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+        resp = self.client.post(reverse('create_ride'), {
+            'route': 'NIT_TO_AIRPORT',
+            'visibility': 'MIXED',
+            'departure_time': dep_time,
+            'total_spots': 3,
+            'disclose_identity': 'on',
+        })
+        self.assertRedirects(resp, reverse('ride_list'))
+        self.assertFalse(RideRequest.objects.filter(creator=unverified_user).exists())
+
+    def test_reschedule_concluded_ride_fails(self):
+        """Rescheduling a ride whose departure + 2 hours buffer has elapsed is blocked."""
+        past_ride = RideRequest.objects.create(
+            creator=self.creator,
+            route='NIT_TO_AIRPORT',
+            visibility='MIXED',
+            departure_time=timezone.now() - timedelta(hours=3),
+            total_spots=3,
+            status='OPEN',
+        )
+        RideParticipant.objects.create(ride=past_ride, user=self.creator)
+        self.client.force_login(self.creator)
+        new_dep_time = (timezone.now() + timedelta(days=2)).strftime('%Y-%m-%dT%H:%M')
+        resp = self.client.post(reverse('reschedule_ride', args=[past_ride.id]), {
+            'departure_time': new_dep_time,
+        })
+        self.assertRedirects(resp, reverse('ride_detail', args=[past_ride.id]))
+        past_ride.refresh_from_db()
+        self.assertNotEqual(past_ride.departure_time.strftime('%Y-%m-%d'), (timezone.now() + timedelta(days=2)).strftime('%Y-%m-%d'))

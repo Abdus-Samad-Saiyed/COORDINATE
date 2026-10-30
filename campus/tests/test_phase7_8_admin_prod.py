@@ -284,6 +284,35 @@ class Phase7OperationalAdminTests(TestCase):
         )
 
 
+    def test_admin_delete_account_blocks_targeting_superuser(self):
+        """admin_delete_account strictly forbids targeting other superuser accounts."""
+        second_super = User.objects.create_superuser(
+            username="2024BCSE099",
+            enrollment_number="2024BCSE099",
+            first_name="SecondAdmin",
+            gender="M",
+            phone_number="9999999999",
+            password="AdminSecretPassword123!",
+            is_active=True,
+            verified=True,
+        )
+        self.client.force_login(self.superuser)
+        res = self.client.post(reverse("admin_delete_account", args=[second_super.id]))
+        self.assertRedirects(res, reverse("operational_dashboard"))
+        second_super.refresh_from_db()
+        self.assertTrue(second_super.is_active)
+        self.assertFalse(second_super.is_deleted)
+
+    def test_admin_operations_require_post(self):
+        """GET requests to mutating operational endpoints return HTTP 405 Method Not Allowed."""
+        self.client.force_login(self.superuser)
+        res_phone = self.client.get(reverse("admin_update_phone", args=[self.regular_user.id]))
+        self.assertEqual(res_phone.status_code, 405)
+
+        res_delete = self.client.get(reverse("admin_delete_account", args=[self.regular_user.id]))
+        self.assertEqual(res_delete.status_code, 405)
+
+
 class Phase8ProductionReadinessTests(TestCase):
     """Phase 8 verification: Health checks, configuration validation."""
 
