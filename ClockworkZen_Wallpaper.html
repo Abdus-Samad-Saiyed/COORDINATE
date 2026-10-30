@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="color-scheme" content="dark">
+<title>Clockwork Zen | Precision Mechanical Horology</title>
+<style>
+  /* =====================================================================
+     CLOCKWORK ZEN — EDITABLE CONFIGURATION
+     Modify any of the primary variables below to customize the wallpaper.
+     Changing --cw-accent automatically updates clock hands, metallic rim
+     reflections, gear accents, and orbital atmospheric lighting.
+     ===================================================================== */
+  :root {
+    color-scheme: dark;
+
+    /* Core Palette & Background */
+    --cw-bg: #140d04;                 /* Deep near-black brown atmospheric canvas */
+    --cw-accent: #F59E0B;             /* Master Accent Color (HEX: e.g. #F59E0B, #00D2FF, #10B981, #6366F1) */
+    --cw-muted: #71717a;              /* Industrial muted steel gear and dial linework */
+    --cw-gear-teeth: #27272a;         /* Extruded tooth body & core gear shadow */
+    --cw-gear-hub: #18181b;           /* Recessed center hub boss fill */
+    --cw-grid-color: rgba(255, 255, 255, 0.022); /* Technical calibration coordinate grid */
+
+    /* Lighting & Atmospheric Dynamics */
+    --cw-top-glow-strength: 0.22;     /* Ambient atmospheric glow intensity (0.0 to 1.0) */
+    --cw-orbit-glow-strength: 0.42;   /* Rotating directional beam & highlight intensity (0.0 to 1.0) */
+    --cw-orbit-duration: 300s;        /* Anti-clockwise rotation period (5 minutes = 300s) */
+    --cw-watermark-opacity: 0.92;     /* Master watermark & mechanical composition opacity */
+
+    /* RTX-Inspired Material Shading */
+    --cw-metal-highlight: rgba(255, 255, 255, 0.48); /* Specular chamfer highlight */
+    --cw-metal-shadow: rgba(0, 0, 0, 0.72);          /* Ambient occlusion & contact shadow */
+
+    /* Automatically derived from --cw-accent via script (defaults prevent startup flash) */
+    --cw-accent-rgb: 245, 158, 11;
+    --cw-accent-hover: #D97706;
+    --cw-accent-dim: rgba(245, 158, 11, 0.14);
+    --cw-accent-glow: rgba(245, 158, 11, 0.35);
+
+    /* Campus Nexus Theme Backward-Compatibility Tokens */
+    --bg: var(--cw-bg);
+    --green: var(--cw-accent);
+    --green-hover: var(--cw-accent-hover);
+    --green-dim: var(--cw-accent-dim);
+    --green-glow: var(--cw-accent-glow);
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: var(--cw-bg);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Fullscreen wallpaper container */
+  .clockwork-watermark-container {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none !important;
+    user-select: none;
+    overflow: hidden;
+    opacity: var(--cw-watermark-opacity);
+  }
+
+  .clockwork-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none !important;
+  }
+
+  /* Accent & Material Classes */
+  .watermark-accent {
+    stroke: var(--cw-accent) !important;
+    transition: stroke 0.3s ease;
+  }
+
+  .watermark-accent-fill {
+    fill: var(--cw-accent) !important;
+    transition: fill 0.3s ease;
+  }
+
+  .watermark-muted {
+    stroke: var(--cw-muted) !important;
+    transition: stroke 0.3s ease;
+  }
+
+  .gear-shadow-teeth {
+    stroke: var(--cw-gear-teeth) !important;
+  }
+
+  .gear-shadow-hub {
+    fill: var(--cw-gear-hub) !important;
+  }
+
+  /* Transform Box Rules */
+  .gear-edge,
+  #clockwork-hour-hand,
+  #clockwork-minute-hand,
+  #clockwork-second-hand {
+    transform-box: view-box;
+  }
+
+  .gear-scattered {
+    opacity: 0.88;
+  }
+
+  /* Anti-clockwise Orbital Light Animation (5 minutes = 300s full rotation) */
+  @keyframes cw-orbit-counter-clockwise {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  .cw-light-orbit {
+    transform-origin: 500px 500px;
+    animation: cw-orbit-counter-clockwise var(--cw-orbit-duration, 300s) linear infinite;
+    will-change: transform;
+    pointer-events: none;
+  }
+
+  /* Hand dropshadow for 3D physical elevation */
+  .hand-shadow {
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.85));
+  }
+</style>
+</head>
+<body>
+<div id="clockwork-watermark" class="clockwork-watermark-container" aria-hidden="true">
+<svg id="clockwork-svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" class="clockwork-svg" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <!-- Background Precision Grid Pattern -->
+        <pattern id="nexus-grid" width="50" height="50" patternUnits="userSpaceOnUse">
+            <path d="M 50 0 L 0 0 0 50" fill="none" stroke="var(--cw-grid-color)" stroke-width="1"/>
+            <circle cx="0" cy="0" r="1" fill="var(--cw-grid-color)"/>
+        </pattern>
+
+        <!-- Drop Shadows for 3D Gear and Bezel Elevation -->
+        <filter id="gear-contact-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="var(--cw-metal-shadow)" flood-opacity="0.85"/>
+        </filter>
+
+        <filter id="dial-rim-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000000" flood-opacity="0.9"/>
+        </filter>
+
+        <filter id="hand-depth-shadow" filterUnits="userSpaceOnUse" x="200" y="200" width="600" height="600">
+            <feDropShadow dx="1" dy="3.5" stdDeviation="3" flood-color="#000000" flood-opacity="0.88"/>
+        </filter>
+
+        <!-- Recessed Dial Face Radial Gradient: Dark chamber depth -->
+        <radialGradient id="dial-recessed-face" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#160e05" stop-opacity="0.95"/>
+            <stop offset="65%" stop-color="#100a03" stop-opacity="0.98"/>
+            <stop offset="92%" stop-color="#0a0602" stop-opacity="1"/>
+            <stop offset="100%" stop-color="#050301" stop-opacity="1"/>
+        </radialGradient>
+
+        <!-- Metallic Bezel Chamfer Gradients -->
+        <linearGradient id="bezel-metallic-body" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#2a241b"/>
+            <stop offset="30%" stop-color="#1c160f"/>
+            <stop offset="50%" stop-color="#261f15"/>
+            <stop offset="70%" stop-color="#18130d"/>
+            <stop offset="100%" stop-color="#2c251c"/>
+        </linearGradient>
+
+        <!-- Directional Lighting Gradients inside the Orbital Light Source -->
+        <!-- Wide Atmospheric Ambient Glow emanating from the light position -->
+        <radialGradient id="orbit-ambient-glow" cx="500" cy="-60" r="850" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="var(--cw-accent)" stop-opacity="var(--cw-top-glow-strength)"/>
+            <stop offset="25%" stop-color="var(--cw-accent)" stop-opacity="calc(var(--cw-top-glow-strength) * 0.72)"/>
+            <stop offset="55%" stop-color="var(--cw-accent)" stop-opacity="calc(var(--cw-top-glow-strength) * 0.28)"/>
+            <stop offset="80%" stop-color="var(--cw-accent)" stop-opacity="calc(var(--cw-top-glow-strength) * 0.08)"/>
+            <stop offset="100%" stop-color="var(--cw-accent)" stop-opacity="0"/>
+        </radialGradient>
+
+        <!-- Concentrated Directional Beam Highlight -->
+        <radialGradient id="orbit-core-beam" cx="500" cy="180" r="380" fx="500" fy="140" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="var(--cw-accent)" stop-opacity="var(--cw-orbit-glow-strength)"/>
+            <stop offset="35%" stop-color="var(--cw-accent)" stop-opacity="calc(var(--cw-orbit-glow-strength) * 0.5)"/>
+            <stop offset="70%" stop-color="var(--cw-accent)" stop-opacity="calc(var(--cw-orbit-glow-strength) * 0.12)"/>
+            <stop offset="100%" stop-color="var(--cw-accent)" stop-opacity="0"/>
+        </radialGradient>
+
+        <!-- Dynamic Specular Rim Highlight on the Bezel edge facing light -->
+        <linearGradient id="orbit-bezel-specular" x1="500" y1="280" x2="500" y2="720" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="var(--cw-accent)" stop-opacity="0.95"/>
+            <stop offset="8%" stop-color="var(--cw-metal-highlight)" stop-opacity="0.75"/>
+            <stop offset="26%" stop-color="var(--cw-accent)" stop-opacity="0.3"/>
+            <stop offset="50%" stop-color="transparent" stop-opacity="0"/>
+            <stop offset="78%" stop-color="#000000" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="#000000" stop-opacity="0.8"/>
+        </linearGradient>
+
+        <!-- Dynamic Recessed Bezel Inner Shadow on illuminated side -->
+        <linearGradient id="orbit-dial-cavity-shadow" x1="500" y1="290" x2="500" y2="710" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#000000" stop-opacity="0.7"/>
+            <stop offset="18%" stop-color="#000000" stop-opacity="0.35"/>
+            <stop offset="45%" stop-color="transparent" stop-opacity="0"/>
+            <stop offset="85%" stop-color="var(--cw-accent)" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="var(--cw-accent)" stop-opacity="0.4"/>
+        </linearGradient>
+
+        <!-- Gear Hub Recessed Gradient -->
+        <radialGradient id="gear-hub-recess" cx="45%" cy="40%" r="55%">
+            <stop offset="0%" stop-color="#2d2720"/>
+            <stop offset="60%" stop-color="#181410"/>
+            <stop offset="100%" stop-color="#0a0806"/>
+        </radialGradient>
+    </defs>
+
+    <!-- Canvas Background Layer & Coordinate Grid -->
+    <rect id="bg-fill" x="-2000" y="-2000" width="5000" height="5000" fill="var(--cw-bg)"/>
+    <rect id="bg-grid" x="-2000" y="-2000" width="5000" height="5000" fill="url(#nexus-grid)"/>
+
+    <!-- ===================================================================
+         DIRECTIONAL ORBITAL LIGHTING LAYER (Radiates & Rotates Anti-Clockwise)
+         Period: 5 minutes (300s). Light travels around the clock circumference,
+         illuminating components and casting dynamic metallic specular glints.
+         =================================================================== -->
+    <g id="cw-light-orbit" class="cw-light-orbit">
+        <!-- Broad Atmospheric Ambient Glow radiating across background -->
+        <circle cx="500" cy="-60" r="850" fill="url(#orbit-ambient-glow)"/>
+
+        <!-- Concentrated Directional Beam sweeping around the clock -->
+        <ellipse cx="500" cy="180" rx="420" ry="260" fill="url(#orbit-core-beam)"/>
+
+        <!-- Directional Bezel Specular Glint & Shadow (orbits with light) -->
+        <circle cx="500" cy="500" r="211" fill="none" stroke="url(#orbit-bezel-specular)" stroke-width="3.5" opacity="0.95"/>
+        <circle cx="500" cy="500" r="202" fill="none" stroke="url(#orbit-bezel-specular)" stroke-width="1.2" opacity="0.6"/>
+
+        <!-- Bezel Inner Cavity Shadow: bezel lip casts shadow into recessed dial on light side -->
+        <circle cx="500" cy="500" r="195" fill="none" stroke="url(#orbit-dial-cavity-shadow)" stroke-width="6" opacity="0.85"/>
+    </g>
+
+    <!-- ===================================================================
+         AMBIENT EDGE & CORNER GEARS LAYER (Heavy Horological Wheelwork)
+         Each corner/edge gear is wrapped in a responsive anchor that adapts
+         to any aspect ratio, keeping gears positioned at display corners.
+         =================================================================== -->
+    <g id="gears-layer">
+        <!-- Top-Left Corner Gear (Center: 90, 90, Speed: 0.5) -->
+        <g id="gear-anchor-tl" class="gear-anchor">
+            <g class="gear-edge gear-tl" data-cx="90" data-cy="90" data-speed="0.5" filter="url(#gear-contact-shadow)">
+                <!-- 3D Extruded Gear Teeth: Shadow Layer + Core Teeth -->
+                <circle cx="90" cy="90" r="82" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="14" stroke-dasharray="8,10" opacity="0.9"/>
+                <circle cx="90" cy="90" r="82" fill="none" class="gear-shadow-teeth" stroke-width="12" stroke-dasharray="8,10"/>
+                <circle cx="90" cy="90" r="88" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.8" opacity="0.25"/>
+
+                <!-- Machined Bevelled Rim & Concentric Grooves -->
+                <circle cx="90" cy="90" r="76" fill="none" class="watermark-muted" stroke-width="2.5"/>
+                <circle cx="90" cy="90" r="72" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.75" opacity="0.3"/>
+                <circle cx="90" cy="90" r="64" fill="none" class="watermark-muted" stroke-width="1.8" opacity="0.85"/>
+                <circle cx="90" cy="90" r="62" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1" opacity="0.7"/>
+
+                <!-- 8 Machined Circular Lightening Cutouts with 3D Bevels -->
+                <circle cx="90" cy="38" r="5.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+                <circle cx="90" cy="38" r="4.5" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.6" opacity="0.4"/>
+                <circle cx="90" cy="142" r="5.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+                <circle cx="90" cy="142" r="4.5" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.6" opacity="0.4"/>
+                <circle cx="38" cy="90" r="5.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+                <circle cx="38" cy="90" r="4.5" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.6" opacity="0.4"/>
+                <circle cx="142" cy="90" r="5.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+                <circle cx="142" cy="90" r="4.5" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.6" opacity="0.4"/>
+                <circle cx="53" cy="53" r="5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+                <circle cx="127" cy="127" r="5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+                <circle cx="127" cy="53" r="5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+                <circle cx="53" cy="127" r="5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+
+                <!-- 3D Chamfered Spokes (Dual Stroke: Core + Specular Edge) -->
+                <line x1="90" y1="14" x2="90" y2="166" stroke="var(--cw-metal-shadow)" stroke-width="3.5" opacity="0.6"/>
+                <line x1="90" y1="14" x2="90" y2="166" class="watermark-muted" stroke-width="2.5"/>
+                <line x1="14" y1="90" x2="166" y2="90" stroke="var(--cw-metal-shadow)" stroke-width="3.5" opacity="0.6"/>
+                <line x1="14" y1="90" x2="166" y2="90" class="watermark-muted" stroke-width="2.5"/>
+                <line x1="36" y1="36" x2="144" y2="144" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="144" y1="36" x2="36" y2="144" class="watermark-muted" stroke-width="1.5"/>
+
+                <!-- Inner Web & Recessed Hub with Fasteners -->
+                <circle cx="90" cy="90" r="42" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="90" cy="90" r="32" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2" opacity="0.5"/>
+                <circle cx="90" cy="90" r="22" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1.2"/>
+                <!-- Fastener Rivets around hub boss -->
+                <circle cx="90" cy="74" r="1.4" fill="var(--cw-metal-highlight)"/>
+                <circle cx="90" cy="106" r="1.4" fill="var(--cw-metal-highlight)"/>
+                <circle cx="74" cy="90" r="1.4" fill="var(--cw-metal-highlight)"/>
+                <circle cx="106" cy="90" r="1.4" fill="var(--cw-metal-highlight)"/>
+                <!-- Amber Bushing Collar & Center Bore -->
+                <circle cx="90" cy="90" r="11" fill="none" stroke="var(--cw-accent)" stroke-width="1.2" opacity="0.65"/>
+                <circle cx="90" cy="90" r="8" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- Top-Right Corner Gear (Center: 910, 90, Speed: -0.6) -->
+        <g id="gear-anchor-tr" class="gear-anchor">
+            <g class="gear-edge gear-tr" data-cx="910" data-cy="90" data-speed="-0.6" filter="url(#gear-contact-shadow)">
+                <circle cx="910" cy="90" r="70" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="12" stroke-dasharray="7,9" opacity="0.88"/>
+                <circle cx="910" cy="90" r="70" fill="none" class="gear-shadow-teeth" stroke-width="10" stroke-dasharray="7,9"/>
+                <circle cx="910" cy="90" r="75" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.75" opacity="0.25"/>
+                <circle cx="910" cy="90" r="65" fill="none" class="watermark-muted" stroke-width="2"/>
+                <circle cx="910" cy="90" r="54" fill="none" class="watermark-muted" stroke-width="1.2" opacity="0.7"/>
+
+                <line x1="910" y1="25" x2="910" y2="155" class="watermark-muted" stroke-width="2"/>
+                <line x1="845" y1="90" x2="975" y2="90" class="watermark-muted" stroke-width="2"/>
+                <line x1="864" y1="44" x2="956" y2="136" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="956" y1="44" x2="864" y2="136" class="watermark-muted" stroke-width="1.5"/>
+
+                <!-- Weight-reduction circular cutouts -->
+                <circle cx="910" cy="46" r="4.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1"/>
+                <circle cx="910" cy="134" r="4.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1"/>
+                <circle cx="866" cy="90" r="4.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1"/>
+                <circle cx="954" cy="90" r="4.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1"/>
+
+                <circle cx="910" cy="90" r="35" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="910" cy="90" r="18" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="910" cy="90" r="10" fill="none" stroke="var(--cw-accent)" stroke-width="1" opacity="0.6"/>
+                <circle cx="910" cy="90" r="7" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- Bottom-Left Corner Gear (Center: 90, 910, Speed: -0.5) -->
+        <g id="gear-anchor-bl" class="gear-anchor">
+            <g class="gear-edge gear-bl" data-cx="90" data-cy="910" data-speed="-0.5" filter="url(#gear-contact-shadow)">
+                <circle cx="90" cy="910" r="85" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="15" stroke-dasharray="9,11" opacity="0.9"/>
+                <circle cx="90" cy="910" r="85" fill="none" class="gear-shadow-teeth" stroke-width="13" stroke-dasharray="9,11"/>
+                <circle cx="90" cy="910" r="91" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.8" opacity="0.25"/>
+                <circle cx="90" cy="910" r="78" fill="none" class="watermark-muted" stroke-width="2.5"/>
+                <circle cx="90" cy="910" r="66" fill="none" class="watermark-muted" stroke-width="1.8" opacity="0.85"/>
+
+                <line x1="90" y1="832" x2="90" y2="988" class="watermark-muted" stroke-width="2.5"/>
+                <line x1="12" y1="910" x2="168" y2="910" class="watermark-muted" stroke-width="2.5"/>
+                <line x1="35" y1="855" x2="145" y2="965" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="145" y1="855" x2="35" y2="965" class="watermark-muted" stroke-width="1.5"/>
+
+                <circle cx="90" cy="855" r="5.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+                <circle cx="90" cy="965" r="5.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+                <circle cx="35" cy="910" r="5.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+                <circle cx="145" cy="910" r="5.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2"/>
+
+                <circle cx="90" cy="910" r="44" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="90" cy="910" r="24" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1.2"/>
+                <circle cx="90" cy="910" r="12" fill="none" stroke="var(--cw-accent)" stroke-width="1.2" opacity="0.65"/>
+                <circle cx="90" cy="910" r="9" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- Bottom-Right Corner Gear (Center: 910, 910, Speed: 0.6) -->
+        <g id="gear-anchor-br" class="gear-anchor">
+            <g class="gear-edge gear-br" data-cx="910" data-cy="910" data-speed="0.6" filter="url(#gear-contact-shadow)">
+                <circle cx="910" cy="910" r="75" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="13" stroke-dasharray="8,10" opacity="0.88"/>
+                <circle cx="910" cy="910" r="75" fill="none" class="gear-shadow-teeth" stroke-width="11" stroke-dasharray="8,10"/>
+                <circle cx="910" cy="910" r="80" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.75" opacity="0.25"/>
+                <circle cx="910" cy="910" r="69" fill="none" class="watermark-muted" stroke-width="2"/>
+                <circle cx="910" cy="910" r="57" fill="none" class="watermark-muted" stroke-width="1.4" opacity="0.8"/>
+
+                <line x1="910" y1="841" x2="910" y2="979" class="watermark-muted" stroke-width="2"/>
+                <line x1="841" y1="910" x2="979" y2="910" class="watermark-muted" stroke-width="2"/>
+                <line x1="861" y1="861" x2="959" y2="959" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="959" y1="861" x2="861" y2="959" class="watermark-muted" stroke-width="1.5"/>
+
+                <circle cx="910" cy="863" r="4.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1"/>
+                <circle cx="910" cy="957" r="4.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1"/>
+                <circle cx="863" cy="910" r="4.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1"/>
+                <circle cx="957" cy="910" r="4.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1"/>
+
+                <circle cx="910" cy="910" r="38" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="910" cy="910" r="20" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="910" cy="910" r="11" fill="none" stroke="var(--cw-accent)" stroke-width="1" opacity="0.6"/>
+                <circle cx="910" cy="910" r="8" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- Mid-Left & Mid-Right Edge Gears (Escapement & Transfer Gears) -->
+        <g id="gear-anchor-edge-l" class="gear-anchor">
+            <g class="gear-edge gear-edge-l" data-cx="40" data-cy="500" data-speed="0.7" filter="url(#gear-contact-shadow)">
+                <circle cx="40" cy="500" r="70" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="12" stroke-dasharray="7,9" opacity="0.85"/>
+                <circle cx="40" cy="500" r="70" fill="none" class="gear-shadow-teeth" stroke-width="10" stroke-dasharray="7,9"/>
+                <circle cx="40" cy="500" r="65" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="40" cy="500" r="54" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2" opacity="0.6"/>
+                <line x1="40" y1="435" x2="40" y2="565" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="-25" y1="500" x2="105" y2="500" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="40" cy="500" r="32" fill="none" class="watermark-muted" stroke-width="1"/>
+                <circle cx="40" cy="500" r="16" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="40" cy="500" r="6" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <g id="gear-anchor-edge-r" class="gear-anchor">
+            <g class="gear-edge gear-edge-r" data-cx="960" data-cy="500" data-speed="-0.7" filter="url(#gear-contact-shadow)">
+                <circle cx="960" cy="500" r="70" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="12" stroke-dasharray="7,9" opacity="0.85"/>
+                <circle cx="960" cy="500" r="70" fill="none" class="gear-shadow-teeth" stroke-width="10" stroke-dasharray="7,9"/>
+                <circle cx="960" cy="500" r="65" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="960" cy="500" r="54" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.2" opacity="0.6"/>
+                <line x1="960" y1="435" x2="960" y2="565" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="895" y1="500" x2="1025" y2="500" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="960" cy="500" r="32" fill="none" class="watermark-muted" stroke-width="1"/>
+                <circle cx="960" cy="500" r="16" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="960" cy="500" r="6" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+    </g>
+
+    <!-- ===================================================================
+         SCATTERED SCREEN GEARS LAYER (Horological Constellation)
+         Differentiated gear types: dense machined pinions & subtle wheels.
+         =================================================================== -->
+    <g id="scattered-gears-layer">
+        <!-- S1: Upper-Left Drift (Subtle Wheel) -->
+        <g id="scatter-anchor-1" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-subtle" data-cx="255" data-cy="185" data-speed="0.85">
+                <circle cx="255" cy="185" r="48" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="10" stroke-dasharray="6,7" opacity="0.7"/>
+                <circle cx="255" cy="185" r="48" fill="none" class="gear-shadow-teeth" stroke-width="8" stroke-dasharray="6,7"/>
+                <circle cx="255" cy="185" r="44" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="221" y1="151" x2="289" y2="219" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="221" y1="219" x2="289" y2="151" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="255" cy="185" r="24" fill="none" class="watermark-muted" stroke-width="1"/>
+                <circle cx="255" cy="185" r="13" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="255" cy="185" r="5" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S2: Upper-Center Pinion (Dense High-Speed Pinion) -->
+        <g id="scatter-anchor-2" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-dense" data-cx="420" data-cy="115" data-speed="-1.6">
+                <circle cx="420" cy="115" r="30" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="8" stroke-dasharray="4,5" opacity="0.8"/>
+                <circle cx="420" cy="115" r="30" fill="none" class="gear-shadow-teeth" stroke-width="7" stroke-dasharray="4,5"/>
+                <circle cx="420" cy="115" r="27" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                <circle cx="420" cy="115" r="21" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1" opacity="0.6"/>
+                <line x1="420" y1="88" x2="420" y2="142" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="395" y1="128" x2="445" y2="102" class="watermark-muted" stroke-width="1.2"/>
+                <circle cx="420" cy="115" r="9" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="420" cy="115" r="3.5" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S3: Upper-Right Drift (Subtle Wheel) -->
+        <g id="scatter-anchor-3" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-subtle" data-cx="760" data-cy="210" data-speed="0.75">
+                <circle cx="760" cy="210" r="54" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="11" stroke-dasharray="6,8" opacity="0.7"/>
+                <circle cx="760" cy="210" r="54" fill="none" class="gear-shadow-teeth" stroke-width="9" stroke-dasharray="6,8"/>
+                <circle cx="760" cy="210" r="50" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="760" y1="160" x2="760" y2="260" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="710" y1="210" x2="810" y2="210" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="725" y1="175" x2="795" y2="245" class="watermark-muted" stroke-width="1"/>
+                <line x1="795" y1="175" x2="725" y2="245" class="watermark-muted" stroke-width="1"/>
+                <circle cx="760" cy="210" r="28" fill="none" class="watermark-muted" stroke-width="1"/>
+                <circle cx="760" cy="210" r="15" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="760" cy="210" r="6" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S4: Far-Right Upper (Dense Pinion) -->
+        <g id="scatter-anchor-4" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-dense" data-cx="865" data-cy="370" data-speed="-1.25">
+                <circle cx="865" cy="370" r="38" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="9" stroke-dasharray="5,6" opacity="0.8"/>
+                <circle cx="865" cy="370" r="38" fill="none" class="gear-shadow-teeth" stroke-width="7" stroke-dasharray="5,6"/>
+                <circle cx="865" cy="370" r="35" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="838" y1="343" x2="892" y2="397" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="892" y1="343" x2="838" y2="397" class="watermark-muted" stroke-width="1.2"/>
+                <circle cx="865" cy="370" r="12" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="865" cy="370" r="4.5" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S5: Mid-Left Escapement (Subtle Wheel) -->
+        <g id="scatter-anchor-5" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-subtle" data-cx="165" data-cy="365" data-speed="-0.68">
+                <circle cx="165" cy="365" r="62" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="12" stroke-dasharray="7,9" opacity="0.75"/>
+                <circle cx="165" cy="365" r="62" fill="none" class="gear-shadow-teeth" stroke-width="10" stroke-dasharray="7,9"/>
+                <circle cx="165" cy="365" r="57" fill="none" class="watermark-muted" stroke-width="2"/>
+                <line x1="165" y1="308" x2="165" y2="422" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="108" y1="365" x2="222" y2="365" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="125" y1="325" x2="205" y2="405" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="205" y1="325" x2="125" y2="405" class="watermark-muted" stroke-width="1.2"/>
+                <circle cx="165" cy="365" r="32" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                <circle cx="165" cy="365" r="17" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="165" cy="365" r="7" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S6: Lower-Left Field (Subtle Wheel) -->
+        <g id="scatter-anchor-6" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-subtle" data-cx="235" data-cy="725" data-speed="0.6">
+                <circle cx="235" cy="725" r="66" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="12" stroke-dasharray="8,10" opacity="0.75"/>
+                <circle cx="235" cy="725" r="66" fill="none" class="gear-shadow-teeth" stroke-width="10" stroke-dasharray="8,10"/>
+                <circle cx="235" cy="725" r="61" fill="none" class="watermark-muted" stroke-width="2"/>
+                <line x1="235" y1="664" x2="235" y2="786" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="174" y1="725" x2="296" y2="725" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="235" cy="725" r="36" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                <circle cx="235" cy="725" r="18" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="235" cy="725" r="7" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S7: Lower-Center-Left Pinion (Dense Pinion) -->
+        <g id="scatter-anchor-7" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-dense" data-cx="375" data-cy="855" data-speed="-1.45">
+                <circle cx="375" cy="855" r="32" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="8" stroke-dasharray="4,6" opacity="0.8"/>
+                <circle cx="375" cy="855" r="32" fill="none" class="gear-shadow-teeth" stroke-width="7" stroke-dasharray="4,6"/>
+                <circle cx="375" cy="855" r="29" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="375" y1="826" x2="375" y2="884" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="348" y1="868" x2="402" y2="842" class="watermark-muted" stroke-width="1.2"/>
+                <circle cx="375" cy="855" r="10" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="375" cy="855" r="4" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S8: Lower-Center-Right Planetary (Dense Pinion) -->
+        <g id="scatter-anchor-8" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-dense" data-cx="630" data-cy="845" data-speed="0.88">
+                <circle cx="630" cy="845" r="48" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="10" stroke-dasharray="6,7" opacity="0.75"/>
+                <circle cx="630" cy="845" r="48" fill="none" class="gear-shadow-teeth" stroke-width="8" stroke-dasharray="6,7"/>
+                <circle cx="630" cy="845" r="44" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="596" y1="811" x2="664" y2="879" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="664" y1="811" x2="596" y2="879" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="630" cy="845" r="23" fill="none" class="watermark-muted" stroke-width="1"/>
+                <circle cx="630" cy="845" r="13" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="630" cy="845" r="5" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S9: Lower-Right Field (Subtle Wheel) -->
+        <g id="scatter-anchor-9" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-subtle" data-cx="785" data-cy="715" data-speed="-0.72">
+                <circle cx="785" cy="715" r="58" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="11" stroke-dasharray="7,8" opacity="0.75"/>
+                <circle cx="785" cy="715" r="58" fill="none" class="gear-shadow-teeth" stroke-width="9" stroke-dasharray="7,8"/>
+                <circle cx="785" cy="715" r="53" fill="none" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="785" y1="662" x2="785" y2="768" class="watermark-muted" stroke-width="1.5"/>
+                <line x1="732" y1="715" x2="838" y2="715" class="watermark-muted" stroke-width="1.5"/>
+                <circle cx="785" cy="715" r="28" fill="none" class="watermark-muted" stroke-width="1"/>
+                <circle cx="785" cy="715" r="16" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="785" cy="715" r="6" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S10: Far-Left Lower Accent (Dense Pinion) -->
+        <g id="scatter-anchor-10" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-dense" data-cx="125" data-cy="615" data-speed="1.5">
+                <circle cx="125" cy="615" r="30" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="8" stroke-dasharray="4,5" opacity="0.8"/>
+                <circle cx="125" cy="615" r="30" fill="none" class="gear-shadow-teeth" stroke-width="6" stroke-dasharray="4,5"/>
+                <circle cx="125" cy="615" r="27" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="125" y1="588" x2="125" y2="642" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="102" y1="628" x2="148" y2="602" class="watermark-muted" stroke-width="1.2"/>
+                <circle cx="125" cy="615" r="9" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="125" cy="615" r="3.5" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S11: Far-Right Lower Satellite (Dense Pinion) -->
+        <g id="scatter-anchor-11" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-dense" data-cx="875" data-cy="615" data-speed="-1.65">
+                <circle cx="875" cy="615" r="28" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="7" stroke-dasharray="4,5" opacity="0.8"/>
+                <circle cx="875" cy="615" r="28" fill="none" class="gear-shadow-teeth" stroke-width="6" stroke-dasharray="4,5"/>
+                <circle cx="875" cy="615" r="25" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="875" y1="590" x2="875" y2="640" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="853" y1="627" x2="897" y2="603" class="watermark-muted" stroke-width="1.2"/>
+                <circle cx="875" cy="615" r="8" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="875" cy="615" r="3.5" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+
+        <!-- S12: Upper-Center-Right Intermediate (Dense Pinion) -->
+        <g id="scatter-anchor-12" class="gear-anchor">
+            <g class="gear-edge gear-scattered scatter-dense" data-cx="605" data-cy="125" data-speed="1.35">
+                <circle cx="605" cy="125" r="36" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="8" stroke-dasharray="5,6" opacity="0.8"/>
+                <circle cx="605" cy="125" r="36" fill="none" class="gear-shadow-teeth" stroke-width="7" stroke-dasharray="5,6"/>
+                <circle cx="605" cy="125" r="33" fill="none" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="580" y1="100" x2="630" y2="150" class="watermark-muted" stroke-width="1.2"/>
+                <line x1="630" y1="100" x2="580" y2="150" class="watermark-muted" stroke-width="1.2"/>
+                <circle cx="605" cy="125" r="11" fill="url(#gear-hub-recess)" stroke="var(--cw-muted)" stroke-width="1"/>
+                <circle cx="605" cy="125" r="4.5" fill="var(--cw-bg)"/>
+            </g>
+        </g>
+    </g>
+
+    <!-- ===================================================================
+         CENTRAL CLOCKWORK LAYER (Precision Timekeeping Engine)
+         Center: 500, 500. Extruded metallic bezel, recessed chamber dial,
+         and continuous fractional hands synchronized to local system time.
+         =================================================================== -->
+    <g id="clockwork-layer" filter="url(#dial-rim-shadow)">
+        <!-- Clock Dial Structure -->
+        <g id="clockwork-dial">
+            <!-- Outer Chamfer & Extruded Bezel Casing -->
+            <circle cx="500" cy="500" r="212" fill="none" class="watermark-muted" stroke-width="1.8" opacity="0.65"/>
+            <circle cx="500" cy="500" r="206" fill="none" stroke="url(#bezel-metallic-body)" stroke-width="10"/>
+            <circle cx="500" cy="500" r="208" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.8" opacity="0.35"/>
+            <circle cx="500" cy="500" r="201" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.5" opacity="0.75"/>
+
+            <!-- Recessed Dial Face: Concave Dispatched Dark Chamber -->
+            <circle cx="500" cy="500" r="200" fill="url(#dial-recessed-face)"/>
+
+            <!-- Chapter Ring Tracks & Fine Calibration Markers -->
+            <circle cx="500" cy="500" r="200" fill="none" class="watermark-muted" stroke-width="2" opacity="0.35"/>
+            <!-- 60 Minute Track Dashes (circ = 2 * pi * 190 = 1193.8 / 60 = 19.9 -> 1.5, 18.4) -->
+            <circle cx="500" cy="500" r="190" fill="none" class="watermark-accent" stroke-width="1.5" stroke-dasharray="2, 7.95" opacity="0.45"/>
+            <circle cx="500" cy="500" r="175" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.5" opacity="0.18"/>
+            <circle cx="500" cy="500" r="160" fill="none" class="watermark-muted" stroke-width="1" opacity="0.35"/>
+            <circle cx="500" cy="500" r="150" fill="none" class="watermark-accent" stroke-width="0.75" opacity="0.3"/>
+
+            <!-- Major 12, 3, 6, 9 o'clock Cardinal Markers (Chamfered with accent pips) -->
+            <!-- 12 O'Clock Marker -->
+            <line x1="500" y1="335" x2="500" y2="365" stroke="var(--cw-metal-shadow)" stroke-width="4.5" stroke-linecap="round" opacity="0.5"/>
+            <line x1="500" y1="335" x2="500" y2="365" class="watermark-accent" stroke-width="3" stroke-linecap="round" opacity="0.95"/>
+            <circle cx="500" cy="374" r="1.8" class="watermark-accent-fill" opacity="0.75"/>
+
+            <!-- 3 O'Clock Marker -->
+            <line x1="665" y1="500" x2="635" y2="500" stroke="var(--cw-metal-shadow)" stroke-width="4.5" stroke-linecap="round" opacity="0.5"/>
+            <line x1="665" y1="500" x2="635" y2="500" class="watermark-accent" stroke-width="3" stroke-linecap="round" opacity="0.95"/>
+            <circle cx="626" cy="500" r="1.8" class="watermark-accent-fill" opacity="0.75"/>
+
+            <!-- 6 O'Clock Marker -->
+            <line x1="500" y1="665" x2="500" y2="635" stroke="var(--cw-metal-shadow)" stroke-width="4.5" stroke-linecap="round" opacity="0.5"/>
+            <line x1="500" y1="665" x2="500" y2="635" class="watermark-accent" stroke-width="3" stroke-linecap="round" opacity="0.95"/>
+            <circle cx="500" cy="626" r="1.8" class="watermark-accent-fill" opacity="0.75"/>
+
+            <!-- 9 O'Clock Marker -->
+            <line x1="335" y1="500" x2="365" y2="500" stroke="var(--cw-metal-shadow)" stroke-width="4.5" stroke-linecap="round" opacity="0.5"/>
+            <line x1="335" y1="500" x2="365" y2="500" class="watermark-accent" stroke-width="3" stroke-linecap="round" opacity="0.95"/>
+            <circle cx="374" cy="500" r="1.8" class="watermark-accent-fill" opacity="0.75"/>
+
+            <!-- Minor Hour Tick Marks (1, 2, 4, 5, 7, 8, 10, 11 o'clock) -->
+            <line x1="575" y1="370" x2="565" y2="387" class="watermark-muted" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+            <line x1="630" y1="425" x2="613" y2="435" class="watermark-muted" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+            <line x1="630" y1="575" x2="613" y2="565" class="watermark-muted" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+            <line x1="575" y1="630" x2="565" y2="613" class="watermark-muted" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+            <line x1="425" y1="630" x2="435" y2="613" class="watermark-muted" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+            <line x1="370" y1="575" x2="387" y2="565" class="watermark-muted" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+            <line x1="370" y1="425" x2="387" y2="435" class="watermark-muted" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+            <line x1="425" y1="370" x2="435" y2="387" class="watermark-muted" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+        </g>
+
+        <!-- Continuous Real-Time Driven Hands (Center: 500, 500) -->
+        <g id="clockwork-hands">
+            <!-- Hour Hand: Continuous Glide, Double-Tiered Chamfer -->
+            <g id="clockwork-hour-hand" filter="url(#hand-depth-shadow)">
+                <line x1="500" y1="500" x2="500" y2="395" stroke="var(--cw-metal-shadow)" stroke-width="6.5" stroke-linecap="round" opacity="0.4"/>
+                <line x1="500" y1="500" x2="500" y2="395" class="watermark-accent" stroke-width="5" stroke-linecap="round"/>
+                <line x1="500" y1="495" x2="500" y2="400" stroke="var(--cw-metal-highlight)" stroke-width="1" opacity="0.4"/>
+                <line x1="500" y1="500" x2="500" y2="520" class="watermark-accent" stroke-width="3.5" stroke-linecap="round" opacity="0.65"/>
+            </g>
+
+            <!-- Minute Hand: Continuous Glide, Slender Needle Profile -->
+            <g id="clockwork-minute-hand" filter="url(#hand-depth-shadow)">
+                <line x1="500" y1="500" x2="500" y2="345" stroke="var(--cw-metal-shadow)" stroke-width="4.5" stroke-linecap="round" opacity="0.45"/>
+                <line x1="500" y1="500" x2="500" y2="345" class="watermark-muted" stroke-width="3" stroke-linecap="round"/>
+                <line x1="500" y1="495" x2="500" y2="350" stroke="var(--cw-metal-highlight)" stroke-width="0.8" opacity="0.3"/>
+                <line x1="500" y1="500" x2="500" y2="530" class="watermark-muted" stroke-width="2" stroke-linecap="round" opacity="0.55"/>
+            </g>
+
+            <!-- Second Hand: Continuous Millisecond-Precision Sweep -->
+            <g id="clockwork-second-hand" filter="url(#hand-depth-shadow)">
+                <line x1="500" y1="535" x2="500" y2="320" class="watermark-accent" stroke-width="1.5" stroke-linecap="round"/>
+                <!-- Second Hand Counterweight Ring -->
+                <circle cx="500" cy="350" r="3.5" class="watermark-accent-fill"/>
+                <circle cx="500" cy="350" r="1.8" fill="var(--cw-bg)"/>
+            </g>
+
+            <!-- Horological Jewel Arbor Cap (Multi-Tiered Center Boss) -->
+            <circle cx="500" cy="500" r="9.5" fill="none" stroke="var(--cw-metal-shadow)" stroke-width="1.5" opacity="0.6"/>
+            <circle cx="500" cy="500" r="7.5" class="watermark-accent-fill"/>
+            <circle cx="500" cy="500" r="5" fill="none" stroke="var(--cw-metal-highlight)" stroke-width="0.8" opacity="0.4"/>
+            <circle cx="500" cy="500" r="3" fill="var(--cw-bg)"/>
+            <circle cx="500" cy="500" r="1.2" fill="var(--cw-accent)" opacity="0.9"/>
+        </g>
+    </g>
+</svg>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const root = document.documentElement;
+  const svg = document.getElementById('clockwork-svg');
+  const debug = { clockTicks: 0, gearTicks: 0, lastClockTimestamp: 0 };
+
+  // ===================================================================
+  // 1. DYNAMIC COLOR CONFIGURATION & DERIVATION
+  // Reads the master --cw-accent variable and computes derived RGB,
+  // glow, and hover tokens so all dependent elements update in unison.
+  // ===================================================================
+  function syncAccentMacros() {
+    const raw = getComputedStyle(root).getPropertyValue('--cw-accent').trim();
+    const match = raw.match(/^#([\da-f]{3}|[\da-f]{6})$/i);
+    if (!match) {
+      console.warn('Clockwork Zen: --cw-accent must be a valid HEX color (e.g. #F59E0B).');
+      return;
+    }
+    let hex = match[1];
+    if (hex.length === 3) {
+      hex = hex.split('').map(c => c + c).join('');
+    }
+    const rgb = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16));
+    const rgbText = rgb.join(', ');
+    const darker = rgb.map(c => Math.round(c * 0.86));
+    const toHex = vals => '#' + vals.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+
+    root.style.setProperty('--cw-accent-rgb', rgbText);
+    root.style.setProperty('--cw-accent-hover', toHex(darker));
+    root.style.setProperty('--cw-accent-dim', `rgba(${rgbText}, 0.14)`);
+    root.style.setProperty('--cw-accent-glow', `rgba(${rgbText}, 0.35)`);
+  }
+
+  // Observe style changes so changing --cw-accent via DevTools or scripts instantly syncs
+  const styleObserver = new MutationObserver(syncAccentMacros);
+  styleObserver.observe(root, { attributes: true, attributeFilter: ['style', 'class'] });
+
+  // ===================================================================
+  // 2. CONTINUOUS CLOCK HAND CALCULATIONS (Section 2)
+  // Precise trigonometric calculation including fractional milliseconds.
+  // ===================================================================
+  function calculateClockAngles(date) {
+    const hours = date.getHours() % 12;
+    const minutes = date.getMinutes();
+    const seconds = date.getSeconds();
+    const millis = date.getMilliseconds();
+
+    // Full continuous precision accounting for milliseconds on every frame:
+    const totalSeconds = seconds + millis / 1000;
+    const totalMinutes = minutes + totalSeconds / 60;
+    const totalHours = hours + totalMinutes / 60;
+
+    return {
+      secondAngle: totalSeconds * 6,
+      minuteAngle: totalMinutes * 6,
+      hourAngle: totalHours * 30
+    };
+  }
+
+  const hourHand = document.getElementById('clockwork-hour-hand');
+  const minuteHand = document.getElementById('clockwork-minute-hand');
+  const secondHand = document.getElementById('clockwork-second-hand');
+
+  function applyHandRotations(hourAngle, minuteAngle, secondAngle) {
+    if (hourHand) hourHand.setAttribute('transform', `rotate(${hourAngle.toFixed(3)} 500 500)`);
+    if (minuteHand) minuteHand.setAttribute('transform', `rotate(${minuteAngle.toFixed(3)} 500 500)`);
+    if (secondHand) secondHand.setAttribute('transform', `rotate(${secondAngle.toFixed(3)} 500 500)`);
+  }
+
+  function updateClockNow() {
+    const now = new Date();
+    const angles = calculateClockAngles(now);
+    applyHandRotations(angles.hourAngle, angles.minuteAngle, angles.secondAngle);
+    debug.clockTicks++;
+    debug.lastClockTimestamp = now.getTime();
+  }
+
+  // ===================================================================
+  // 3. RESPONSIVE VIEWPORT & GEAR ANCHORING ENGINE (Section 8)
+  // Ensures circular proportion, prevents dial cropping, and positions
+  // edge and corner gears gracefully across all 5 standard viewports:
+  // 1366x768, 1920x1080, 2560x1080, 3440x1440, and 1080x1920.
+  // ===================================================================
+  const gearAnchors = {
+    tl: document.getElementById('gear-anchor-tl'),
+    tr: document.getElementById('gear-anchor-tr'),
+    bl: document.getElementById('gear-anchor-bl'),
+    br: document.getElementById('gear-anchor-br'),
+    edgeL: document.getElementById('gear-anchor-edge-l'),
+    edgeR: document.getElementById('gear-anchor-edge-r')
+  };
+
+  const scatterAnchors = [];
+  for (let i = 1; i <= 12; i++) {
+    const el = document.getElementById(`scatter-anchor-${i}`);
+    if (el) scatterAnchors.push({ id: i, el });
+  }
+
+  // Base coordinates of scattered gears
+  const scatterBaseCoords = {
+    1: { x: 255, y: 185 },
+    2: { x: 420, y: 115 },
+    3: { x: 760, y: 210 },
+    4: { x: 865, y: 370 },
+    5: { x: 165, y: 365 },
+    6: { x: 235, y: 725 },
+    7: { x: 375, y: 855 },
+    8: { x: 630, y: 845 },
+    9: { x: 785, y: 715 },
+    10: { x: 125, y: 615 },
+    11: { x: 875, y: 615 },
+    12: { x: 605, y: 125 }
+  };
+
+  function updateResponsiveLayout() {
+    const w = window.innerWidth || 1920;
+    const h = window.innerHeight || 1080;
+    const aspect = w / h;
+
+    let vbWidth, vbHeight, minX, minY;
+
+    if (aspect >= 1) {
+      // Landscape: maintain height = 1000, expand width to match screen ratio
+      vbHeight = 1000;
+      vbWidth = 1000 * aspect;
+      minX = 500 - (vbWidth / 2);
+      minY = 0;
+    } else {
+      // Portrait: maintain width = 1000, expand height to match screen ratio
+      vbWidth = 1000;
+      vbHeight = 1000 / aspect;
+      minX = 0;
+      minY = 500 - (vbHeight / 2);
+    }
+
+    if (svg) {
+      svg.setAttribute('viewBox', `${minX.toFixed(2)} ${minY.toFixed(2)} ${vbWidth.toFixed(2)} ${vbHeight.toFixed(2)}`);
+    }
+
+    const maxX = minX + vbWidth;
+    const maxY = minY + vbHeight;
+
+    // Anchor corner and edge gears to match screen boundaries without clipping
+    if (aspect >= 1) {
+      const dxLeft = minX;
+      const dxRight = maxX - 1000;
+
+      if (gearAnchors.tl) gearAnchors.tl.setAttribute('transform', `translate(${dxLeft.toFixed(2)}, 0)`);
+      if (gearAnchors.bl) gearAnchors.bl.setAttribute('transform', `translate(${dxLeft.toFixed(2)}, 0)`);
+      if (gearAnchors.edgeL) gearAnchors.edgeL.setAttribute('transform', `translate(${dxLeft.toFixed(2)}, 0)`);
+
+      if (gearAnchors.tr) gearAnchors.tr.setAttribute('transform', `translate(${dxRight.toFixed(2)}, 0)`);
+      if (gearAnchors.br) gearAnchors.br.setAttribute('transform', `translate(${dxRight.toFixed(2)}, 0)`);
+      if (gearAnchors.edgeR) gearAnchors.edgeR.setAttribute('transform', `translate(${dxRight.toFixed(2)}, 0)`);
+
+      // Gracefully disperse scattered gears to avoid clustering on ultrawide monitors
+      scatterAnchors.forEach(({ id, el }) => {
+        const base = scatterBaseCoords[id];
+        if (!base) return;
+        let dx = 0;
+        if (base.x < 500) {
+          dx = minX * ((500 - base.x) / 500) * 0.72;
+        } else if (base.x > 500) {
+          dx = (maxX - 1000) * ((base.x - 500) / 500) * 0.72;
+        }
+        el.setAttribute('transform', `translate(${dx.toFixed(2)}, 0)`);
+      });
+    } else {
+      // Portrait adjustments
+      const dyTop = minY;
+      const dyBottom = maxY - 1000;
+
+      if (gearAnchors.tl) gearAnchors.tl.setAttribute('transform', `translate(0, ${dyTop.toFixed(2)})`);
+      if (gearAnchors.tr) gearAnchors.tr.setAttribute('transform', `translate(0, ${dyTop.toFixed(2)})`);
+
+      if (gearAnchors.bl) gearAnchors.bl.setAttribute('transform', `translate(0, ${dyBottom.toFixed(2)})`);
+      if (gearAnchors.br) gearAnchors.br.setAttribute('transform', `translate(0, ${dyBottom.toFixed(2)})`);
+
+      if (gearAnchors.edgeL) gearAnchors.edgeL.removeAttribute('transform');
+      if (gearAnchors.edgeR) gearAnchors.edgeR.removeAttribute('transform');
+
+      scatterAnchors.forEach(({ id, el }) => {
+        const base = scatterBaseCoords[id];
+        if (!base) return;
+        let dy = 0;
+        if (base.y < 500) {
+          dy = minY * ((500 - base.y) / 500) * 0.72;
+        } else if (base.y > 500) {
+          dy = (maxY - 1000) * ((base.y - 500) / 500) * 0.72;
+        }
+        el.setAttribute('transform', `translate(0, ${dy.toFixed(2)})`);
+      });
+    }
+  }
+
+  // ===================================================================
+  // 4. ANIMATION LOOP & ROTATIONAL DYNAMICS
+  // Continuous 60/120/144Hz updates with click-impulse decay.
+  // ===================================================================
+  let gearImpulse = 0;
+  let ambientGearAngle = 0;
+  let lastFrameTime = 0;
+  let isRunning = false;
+  let animId = null;
+
+  // Deliberate click interaction: adds rotational impulse that smoothly decays
+  document.addEventListener('click', () => {
+    gearImpulse += 18;
+  }, { passive: true });
+
+  const cachedGears = [];
+  document.querySelectorAll('.gear-edge').forEach((gear, index) => {
+    const cx = gear.getAttribute('data-cx');
+    const cy = gear.getAttribute('data-cy');
+    const speed = parseFloat(gear.getAttribute('data-speed') || (index % 2 === 0 ? '1' : '-1'));
+    cachedGears.push({ el: gear, cx, cy, speed });
+  });
+
+  function animateLoop(timestamp) {
+    if (!isRunning) return;
+
+    if (!lastFrameTime) lastFrameTime = timestamp;
+    const elapsed = Math.min(50, Math.max(0, timestamp - lastFrameTime));
+    lastFrameTime = timestamp;
+
+    const frameUnits = elapsed / (1000 / 60);
+    gearImpulse *= Math.pow(0.95, frameUnits);
+    ambientGearAngle += (0.035 + gearImpulse * 0.04) * frameUnits;
+
+    // Drive clock hands continuously on every animation frame from wall clock
+    updateClockNow();
+
+    // Rotate horological wheelwork around respective pivots
+    for (let i = 0; i < cachedGears.length; i++) {
+      const g = cachedGears[i];
+      const angle = ambientGearAngle * g.speed;
+      if (g.cx !== null && g.cy !== null) {
+        g.el.setAttribute('transform', `rotate(${angle.toFixed(2)} ${g.cx} ${g.cy})`);
+      } else {
+        g.el.style.transform = `rotate(${angle.toFixed(2)}deg)`;
+      }
+    }
+
+    debug.gearTicks++;
+    animId = requestAnimationFrame(animateLoop);
+  }
+
+  function startAnimation() {
+    if (!isRunning) {
+      isRunning = true;
+      lastFrameTime = performance.now();
+      animId = requestAnimationFrame(animateLoop);
+    }
+  }
+
+  function stopAnimation() {
+    isRunning = false;
+    if (animId) {
+      cancelAnimationFrame(animId);
+      animId = null;
+    }
+  }
+
+  // Accessibility & Lifecycle: Pause rendering when hidden, resume with real system time
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      stopAnimation();
+    } else {
+      updateClockNow();
+      startAnimation();
+    }
+  });
+
+  window.addEventListener('pageshow', () => {
+    updateClockNow();
+    startAnimation();
+  });
+
+  window.addEventListener('resize', updateResponsiveLayout, { passive: true });
+
+  // Initial startup sequence
+  syncAccentMacros();
+  updateResponsiveLayout();
+  updateClockNow();
+  startAnimation();
+
+  // Diagnostic API exposed for test automation & visual verification
+  window.__clockworkZenDebug = {
+    calculateClockAngles,
+    syncAccentMacros,
+    updateResponsiveLayout,
+    getState: () => ({
+      ...debug,
+      ambientGearAngle,
+      gearImpulse,
+      isRunning,
+      time: new Date().toISOString()
+    })
+  };
+})();
+</script>
+</body>
+</html>

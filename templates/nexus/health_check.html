@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}System Health & Platform Telemetry — Campus Nexus{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Return Navigation Affordance -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'landing' %}{% endif %}" class="btn btn-outline-secondary btn-sm py-1 px-3 d-inline-flex align-items-center gap-1">
+            <i class="bi bi-arrow-left"></i> Return to Campus Nexus
+        </a>
+        <div class="d-flex gap-2 align-items-center">
+            <a href="?format=json" target="_blank" class="btn btn-dark-custom btn-sm">
+                <i class="bi bi-file-code me-1"></i> Raw JSON View
+            </a>
+            {% if user.is_staff or user.is_superuser %}
+                <a href="{% url 'operational_dashboard' %}" class="btn btn-outline-green btn-sm">
+                    <i class="bi bi-speedometer2 me-1"></i> Operations Dashboard
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Health Status Banner -->
+    <div class="glass p-4 p-md-5 mb-4 border-{% if db_ok %}success{% else %}danger{% endif %}-subtle text-center">
+        <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
+             style="width: 72px; height: 72px; background: {% if db_ok %}rgba(16, 185, 129, 0.15){% else %}rgba(239, 68, 68, 0.15){% endif %};">
+            <i class="bi bi-{% if db_ok %}check-circle-fill text-success{% else %}exclamation-triangle-fill text-danger{% endif %} fs-1"></i>
+        </div>
+        <h2 class="fw-bold mb-1">
+            {% if db_ok %}ALL SYSTEMS OPERATIONAL{% else %}SYSTEM DEGRADED{% endif %}
+        </h2>
+        <p class="text-secondary small mb-3">
+            Campus Nexus infrastructure, database connection pool, and ASGI runtime verified at {{ payload.timestamp }}.
+        </p>
+        <span class="badge {% if db_ok %}bg-success{% else %}bg-danger{% endif %} px-3 py-1 rounded-pill">
+            HTTP {{ status_code }} OK
+        </span>
+    </div>
+
+    <!-- Telemetry & Traffic Cards (Operational Telemetry) -->
+    <h5 class="fw-bold text-white mb-3"><i class="bi bi-speedometer green-accent me-2"></i>Live Server Traffic & Runtime Telemetry</h5>
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass p-3 h-100">
+                <span class="small text-secondary fw-semibold text-uppercase d-block mb-1">Total Production Requests</span>
+                <div class="fs-3 fw-bold text-emerald">{{ traffic.total_requests|intcomma }}</div>
+                <div class="small text-secondary mt-1">Processed across platform endpoints</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass p-3 h-100">
+                <span class="small text-secondary fw-semibold text-uppercase d-block mb-1">Peak Server Throughput</span>
+                <div class="fs-3 fw-bold text-warning">{{ traffic.peak_rps }} <span class="fs-6 text-secondary">req/s</span></div>
+                <div class="small text-secondary mt-1">Measured concurrent student surge</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass p-3 h-100">
+                <span class="small text-secondary fw-semibold text-uppercase d-block mb-1">Average Response Latency</span>
+                <div class="fs-3 fw-bold text-info">{{ traffic.avg_latency_ms }} <span class="fs-6 text-secondary">ms</span></div>
+                <div class="small text-secondary mt-1">Sub-30ms p95 response threshold</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass p-3 h-100">
+                <span class="small text-secondary fw-semibold text-uppercase d-block mb-1">Database & Uptime</span>
+                <div class="fs-3 fw-bold text-success">{% if db_ok %}Connected{% else %}Error{% endif %}</div>
+                <div class="small text-secondary mt-1">System uptime: {{ traffic.uptime_display }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Operational Traffic Intervals -->
+    <div class="glass p-4 mb-4 border-secondary">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold text-white mb-0">
+                <i class="bi bi-clock-history green-accent me-2"></i>Traffic Volume Across Time Intervals
+            </h5>
+            <span class="badge bg-dark border border-secondary text-secondary small">Live Rolling Telemetry</span>
+        </div>
+        <div class="row g-2 text-center">
+            <div class="col-6 col-md-3">
+                <div class="p-3 rounded bg-black bg-opacity-30 border border-secondary">
+                    <span class="text-secondary small d-block mb-1">Last 1 Hour</span>
+                    <strong class="text-white fs-5">{{ traffic.requests_last_hour }}</strong>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="p-3 rounded bg-black bg-opacity-30 border border-secondary">
+                    <span class="text-secondary small d-block mb-1">Today (24h)</span>
+                    <strong class="text-white fs-5">{{ traffic.requests_today }}</strong>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="p-3 rounded bg-black bg-opacity-30 border border-secondary">
+                    <span class="text-secondary small d-block mb-1">Last 7 Days</span>
+                    <strong class="text-white fs-5">{{ traffic.requests_7d }}</strong>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="p-3 rounded bg-black bg-opacity-30 border border-secondary">
+                    <span class="text-secondary small d-block mb-1">Active Users Today</span>
+                    <strong class="text-white fs-5">{{ traffic.users_signin_today }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Collapsible Raw JSON Telemetry -->
+    <div class="glass p-4 mb-4 border-secondary">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="fw-bold text-white mb-0">
+                <i class="bi bi-code-slash green-accent me-2"></i>Raw Health Endpoint Response
+            </h6>
+            <button type="button" class="btn btn-dark-custom btn-sm" onclick="copyJsonPayload(this)">
+                <i class="bi bi-clipboard me-1"></i> Copy JSON
+            </button>
+        </div>
+        <pre class="bg-black bg-opacity-60 p-3 rounded text-success small mb-0 font-monospace" style="max-height: 220px; overflow-y: auto;" id="raw-json-block">{{ payload|pprint }}</pre>
+    </div>
+
+    <!-- Bottom Return Affordance -->
+    <div class="text-center pt-2">
+        <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'landing' %}{% endif %}" class="btn btn-green px-4">
+            <i class="bi bi-arrow-left me-1"></i> Return to Campus Nexus Dashboard
+        </a>
+    </div>
+</div>
+
+<script>
+function copyJsonPayload(btn) {
+    const code = document.getElementById('raw-json-block').textContent;
+    navigator.clipboard.writeText(code).then(function() {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check2 text-success me-1"></i> Copied!';
+        setTimeout(function() { btn.innerHTML = orig; }, 1800);
+    });
+}
+</script>
+{% endblock %}

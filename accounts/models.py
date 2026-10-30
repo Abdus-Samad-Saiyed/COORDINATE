@@ -1,0 +1,546 @@
+"""
+User model and social models for COORDINATE.
+"""
+
+from django.contrib.auth.models import AbstractUser
+from django.core.validators import RegexValidator
+from django.db import models
+from django.utils import timezone
+
+
+ENROLLMENT_VALIDATOR = RegexValidator(
+    regex=r'^(?:\d{4}|20XX)[BMP][A-Z]{3}\d{3}$',
+    message='Invalid enrollment number. Expected format: 2024BCSE001 or 20XXBCSE001',
+)
+
+_DEGREE_MAP = {'B': 'Bachelors', 'M': 'Masters', 'P': 'PhD'}
+
+
+class User(AbstractUser):
+    """
+    Custom user model where enrollment_number is the login credential.
+
+    Enrollment format: 2024BCSE001 or 20XXBCSE001
+      [0:4]  → joining year   (2024 or 20XX)
+      [4]    → degree code    (B/M/P)
+      [5:8]  → branch code    (CSE, ECE, …)
+      [8:11] → roll number    (001)
+    """
+
+    enrollment_number = models.CharField(
+        max_length=11,
+        unique=True,
+        validators=[ENROLLMENT_VALIDATOR],
+        db_index=True,
+    )
+    phone_number = models.CharField(max_length=15)
+
+    # Auto-derived from enrollment_number on save
+    branch = models.CharField(max_length=10, blank=True)
+    degree = models.CharField(max_length=20, blank=True)
+    joining_year = models.IntegerField(null=True, blank=True)
+    roll_number = models.CharField(max_length=10, blank=True)
+
+    GENDER_CHOICES = [('M', 'Male'), ('F', 'Female')]
+    gender = models.CharField(max_length=1, choices=GENDER_CHOICES, blank=True)
+
+    verified = models.BooleanField(default=False)
+    profile_photo = models.ImageField(upload_to='profiles/', blank=True, null=True)
+    bio = models.TextField(max_length=500, blank=True)
+    show_friends_publicly = models.BooleanField(default=True)
+    hide_online_status = models.BooleanField(default=False)
+    hide_from_search = models.BooleanField(default=False)
+    hide_profile_photo = models.BooleanField(default=False)
+    show_contact_on_profile = models.BooleanField(default=True)
+    two_factor_enabled = models.BooleanField(default=False)
+
+    # Single active session security key (HMAC digest or raw key)
+    current_session_key = models.CharField(max_length=64, blank=True, default='')
+
+    # Soft deletion / Account closed state
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    # Ride reliability stats
+    rides_completed = models.IntegerField(default=0)
+    on_time_count = models.IntegerField(default=0)
+    late_count = models.IntegerField(default=0)
+    no_show_count = models.IntegerField(default=0)
+    behavior_reports = models.IntegerField(default=0)
+
+    USERNAME_FIELD = 'enrollment_number'
+    REQUIRED_FIELDS = ['username', 'gender', 'phone_number', 'email']
+
+    class Meta:
+        verbose_name = 'User'
+        verbose_name_plural = 'Users'
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._initial_profile_photo_name = self.profile_photo.name if (self.pk and self.profile_photo) else ''
+
+    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = self.email.strip().lower()
+        if self.enrollment_number:
+            e = self.enrollment_number.upper()
+            self.enrollment_number = e
+            year_part = e[:4]
+            self.joining_year = int(year_part) if year_part.isdigit() else 2099
+            self.degree = _DEGREE_MAP.get(e[4], 'Unknown')
+            self.branch = e[5:8]
+            self.roll_number = e[8:]
+
+        update_fields = kwargs.get('update_fields')
+        old_photo_to_delete = None
+        if self.pk and (update_fields is None or 'profile_photo' in update_fields):
+            current_photo_name = self.profile_photo.name if self.profile_photo else ''
+            if self._initial_profile_photo_name and self._initial_profile_photo_name != current_photo_name:
+                old_photo_to_delete = self._initial_profile_photo_name
+
+        super().save(*args, **kwargs)
+        self._initial_profile_photo_name = self.profile_photo.name if self.profile_photo else ''
+
+        if old_photo_to_delete:
+            def _delete_old_file(name=old_photo_to_delete, storage=self.profile_photo.storage):
+                try:
+                    if not User.objects.filter(profile_photo=name).exists():
+                        storage.delete(name)
+                except Exception:
+                    pass
+            from django.db import transaction
+            transaction.on_commit(_delete_old_file)
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def is_debug_account(self) -> bool:
+        """Synthetic debug accounts begin with '20XX' and are active only when DEBUG=True or test runner."""
+        from django.conf import settings
+        import sys
+        is_debug_mode = getattr(settings, 'DEBUG', False) or ('test' in sys.argv)
+        return bool(is_debug_mode and self.enrollment_number and self.enrollment_number.startswith('20XX'))
+
+    @property
+    def on_time_percentage(self) -> float:
+        total = self.on_time_count + self.late_count + self.no_show_count
+        if total == 0:
+            return 100.0
+        return round((self.on_time_count / total) * 100, 1)
+
+    def can_view_phone_number(self, viewer) -> bool:
+        """
+        Explicit phone number privacy policy:
+        Only visible to:
+          - Self
+          - Staff / superusers
+          - Connected friends when target user enables contact visibility
+        """
+        if not viewer or not viewer.is_authenticated or not getattr(viewer, 'is_active', False):
+            return False
+        if viewer == self or viewer.is_staff or viewer.is_superuser:
+            return True
+        if not getattr(viewer, 'verified', False) or getattr(viewer, 'is_deleted', False):
+            return False
+        if not getattr(self, 'show_contact_on_profile', True):
+            return False
+        return Friendship.objects.filter(
+            models.Q(user1=viewer, user2=self) | models.Q(user1=self, user2=viewer)
+        ).exists()
+
+    @property
+    def display_name(self) -> str:
+        name = self.get_full_name() or self.enrollment_number
+        if getattr(self, 'is_deleted', False):
+            return f"{name} (Closed Account)"
+        return name
+
+    def __str__(self) -> str:
+        return self.enrollment_number
+
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
+
+class AccountApplication(models.Model):
+    """
+    A prospective student's application for a verified account.
+    Admin reviews these and calls approve_application() to create the User.
+    """
+
+    enrollment_number = models.CharField(max_length=11, unique=True)
+    full_name = models.CharField(max_length=255)
+    email = models.EmailField(max_length=254, default='')
+    phone_number = models.CharField(max_length=15)
+    gender = models.CharField(max_length=1, choices=User.GENDER_CHOICES)
+    password = models.CharField(max_length=255)          # stored hashed
+    application_number = models.CharField(max_length=20, unique=True)
+    phone_verified = models.BooleanField(default=False)
+    approved = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Account Application'
+        verbose_name_plural = 'Account Applications'
+
+    def save(self, *args, **kwargs):
+        if self.enrollment_number:
+            self.enrollment_number = self.enrollment_number.strip().upper()
+        if self.email:
+            self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f'{self.application_number} — {self.enrollment_number}'
+
+
+# ---------------------------------------------------------------------------
+# Social graph
+# ---------------------------------------------------------------------------
+
+class FriendRequest(models.Model):
+    sender = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='sent_friend_requests',
+    )
+    receiver = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='received_friend_requests',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sender', 'receiver'],
+                name='unique_friend_request',
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(sender=models.F('receiver')),
+                name='no_self_friend_request',
+            ),
+        ]
+        verbose_name = 'Friend Request'
+
+    def __str__(self) -> str:
+        return f'{self.sender} → {self.receiver}'
+
+
+class Friendship(models.Model):
+    user1 = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='friendships_as_user1',
+    )
+    user2 = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='friendships_as_user2',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user1', 'user2'],
+                name='unique_friendship',
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(user1=models.F('user2')),
+                name='no_self_friendship',
+            ),
+        ]
+        verbose_name = 'Friendship'
+
+    def save(self, *args, **kwargs):
+        if self.user1_id and self.user2_id and self.user1_id > self.user2_id:
+            self.user1, self.user2 = self.user2, self.user1
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f'{self.user1} ↔ {self.user2}'
+
+
+class DirectMessage(models.Model):
+    """1-on-1 direct message between friends."""
+
+    sender = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='sent_direct_messages',
+    )
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='received_direct_messages',
+    )
+    content = models.TextField(max_length=2000)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    is_read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'Direct Message'
+        verbose_name_plural = 'Direct Messages'
+
+    def clean(self):
+        super().clean()
+        if not self.content or not self.content.strip():
+            from django.core.exceptions import ValidationError
+            raise ValidationError({'content': 'Message content cannot be blank.'})
+        self.content = self.content.strip()
+
+    def __str__(self) -> str:
+        return f'{self.sender} → {self.recipient}: {self.content[:30]}'
+
+
+class PhoneOTP(models.Model):
+    """Cryptographically protected single-use OTP for 2FA, Signup, and Security changes."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='phone_otps')
+    purpose = models.CharField(max_length=30, default='2FA')  # 2FA, SIGNUP, SECURITY_CHANGE, PASSWORD_RESET
+    otp_hash = models.CharField(max_length=128)
+    phone_number = models.CharField(max_length=20)
+    email = models.EmailField(max_length=254, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    attempts_left = models.IntegerField(default=3)
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Phone OTP'
+        verbose_name_plural = 'Phone OTPs'
+
+    def is_valid(self) -> bool:
+        return (not self.is_used) and (self.attempts_left > 0) and (timezone.now() < self.expires_at)
+
+    def __str__(self) -> str:
+        ident = self.user.enrollment_number if self.user else 'Anonymous'
+        return f'OTP ({self.purpose}) for {ident} ({self.phone_number})'
+
+
+class PhysicalVerificationRequest(models.Model):
+    """In-person physical verification request for forgotten password or lost phone/SIM."""
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending In-Person Verification'),
+        ('VERIFIED', 'Physically Verified & Resolved'),
+        ('REJECTED', 'Rejected'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='physical_verification_requests')
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=20, blank=True)
+    student_notes = models.TextField(blank=True, max_length=500)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', db_index=True)
+    verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_verifications')
+    resolution_notes = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Physical Verification Request'
+        verbose_name_plural = 'Physical Verification Requests'
+
+    def __str__(self) -> str:
+        return f"{self.user.enrollment_number} — {self.status}"
+
+
+class PasskeyCredential(models.Model):
+    """FIDO2 / WebAuthn Biometric & Windows Hello Passkey Credential."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='passkey_credentials')
+    credential_id = models.CharField(max_length=512, unique=True, db_index=True)
+    public_key = models.TextField()
+    sign_count = models.IntegerField(default=0)
+    name = models.CharField(max_length=100, default='Windows Hello / Biometric Key')
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Passkey Credential'
+        verbose_name_plural = 'Passkey Credentials'
+
+    def __str__(self) -> str:
+        return f'{self.name} — {self.user.enrollment_number}'
+
+
+class ImmutableAuditQuerySet(models.QuerySet):
+    def update(self, *args, **kwargs):
+        raise PermissionError("AuditEvent records are append-only and cannot be updated in bulk.")
+
+    def delete(self, *args, **kwargs):
+        raise PermissionError("AuditEvent records are append-only and cannot be deleted in bulk.")
+
+
+class AuditEvent(models.Model):
+    """Minimal, privacy-preserving operational audit log."""
+
+    EVENT_CHOICES = [
+        ('LOGIN_SUCCESS', 'Login Success'),
+        ('LOGIN_FAILURE', 'Login Failure'),
+        ('APP_SUBMIT', 'Application Submitted'),
+        ('APP_APPROVED', 'Application Approved'),
+        ('APP_REJECTED', 'Application Rejected'),
+        ('SUPERUSER_PROMOTED', 'Superuser Promoted'),
+        ('SUPERUSER_REVOKED', 'Superuser Revoked'),
+        ('ADMIN_PHONE_UPDATE', 'Admin Updated Phone Number'),
+        ('ACCOUNT_DELETED', 'Account Closed / Deleted by Admin'),
+        ('PHYSICAL_VERIFICATION_REQUESTED', 'Physical In-Person Verification Filed'),
+        ('PHYSICAL_VERIFICATION_RESOLVED', 'Physical In-Person Verification Approved'),
+        ('PHYSICAL_VERIFICATION_REJECTED', 'Physical In-Person Verification Rejected'),
+        ('SECURITY_SETTINGS_UPDATED', 'Security Credentials Updated'),
+        ('PASSKEY_REGISTERED', 'Passkey Registered'),
+        ('CONTRIBUTOR_NOMINATED', 'Contributor Nominated'),
+        ('CONTRIBUTOR_REMOVED', 'Contributor Removed'),
+        ('CONSENT_GRANTED', 'Consent Granted'),
+        ('CONSENT_REVOKED', 'Consent Revoked'),
+        ('SESSION_TERMINATED_CONCURRENT', 'Session Terminated on Concurrent Login'),
+        ('RIDE_CREATED', 'Ride Created'),
+        ('RIDE_JOINED', 'Ride Joined'),
+        ('RIDE_LEFT', 'Ride Left'),
+        ('RIDE_COMPLETED', 'Ride Completed'),
+        ('RIDE_CANCELLED', 'Ride Cancelled'),
+        ('INCIDENT_ESCALATED', 'Incident Escalated to Institute'),
+        ('FEEDBACK_SUBMITTED', 'Platform Feedback Submitted'),
+        ('EXPORT_GENERATED', 'Export Generated'),
+    ]
+
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    event_type = models.CharField(max_length=40, choices=EVENT_CHOICES, db_index=True)
+    actor_enrollment = models.CharField(max_length=20, blank=True)
+    description = models.CharField(max_length=255)
+    target_id = models.CharField(max_length=50, blank=True)
+
+    objects = ImmutableAuditQuerySet.as_manager()
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'Audit Event'
+        verbose_name_plural = 'Audit Events'
+
+    def __str__(self) -> str:
+        return f"[{self.timestamp.strftime('%Y-%m-%d %H:%M')}] {self.event_type}: {self.description}"
+
+    def delete(self, *args, **kwargs):
+        raise PermissionError("Audit events are immutable and cannot be deleted.")
+
+    def save(self, *args, **kwargs):
+        if self.pk and not kwargs.get('force_insert', False):
+            raise PermissionError("Audit events are immutable and cannot be modified.")
+        super().save(*args, **kwargs)
+
+
+class PlatformFeedback(models.Model):
+    """User feedback, feature requests, proposals, and bug reports."""
+
+    FEEDBACK_TYPES = [
+        ('BUG', 'Bug Report'),
+        ('FEATURE', 'Feature Request'),
+        ('PROPOSAL', 'Project / Service Proposal'),
+        ('GENERAL', 'General Feedback'),
+    ]
+
+    STATUS_CHOICES = [
+        ('OPEN', 'Open'),
+        ('IN_REVIEW', 'In Review'),
+        ('RESOLVED', 'Resolved'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='feedbacks')
+    submitter_name = models.CharField(max_length=100, blank=True)
+    submitter_contact = models.CharField(max_length=100, blank=True)
+    feedback_type = models.CharField(max_length=20, choices=FEEDBACK_TYPES, default='GENERAL')
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    system_info = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Platform Feedback'
+        verbose_name_plural = 'Platform Feedback'
+
+    def __str__(self) -> str:
+        return f"[{self.get_feedback_type_display()}] {self.title}"
+
+
+class Contributor(models.Model):
+    """Platform contributor and maintainer profile with peer nomination tracking."""
+
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='contributor_profiles')
+    name = models.CharField(max_length=100)
+    enrollment_number = models.CharField(max_length=20, blank=True)
+    role = models.CharField(max_length=100, default='Core Contributor')
+    github_url = models.URLField(blank=True)
+    linkedin_url = models.URLField(blank=True)
+    bio = models.CharField(max_length=255, blank=True)
+    nominated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='nominated_contributors')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'Contributor'
+        verbose_name_plural = 'Contributors'
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.role})"
+
+
+def log_audit_event(
+    event_type: str,
+    actor_enrollment: str = '',
+    description: str = '',
+    target_id: str = '',
+):
+    """Log an operational audit event without collecting sensitive payloads."""
+    try:
+        return AuditEvent.objects.create(
+            event_type=event_type,
+            actor_enrollment=str(actor_enrollment)[:20],
+            description=str(description)[:255],
+            target_id=str(target_id)[:50],
+        )
+    except Exception:
+        return None
+
+
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+
+@receiver(post_delete, sender=User)
+def cleanup_user_profile_photo_on_delete(sender, instance, **kwargs):
+    """Ensure profile photo file is removed from storage when User is deleted."""
+    if instance.profile_photo and instance.profile_photo.name:
+        try:
+            instance.profile_photo.storage.delete(instance.profile_photo.name)
+        except Exception:
+            pass
+
+
+
+
+# ---------------------------------------------------------------------------
+# Signals
+# ---------------------------------------------------------------------------
+from django.contrib.auth.signals import user_logged_out
+from django.dispatch import receiver
+
+@receiver(user_logged_out)
+def on_user_logged_out(sender, request, user, **kwargs):
+    if user and hasattr(user, 'current_session_key') and getattr(user, 'pk', None):
+        user.current_session_key = ''
+        user.save(update_fields=['current_session_key'])

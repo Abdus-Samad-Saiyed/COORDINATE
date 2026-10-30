@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}Sign In — COORDINATE{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center align-items-center" style="min-height: 65vh;">
+        <div class="col-md-8 col-lg-5">
+            <div class="glass p-4 p-md-5">
+                <div class="text-center mb-4">
+                    <div class="feature-icon mx-auto mb-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
+                        <i class="bi bi-person-badge"></i>
+                    </div>
+                    <h2 class="fw-bold mb-1">Student Sign In</h2>
+                    <p class="text-secondary small">Access verified rides across campus</p>
+                </div>
+
+                <form method="POST" action="{% url 'login' %}">
+                    {% csrf_token %}
+                    {% if next %}
+                        <input type="hidden" name="next" value="{{ next }}">
+                    {% endif %}
+
+                    <!-- Strict Institutional Disciplinary Warning Banner -->
+                    <div class="alert alert-warning border border-warning-subtle py-2 px-3 mb-3 small d-flex align-items-start gap-2">
+                        <i class="bi bi-shield-exclamation text-warning fs-5 flex-shrink-0 mt-1"></i>
+                        <div>
+                            <strong class="d-block text-warning-emphasis">STRICT DISCIPLINARY NOTICE:</strong>
+                            <span class="text-white-50">
+                                Never share your enrollment credentials or 2FA codes with anyone. Sharing credentials violates the Institute IT &amp; Discipline Code.
+                                You are legally and academically accountable for all platform activities, rides, and messages originating from your account.
+                            </span>
+                        </div>
+                    </div>
+
+                    {% if form.errors %}
+                        <div class="alert alert-danger py-2 small mb-3">
+                            <i class="bi bi-exclamation-circle-fill me-1"></i> Invalid enrollment number or password.
+                        </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="id_username" class="form-label">Enrollment Number</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-person"></i></span>
+                            <input type="text" name="username" autofocus autocapitalize="characters" autocomplete="username" maxlength="11" required id="id_username" class="form-control" placeholder="e.g. 2024BCSE001">
+                        </div>
+                        <div class="form-text text-secondary small">Format: Year + Degree + Branch + Roll (e.g. 2024BCSE001)</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label for="id_password" class="form-label mb-0">Password</label>
+                            <a href="{% url 'forgot_password' %}" class="small text-secondary text-decoration-none">
+                                <i class="bi bi-question-circle me-1"></i> Forgot Password?
+                            </a>
+                        </div>
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-key"></i></span>
+                            <input type="password" name="password" autocomplete="current-password" required id="id_password" class="form-control" placeholder="Enter your password">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-green w-100 py-2 fs-6 fw-bold">
+                        <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+                    </button>
+                </form>
+
+                <hr class="my-4">
+
+                <div class="text-center small">
+                    <p class="text-secondary mb-2">New student or haven't verified yet?</p>
+                    <a href="{% url 'apply_account' %}" class="green-accent fw-semibold">
+                        <i class="bi bi-pencil-square me-1"></i> Submit Account Application &rarr;
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

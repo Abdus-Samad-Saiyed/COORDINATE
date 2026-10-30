@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+
+{% block title %}System Analytics — COORDINATE{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">Campus Analytics Dashboard</h2>
+            <p class="text-secondary small mb-0">Overview of student travel, platform activity, and safety metrics</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'application_list' %}" class="btn btn-outline-green">
+                <i class="bi bi-person-lines-fill me-1"></i> Pending Applications ({{ pending_count }})
+            </a>
+            <a href="{% url 'admin:index' %}" class="btn btn-dark-custom">
+                <i class="bi bi-shield-lock me-1"></i> Django Admin
+            </a>
+        </div>
+    </div>
+
+    <!-- Top KPI Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass stat-card-mini">
+                <div class="num green-accent">{{ ride_stats.total }}</div>
+                <div class="lbl">Total Rides Posted</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass stat-card-mini">
+                <div class="num text-info">{{ ride_stats.open }}</div>
+                <div class="lbl">Active Open Rides</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass stat-card-mini">
+                <div class="num text-warning">{{ ride_stats.full }}</div>
+                <div class="lbl">Rides At Capacity</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="glass stat-card-mini">
+                <div class="num text-white">{{ user_stats.verified }}</div>
+                <div class="lbl">Verified Students</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Route Volume -->
+        <div class="col-lg-6">
+            <div class="glass p-4 h-100">
+                <h5 class="fw-bold mb-3"><i class="bi bi-geo-alt green-accent me-2"></i>Most Frequent Routes</h5>
+                {% if popular_routes %}
+                    <div class="d-flex flex-column gap-3">
+                        {% for r in popular_routes %}
+                            <div>
+                                <div class="d-flex justify-content-between small fw-semibold mb-1">
+                                    <span>{{ r.label }}</span>
+                                    <span class="green-accent">{{ r.count }} rides</span>
+                                </div>
+                                <div class="reliability-bar-wrap">
+                                    <div class="reliability-bar" style="width: {% widthratio r.count ride_stats.total 100 %}%;"></div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-secondary small mb-0">No route data accumulated yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Most Active Students -->
+        <div class="col-lg-6">
+            <div class="glass p-4 h-100">
+                <h5 class="fw-bold mb-3"><i class="bi bi-trophy green-accent me-2"></i>Top Ride Coordinators</h5>
+                {% if top_users %}
+                    <div class="table-responsive">
+                        <table class="table table-dark table-sm align-middle mb-0" style="background: transparent;">
+                            <thead>
+                                <tr class="text-secondary small">
+                                    <th>Student</th>
+                                    <th>Branch</th>
+                                    <th>Rides</th>
+                                    <th>Reliability</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in top_users %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'profile' u.enrollment_number %}" class="green-accent fw-semibold">
+                                                {{ u.enrollment_number }}
+                                            </a>
+                                        </td>
+                                        <td>{{ u.branch }}</td>
+                                        <td>{{ u.rides_completed }}</td>
+                                        <td>{{ u.on_time_percentage }}%</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-secondary small mb-0">No active students recorded.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Flagged Reports Table -->
+    {% if flagged_users %}
+    <div class="glass p-4 mt-4 border-danger">
+        <h5 class="fw-bold mb-3 text-danger"><i class="bi bi-flag-fill me-2"></i>Students With Behavior Reports</h5>
+        <div class="table-responsive">
+            <table class="table table-dark table-sm align-middle mb-0" style="background: transparent;">
+                <thead>
+                    <tr class="text-secondary small">
+                        <th>Student</th>
+                        <th>Phone</th>
+                        <th>Late</th>
+                        <th>No-Shows</th>
+                        <th>Reports Filed</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fu in flagged_users %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'profile' fu.enrollment_number %}" class="text-white fw-bold">
+                                    {{ fu.enrollment_number }}
+                                </a>
+                            </td>
+                            <td>{{ fu.phone_number }}</td>
+                            <td>{{ fu.late_count }}</td>
+                            <td>{{ fu.no_show_count }}</td>
+                            <td><span class="badge bg-danger">{{ fu.behavior_reports }}</span></td>
+                            <td>
+                                <a href="{% url 'admin:accounts_user_change' fu.id %}" class="btn btn-outline-danger btn-sm py-0">Review</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

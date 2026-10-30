@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block title %}My Rides & History — COORDINATE{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">My Rides</h2>
+            <p class="text-secondary small mb-0">Your active participations and completed campus ride history</p>
+        </div>
+        <a href="{% url 'create_ride' %}" class="btn btn-green">
+            <i class="bi bi-plus-circle-fill me-1"></i> Offer New Ride
+        </a>
+    </div>
+
+    <!-- Active / Upcoming Rides -->
+    <div class="mb-5">
+        <h5 class="fw-bold mb-3 text-white">
+            <i class="bi bi-broadcast green-accent me-2"></i>Active & Upcoming Rides
+        </h5>
+        {% if active_rides %}
+            <div class="row g-3">
+                {% for ride in active_rides %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="glass p-4 h-100 d-flex flex-column justify-content-between">
+                            <div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="badge bg-success-subtle text-success">{{ ride.get_status_display }}</span>
+                                    <span class="text-secondary small">{{ ride.departure_time|date:"M j, H:i" }}</span>
+                                </div>
+                                <h5 class="fw-bold mb-1">{{ ride.route_display }}</h5>
+                                <p class="text-secondary small mb-3">Host: {{ ride.creator.enrollment_number }} &middot; {{ ride.participant_count }}/{{ ride.total_spots }} spots</p>
+                            </div>
+                            <a href="{% url 'ride_detail' ride.id %}" class="btn btn-outline-green btn-sm w-100">
+                                <i class="bi bi-chat-dots me-1"></i> Open Ride & Chat
+                            </a>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="glass p-4 text-center text-secondary small">
+                You have no active rides right now. <a href="{% url 'ride_list' %}" class="green-accent">Find rides on campus &rarr;</a>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Past & Completed Rides History -->
+    <div>
+        <h5 class="fw-bold mb-3 text-white">
+            <i class="bi bi-clock-history text-secondary me-2"></i>Past Ride History
+        </h5>
+        {% if past_rides %}
+            <div class="glass p-3 p-md-4">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0" style="background: transparent;">
+                        <thead>
+                            <tr class="text-secondary small">
+                                <th>Route</th>
+                                <th>Date & Time</th>
+                                <th>Host</th>
+                                <th>Status</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ride in past_rides %}
+                                <tr>
+                                    <td><strong>{{ ride.route_display }}</strong></td>
+                                    <td>{{ ride.departure_time|date:"M j, Y — H:i" }}</td>
+                                    <td>{{ ride.creator.enrollment_number }}</td>
+                                    <td>
+                                        {% if ride.status == 'COMPLETED' %}
+                                            <span class="badge bg-info-subtle text-info">Completed</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary-subtle text-secondary">{{ ride.get_status_display }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="{% url 'ride_detail' ride.id %}" class="btn btn-dark-custom btn-sm">
+                                            View Details
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% else %}
+            <div class="glass p-4 text-center text-secondary small">
+                No past completed rides in your history yet.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

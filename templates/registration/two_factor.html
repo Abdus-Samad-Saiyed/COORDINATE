@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Two-Factor Verification — COORDINATE{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center align-items-center" style="min-height: 65vh;">
+        <div class="col-md-8 col-lg-5">
+            <div class="glass p-4 p-md-5 glass-glow">
+                <!-- Header -->
+                <div class="text-center mb-4">
+                    <div class="feature-icon mx-auto mb-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
+                        <i class="bi bi-shield-lock-fill"></i>
+                    </div>
+                    <h2 class="fw-bold mb-1">Two-Factor Authentication</h2>
+                    <p class="text-secondary small mb-0">
+                        Identity verification for <strong class="text-white">{{ user_obj.enrollment_number }}</strong>
+                    </p>
+                </div>
+
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %} py-2 px-3 small mb-3">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+
+                <!-- Option A: Dual-Channel OTP Verification (SMS & Email) -->
+                <div class="mb-4">
+                    <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 mb-3 text-center">
+                        <span class="text-secondary small d-block mb-1">Verification Code Dispatched To:</span>
+                        <div class="d-flex flex-wrap justify-content-center gap-2 mb-2">
+                            {% if masked_email %}
+                            <span class="badge bg-dark border border-secondary font-monospace text-info px-2 py-1">
+                                <i class="bi bi-envelope me-1"></i>{{ masked_email }}
+                            </span>
+                            {% endif %}
+                            {% if masked_phone %}
+                            <span class="badge bg-dark border border-secondary font-monospace text-success px-2 py-1">
+                                <i class="bi bi-phone me-1"></i>{{ masked_phone }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <span class="d-block text-secondary small" style="font-size: 0.75rem;">
+                            Valid for 5 minutes &bull; Maximum 3 attempts &bull; Check your Email or SMS
+                        </span>
+                    </div>
+
+                    <form method="POST" action="{% url 'two_factor_verify' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="verify">
+
+                        <div class="mb-3 text-center">
+                            <label for="otp_code" class="form-label text-secondary small fw-semibold text-uppercase">Enter 6-Digit Code</label>
+                            <input type="text"
+                                   id="otp_code"
+                                   name="otp_code"
+                                   maxlength="6"
+                                   inputmode="numeric"
+                                   pattern="[0-9]{6}"
+                                   autocomplete="one-time-code"
+                                   class="form-control form-control-lg text-center font-monospace fs-3 fw-bold"
+                                   placeholder="&bull; &bull; &bull; &bull; &bull; &bull;"
+                                   autofocus
+                                   required>
+                        </div>
+
+                        <button type="submit" class="btn btn-green w-100 py-2 fs-6 fw-bold mb-2">
+                            <i class="bi bi-check2-circle me-1"></i> Verify Code &amp; Sign In
+                        </button>
+                    </form>
+
+                    <form method="POST" action="{% url 'two_factor_verify' %}" class="text-center mt-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="resend">
+                        <button type="submit" class="btn btn-link text-secondary text-decoration-none small p-0">
+                            <i class="bi bi-arrow-repeat me-1"></i> Didn't receive code? Resend SMS OTP
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Divider -->
+                <div class="position-relative my-4 text-center">
+                    <hr class="border-secondary">
+                    <span class="position-absolute top-50 start-50 translate-middle px-3 bg-dark text-secondary small font-monospace">
+                        OR PASSKEY BYPASS
+                    </span>
+                </div>
+
+                <!-- Option B: Biometric / Windows Hello Passkey Bypass -->
+                <div>
+                    <button type="button"
+                            id="btnPasskeyAuth"
+                            onclick="authenticateWithPasskey()"
+                            class="btn btn-outline-light w-100 py-2 d-flex align-items-center justify-content-center gap-2 fw-semibold">
+                        <i class="bi bi-fingerprint fs-5 text-warning"></i>
+                        <span>Bypass with Windows Hello / Passkey</span>
+                    </button>
+                    <div id="passkeyAuthStatus" class="small mt-2 text-center font-monospace" style="display: none;"></div>
+                </div>
+
+                <hr class="my-4 border-secondary">
+
+                <div class="text-center small">
+                    <a href="{% url 'login' %}" class="text-secondary text-decoration-none">
+                        <i class="bi bi-arrow-left me-1"></i> Cancel and return to sign in
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// WebAuthn Biometric & Windows Hello Passkey Verification
+async function authenticateWithPasskey() {
+    const statusDiv = document.getElementById('passkeyAuthStatus');
+    const authBtn = document.getElementById('btnPasskeyAuth');
+
+    statusDiv.style.display = 'block';
+    statusDiv.className = 'small mt-2 text-center text-info font-monospace';
+    statusDiv.textContent = 'Contacting security module...';
+
+    if (!window.PublicKeyCredential) {
+        statusDiv.className = 'small mt-2 text-center text-danger font-monospace';
+        statusDiv.textContent = 'WebAuthn passkeys are not supported on this browser.';
+        return;
+    }
+
+    try {
+        // Step 1: Fetch challenge from server
+        const challengeRes = await fetch("{% url 'passkey_auth_challenge' %}");
+        if (!challengeRes.ok) {
+            const err = await challengeRes.json();
+            throw new Error(err.error || 'Challenge negotiation failed');
+        }
+        const chalData = await challengeRes.json();
+
+        // Convert base64url challenge to Uint8Array
+        const challengeBytes = Uint8Array.from(atob(chalData.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
+        statusDiv.textContent = 'Awaiting Windows Hello / biometric confirmation...';
+
+        // Step 2: Request assertion from Windows Hello / biometric authenticator
+        const getOptions = {
+            challenge: challengeBytes,
+            timeout: 60000,
+            userVerification: 'preferred',
+        };
+        // RFC 5890: rpId cannot be an IP address
+        if (chalData.rp_id && !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(chalData.rp_id)) {
+            getOptions.rpId = chalData.rp_id;
+        }
+
+        const assertion = await navigator.credentials.get({
+            publicKey: getOptions
+        });
+
+        if (!assertion) {
+            throw new Error('Biometric authentication cancelled.');
+        }
+
+        function bufferToBase64url(buffer) {
+            if (!buffer) return '';
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        const clientDataB64 = bufferToBase64url(assertion.response.clientDataJSON);
+
+        statusDiv.textContent = 'Verifying cryptographic signature...';
+
+        // Get CSRF Token
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+
+        // Step 3: Verify assertion on server
+        const verifyRes = await fetch("{% url 'passkey_auth_verify' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({
+                id: assertion.id,
+                credential_id: assertion.id,
+                rawId: bufferToBase64url(assertion.rawId),
+                type: assertion.type,
+                client_data_json: clientDataB64,
+                response: {
+                    clientDataJSON: clientDataB64,
+                    authenticatorData: bufferToBase64url(assertion.response.authenticatorData),
+                    signature: bufferToBase64url(assertion.response.signature),
+                    userHandle: assertion.response.userHandle ? bufferToBase64url(assertion.response.userHandle) : null
+                }
+            })
+        });
+
+        const verifyData = await verifyRes.json();
+        if (verifyData.success) {
+            statusDiv.className = 'small mt-2 text-center text-success font-monospace';
+            statusDiv.textContent = 'Passkey verified! Redirecting...';
+            window.location.href = verifyData.redirect_url || "{% url 'dashboard' %}";
+        } else {
+            throw new Error(verifyData.error || 'Verification failed');
+        }
+    } catch (err) {
+        statusDiv.className = 'small mt-2 text-center text-danger font-monospace';
+        let msg = err.message || 'Passkey authentication failed.';
+        if (window.location.hostname === '127.0.0.1' && /domain|origin|valid/i.test(msg)) {
+            msg += ' (Tip: Open http://localhost:8000 instead of 127.0.0.1 for WebAuthn/Windows Hello compliance)';
+        }
+        statusDiv.textContent = msg;
+    }
+}
+</script>
+{% endblock %}

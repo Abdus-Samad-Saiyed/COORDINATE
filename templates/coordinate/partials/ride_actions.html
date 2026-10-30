@@ -1,0 +1,36 @@
+<!-- templates/coordinate/partials/ride_actions.html -->
+<div id="ride-actions-{{ ride.id }}" class="w-100">
+    {% if joined %}
+        <form method="POST"
+              action="{% url 'leave_ride' ride.id %}"
+              hx-post="{% url 'leave_ride' ride.id %}"
+              hx-target="#ride-actions-{{ ride.id }}"
+              hx-swap="outerHTML"
+              class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger w-100 rounded-pill">
+                <i class="bi bi-box-arrow-left me-1"></i> Leave Ride
+            </button>
+        </form>
+    {% elif not has_active_ride and ride.status == 'OPEN' %}
+        <form method="POST"
+              action="{% url 'join_ride' ride.id %}"
+              hx-post="{% url 'join_ride' ride.id %}"
+              hx-target="#ride-actions-{{ ride.id }}"
+              hx-swap="outerHTML"
+              class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-green w-100 rounded-pill">
+                <i class="bi bi-person-plus me-1"></i> Join Ride
+            </button>
+        </form>
+    {% elif ride.status == 'FULL' %}
+        <button class="btn btn-dark-custom w-100 rounded-pill text-warning" disabled>
+            <i class="bi bi-slash-circle me-1"></i> Ride Full
+        </button>
+    {% else %}
+        <button class="btn btn-dark-custom w-100 rounded-pill text-secondary" disabled>
+            <i class="bi bi-dash-circle me-1"></i> Already in a Ride
+        </button>
+    {% endif %}
+</div>

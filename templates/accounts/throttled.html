@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}Request Throttled — COORDINATE{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center align-items-center" style="min-height: 50vh;">
+        <div class="col-md-8 col-lg-6">
+            <div class="glass p-4 p-md-5 text-center">
+                <div class="feature-icon mx-auto mb-3 text-warning" style="width: 64px; height: 64px; font-size: 2rem;">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+                <h3 class="fw-bold mb-2">Too Many Requests</h3>
+                <p class="text-secondary mb-4">
+                    {{ message|default:"You have submitted too many requests in a short time. Please wait a few moments before trying again to protect campus accounts." }}
+                </p>
+                <div class="d-flex justify-content-center gap-2">
+                    <a href="javascript:history.back()" class="btn btn-dark-custom">
+                        <i class="bi bi-arrow-left me-1"></i> Go Back
+                    </a>
+                    <a href="{% url 'landing' %}" class="btn btn-green">
+                        <i class="bi bi-house-door me-1"></i> Return Home
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

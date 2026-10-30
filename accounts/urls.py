@@ -1,0 +1,47 @@
+"""URL patterns for the accounts app."""
+
+from django.urls import path
+
+from .views import (
+    accept_friend_request,
+    admin_analytics,
+    application_list,
+    application_success,
+    approve_application,
+    dashboard,
+    decline_friend_request,
+    direct_chat_view,
+    forgot_password_view,
+    messages_inbox,
+    profile_view,
+    apply_account,
+    reject_application,
+    send_friend_request,
+    send_security_otp,
+    send_signup_otp,
+    unfriend_user,
+    user_search,
+    verify_security_step_up,
+)
+
+urlpatterns = [
+    path('dashboard/',                                  dashboard,              name='dashboard'),
+    path('search/',                                     user_search,            name='user_search'),
+    path('messages/',                                   messages_inbox,         name='messages_inbox'),
+    path('messages/<str:enrollment_number>/',           direct_chat_view,       name='direct_chat'),
+    path('profile/<str:enrollment_number>/',            profile_view,           name='profile'),
+    path('apply/',                                      apply_account,          name='apply_account'),
+    path('apply/success/',                              application_success,    name='application_success'),
+    path('forgot-password/',                            forgot_password_view,   name='forgot_password'),
+    path('otp/send-signup/',                            send_signup_otp,        name='send_signup_otp'),
+    path('otp/send-security/',                          send_security_otp,      name='send_security_otp'),
+    path('security/verify-step-up/',                    verify_security_step_up,name='verify_security_step_up'),
+    path('applications/',                               application_list,       name='application_list'),
+    path('applications/<int:application_id>/approve/',  approve_application,    name='approve_application'),
+    path('applications/<int:application_id>/reject/',   reject_application,     name='reject_application'),
+    path('analytics/',                                  admin_analytics,        name='admin_analytics'),
+    path('friends/<str:enrollment_number>/request/',    send_friend_request,    name='send_friend_request'),
+    path('friends/<str:enrollment_number>/unfriend/',   unfriend_user,          name='unfriend_user'),
+    path('friends/<int:request_id>/accept/',            accept_friend_request,  name='accept_friend_request'),
+    path('friends/<int:request_id>/decline/',           decline_friend_request, name='decline_friend_request'),
+]

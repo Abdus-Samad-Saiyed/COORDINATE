@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Contact Us — Campus Nexus{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header -->
+    <div class="text-center mb-5">
+        <span class="badge bg-success-subtle text-success px-3 py-2 rounded-pill fw-semibold mb-3 border border-success-subtle d-inline-flex align-items-center">
+            <i class="bi bi-envelope-paper-fill me-2"></i> Communications &amp; Support Directory
+        </span>
+        <h1 class="hero-title mb-2">Contact <span class="green-accent">Campus Nexus</span></h1>
+        <p class="hero-subtitle mx-auto text-secondary small">
+            Reach out to our student engineering leads, designated application administrators, or institutional proctorial desks.
+        </p>
+    </div>
+
+    <div class="row g-4 justify-content-center">
+        <!-- Contact Cards -->
+        <div class="col-md-6 col-lg-4">
+            <div class="glass p-4 h-100 d-flex flex-column">
+                <div class="feature-icon mb-3" style="width: 50px; height: 50px; font-size: 1.4rem;">
+                    <i class="bi bi-cpu-fill"></i>
+                </div>
+                <h3 class="fw-bold fs-5 mb-1">Technical &amp; Engineering Desk</h3>
+                <p class="text-secondary small mb-3 flex-grow-1">
+                    For platform bugs, code contributions, server uptime questions, or repository development.
+                </p>
+                <div class="p-3 rounded border border-secondary bg-black bg-opacity-30">
+                    <div class="text-secondary small text-uppercase fw-semibold mb-1">Email Address</div>
+                    <a href="mailto:admin@campusnexus.nit.ac.in" class="green-accent fw-bold font-monospace text-decoration-none">
+                        admin@campusnexus.nit.ac.in
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-4">
+            <div class="glass p-4 h-100 d-flex flex-column">
+                <div class="feature-icon mb-3" style="width: 50px; height: 50px; font-size: 1.4rem;">
+                    <i class="bi bi-shield-lock-fill"></i>
+                </div>
+                <h3 class="fw-bold fs-5 mb-1">Identity &amp; Account Verification</h3>
+                <p class="text-secondary small mb-3 flex-grow-1">
+                    For verification delays, enrollment number discrepancies, or account access assistance.
+                </p>
+                <div class="p-3 rounded border border-secondary bg-black bg-opacity-30">
+                    <div class="text-secondary small text-uppercase fw-semibold mb-1">Email Address</div>
+                    <a href="mailto:verify@campusnexus.nit.ac.in" class="green-accent fw-bold font-monospace text-decoration-none">
+                        verify@campusnexus.nit.ac.in
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-4">
+            <div class="glass p-4 h-100 d-flex flex-column">
+                <div class="feature-icon mb-3" style="width: 50px; height: 50px; font-size: 1.4rem;">
+                    <i class="bi bi-shield-exclamation text-danger"></i>
+                </div>
+                <h3 class="fw-bold fs-5 mb-1">Proctorial Board &amp; Safety Escalation</h3>
+                <p class="text-secondary small mb-3 flex-grow-1">
+                    For urgent student safety reports, harassment violations, or proctorial inquiries.
+                </p>
+                <div class="p-3 rounded border border-secondary bg-black bg-opacity-30">
+                    <div class="text-secondary small text-uppercase fw-semibold mb-1">Official Desk</div>
+                    <a href="mailto:proctorial@campusnexus.nit.ac.in" class="text-danger fw-bold font-monospace text-decoration-none">
+                        proctorial@campusnexus.nit.ac.in
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Institutional Notice -->
+    <div class="row justify-content-center mt-5">
+        <div class="col-lg-8">
+            <div class="glass p-4 text-center">
+                <h4 class="fw-bold fs-6 mb-2 text-white">Physical Location &amp; Campus Hours</h4>
+                <p class="text-secondary small mb-3">
+                    Campus Nexus Server Lab &bull; Computer Centre 2nd Floor &bull; National Institute of Technology<br>
+                    Operational Support: Monday to Friday, 09:00 AM &ndash; 05:30 PM IST
+                </p>
+                <div class="d-flex justify-content-center gap-3">
+                    <a href="{% url 'feedback' %}" class="btn btn-green btn-sm px-3">
+                        <i class="bi bi-chat-dots-fill me-1"></i> Submit Feedback / Bug Report
+                    </a>
+                    <a href="{% url 'about' %}" class="btn btn-dark-custom btn-sm px-3">
+                        <i class="bi bi-info-circle me-1"></i> About Campus Nexus
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

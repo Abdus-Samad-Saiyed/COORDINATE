@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Feedback & Bug Reporting — Campus Nexus{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Header -->
+            <div class="text-center mb-4">
+                <span class="badge bg-success-subtle text-success px-3 py-2 rounded-pill fw-semibold mb-3 border border-success-subtle d-inline-flex align-items-center">
+                    <i class="bi bi-chat-left-heart-fill me-2"></i> Student Feedback &amp; Bug Tracker
+                </span>
+                <h1 class="hero-title mb-2">Help Us Improve <span class="green-accent">Campus Nexus</span></h1>
+                <p class="hero-subtitle mx-auto text-secondary small">
+                    Submit bug reports, feature suggestions, or propose an entirely new student service module.
+                </p>
+            </div>
+
+            <!-- GitHub Issues Routing Banner -->
+            <div class="glass p-3 mb-4 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 border border-secondary">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="feature-icon flex-shrink-0" style="width: 44px; height: 44px; font-size: 1.25rem;">
+                        <i class="bi bi-github"></i>
+                    </div>
+                    <div>
+                        <strong class="d-block text-white">Route Directly to Repository Issues</strong>
+                        <span class="text-secondary small">
+                            Developers and contributors can open bugs, proposals, and feature requests directly in the GitHub repository issue tracker.
+                        </span>
+                    </div>
+                </div>
+                <a href="https://github.com/abdus-samad-saiyed/Campus-Nexus/issues/new/choose" target="_blank" rel="noopener noreferrer" class="btn btn-outline-light btn-sm px-3 flex-shrink-0">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> Open GitHub Issues
+                </a>
+            </div>
+
+            <!-- Feedback Submission Form -->
+            <div class="glass p-4 p-md-5 glass-glow">
+                <form id="feedbackForm" method="POST" action="{% url 'feedback' %}" class="d-flex flex-column gap-3">
+                    {% csrf_token %}
+
+                    <!-- Feedback Type Selector -->
+                    <div>
+                        <label class="form-label text-secondary small fw-semibold text-uppercase">Submission Category</label>
+                        <select id="feedbackType" name="feedback_type" class="form-select" required>
+                            <option value="BUG" {% if request.GET.type == 'BUG' or feedback_type == 'BUG' %}selected{% endif %}>
+                                🐞 Bug Report (Layout issue, error, unexpected behavior)
+                            </option>
+                            <option value="FEATURE" {% if request.GET.type == 'FEATURE' or feedback_type == 'FEATURE' %}selected{% endif %}>
+                                💡 Feature Request (Enhancement to existing features)
+                            </option>
+                            <option value="PROPOSAL" {% if request.GET.type == 'PROPOSAL' or feedback_type == 'PROPOSAL' %}selected{% endif %}>
+                                🚀 New Service Proposal (Idea for an entire new campus module)
+                            </option>
+                            <option value="GENERAL" {% if not request.GET.type or request.GET.type == 'GENERAL' or feedback_type == 'GENERAL' %}selected{% endif %}>
+                                💬 General Feedback &amp; Suggestions
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Subject / Title -->
+                    <div>
+                        <label class="form-label text-secondary small fw-semibold text-uppercase">Subject / Title</label>
+                        <input type="text"
+                               id="feedbackTitle"
+                               name="title"
+                               value="{{ title|default:'' }}"
+                               class="form-control"
+                               placeholder="e.g. Ride list date stepper resets on refresh, or Proposal for hostel print module"
+                               maxlength="200"
+                               required>
+                    </div>
+
+                    <!-- Description -->
+                    <div>
+                        <label class="form-label text-secondary small fw-semibold text-uppercase">Detailed Description</label>
+                        <textarea id="feedbackDesc"
+                                  name="description"
+                                  class="form-control"
+                                  rows="6"
+                                  placeholder="Describe the issue or proposal clearly. For bugs, include steps to reproduce..."
+                                  required>{{ description|default:'' }}</textarea>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label text-secondary small fw-semibold text-uppercase">Your Name (Optional)</label>
+                            <input type="text"
+                                   id="submitterName"
+                                   name="submitter_name"
+                                   value="{% if user.is_authenticated %}{{ user.get_full_name }}{% else %}{{ submitter_name|default:'' }}{% endif %}"
+                                   class="form-control"
+                                   placeholder="Your name or alias">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-secondary small fw-semibold text-uppercase">Contact / Enrollment (Optional)</label>
+                            <input type="text"
+                                   name="submitter_contact"
+                                   value="{% if user.is_authenticated %}{{ user.enrollment_number }}{% else %}{{ submitter_contact|default:'' }}{% endif %}"
+                                   class="form-control"
+                                   placeholder="Enrollment no. or mobile">
+                        </div>
+                    </div>
+
+                    <div class="p-3 rounded border border-secondary bg-black bg-opacity-40 small text-secondary">
+                        <i class="bi bi-shield-check text-success me-1"></i>
+                        <strong>Privacy Safeguard:</strong> Feedback entries are tracked in the operational administrative dashboard. Do not include sensitive passwords or private credentials.
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center pt-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="routeToGitHubIssue()">
+                            <i class="bi bi-github me-1"></i> Pre-fill &amp; Route to GitHub Issue &rarr;
+                        </button>
+                        <div class="d-flex gap-2">
+                            <a href="{% url 'landing' %}" class="btn btn-dark-custom">Cancel</a>
+                            <button type="submit" class="btn btn-green px-4">
+                                <i class="bi bi-send-fill me-1"></i> Submit Report
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <script>
+            function routeToGitHubIssue() {
+                const title = document.getElementById('feedbackTitle').value.trim() || 'Bug report / Feature proposal';
+                const type = document.getElementById('feedbackType').value;
+                const desc = document.getElementById('feedbackDesc').value.trim() || 'No description provided';
+                const name = document.getElementById('submitterName').value.trim() || 'Anonymous Student';
+
+                const label = (type === 'BUG') ? 'bug' : (type === 'FEATURE' ? 'enhancement' : 'documentation');
+                const issueBody = `### Category\n${type}\n\n### Description\n${desc}\n\n### Submitter\n${name}\n\n*Routed from Campus Nexus Web Portal*`;
+
+                const githubUrl = 'https://github.com/abdus-samad-saiyed/Campus-Nexus/issues/new?' +
+                    'title=' + encodeURIComponent(`[${type}] ${title}`) +
+                    '&labels=' + encodeURIComponent(label) +
+                    '&body=' + encodeURIComponent(issueBody);
+
+                window.open(githubUrl, '_blank', 'noopener,noreferrer');
+            }
+            </script>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Messages — Campus Nexus{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">
+                <i class="bi bi-chat-left-dots-fill green-accent me-2"></i>Friend Direct Messages
+            </h2>
+            <p class="text-secondary small mb-0">1-on-1 encrypted campus conversations with your confirmed friends.</p>
+        </div>
+        <a href="{% url 'profile' user.enrollment_number %}" class="btn btn-outline-green btn-sm">
+            <i class="bi bi-people-fill me-1"></i> Manage Friends
+        </a>
+    </div>
+
+    <div class="glass p-4">
+        {% if conversations %}
+            <div class="list-group list-group-flush bg-transparent">
+                {% for conv in conversations %}
+                    <a href="{% url 'direct_chat' conv.friend.enrollment_number %}"
+                       class="list-group-item list-group-item-action bg-transparent text-white border-secondary p-3 d-flex justify-content-between align-items-center rounded mb-2 hover-glass">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="position-relative">
+                                {% if conv.friend.profile_photo %}
+                                    <img src="{{ conv.friend.profile_photo.url }}" class="rounded-circle object-fit-cover shadow"
+                                         style="width: 48px; height: 48px;" alt="{{ conv.friend.enrollment_number }}">
+                                {% else %}
+                                    <div class="feature-icon" style="width: 48px; height: 48px; font-size: 1.5rem;">
+                                        <i class="bi bi-person-fill"></i>
+                                    </div>
+                                {% endif %}
+                                {% if conv.unread_count > 0 %}
+                                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success">
+                                        {{ conv.unread_count }}
+                                    </span>
+                                {% endif %}
+                            </div>
+
+                            <div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <h6 class="fw-bold mb-0">{{ conv.friend.display_name }}</h6>
+                                    <span class="badge bg-dark border border-secondary text-secondary small">{{ conv.friend.branch }}</span>
+                                </div>
+                                <div class="small text-secondary text-truncate mt-1" style="max-width: 420px;">
+                                    {% if conv.latest_message %}
+                                        {% if conv.latest_message.sender == request.user %}
+                                            <span class="text-white-50">You: </span>
+                                        {% endif %}
+                                        {{ conv.latest_message.content }}
+                                    {% else %}
+                                        <span class="fst-italic">No messages yet. Say hi!</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-end small">
+                            {% if conv.latest_message %}
+                                <div class="text-secondary mb-1">{{ conv.latest_message.created_at|date:"M j, H:i" }}</div>
+                            {% endif %}
+                            <span class="btn btn-sm btn-outline-green py-0 px-2">Open Chat</span>
+                        </div>
+                    </a>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <div class="feature-icon mx-auto mb-3" style="width: 64px; height: 64px; font-size: 1.8rem;">
+                    <i class="bi bi-people"></i>
+                </div>
+                <h5 class="fw-bold">No Friend Conversations Yet</h5>
+                <p class="text-secondary small mb-3">Add friends from campus rides or view classmate profiles to start messaging!</p>
+                <a href="{% url 'ride_list' %}" class="btn btn-green">
+                    <i class="bi bi-car-front-fill me-1"></i> Browse Campus Rides
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
