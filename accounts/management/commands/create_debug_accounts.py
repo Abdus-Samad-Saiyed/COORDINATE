@@ -1,11 +1,13 @@
 """Management command: create debug/test accounts for development."""
 
+import os
+import secrets
+
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
 
 from accounts.models import User
-from coordinate.models import RideParticipant, RideRequest
 
 DEBUG_USERS = [
     {
@@ -18,7 +20,7 @@ DEBUG_USERS = [
         'gender': 'M',
         'verified': True,
         'is_active': True,
-    'two_factor_enabled': False,
+        'two_factor_enabled': False,
     },
     {
         'enrollment_number': '20XXBECE001',
@@ -30,7 +32,7 @@ DEBUG_USERS = [
         'gender': 'F',
         'verified': True,
         'is_active': True,
-    'two_factor_enabled': False,
+        'two_factor_enabled': False,
     },
     {
         'enrollment_number': '20XXBCIV001',
@@ -42,7 +44,7 @@ DEBUG_USERS = [
         'gender': 'M',
         'verified': True,
         'is_active': True,
-    'two_factor_enabled': False,
+        'two_factor_enabled': False,
     },
     {
         'enrollment_number': '20XXBELE001',
@@ -54,7 +56,7 @@ DEBUG_USERS = [
         'gender': 'F',
         'verified': True,
         'is_active': True,
-    'two_factor_enabled': False,
+        'two_factor_enabled': False,
     },
     {
         'enrollment_number': '20XXBMEC001',
@@ -66,13 +68,9 @@ DEBUG_USERS = [
         'gender': 'M',
         'verified': True,
         'is_active': True,
-    'two_factor_enabled': False,
+        'two_factor_enabled': False,
     },
 ]
-
-import os
-
-import secrets
 
 DEBUG_PASSWORD = os.environ.get('DEBUG_ACCOUNT_PASSWORD')
 PERSONAL_SUPERACCOUNT_ENROLLMENT = os.environ.get('PERSONAL_SUPERACCOUNT_ENROLLMENT')
@@ -80,7 +78,7 @@ PERSONAL_PASSWORD = os.environ.get('PERSONAL_SUPERACCOUNT_PASSWORD')
 
 
 class Command(BaseCommand):
-    help = 'Purge legacy debug accounts, create 20XX branch debug accounts, and set up superaccount 2024BCSE065.'
+    help = 'Create 20XX branch debug accounts and set up superaccount for development/testing.'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -93,14 +91,9 @@ class Command(BaseCommand):
             action='store_true',
             help='Overwrite existing personal superaccount password and attributes.',
         )
-        parser.add_argument(
-            '--purge-legacy',
-            action='store_true',
-            help='Purge legacy 2024/2099 debug accounts.',
-        )
 
     def handle(self, *args, **options):
-        if not settings.DEBUG:
+        if not getattr(settings, 'DEBUG', False):
             raise CommandError(
                 'This command can only be run with DEBUG=True. '
                 'Refusing to create debug accounts in a production environment.'
@@ -147,24 +140,15 @@ class Command(BaseCommand):
         else:
             self.stdout.write('PERSONAL_SUPERACCOUNT not configured; skipping superaccount creation.')
 
-        # 2. Clean up legacy 2024 and 2099 debug accounts only if explicitly requested
-        if options.get('purge_legacy'):
-            legacy_debug_enrollments = [
-                '2024BCSE001', '2024BCSE002', '2024BCSE003', '2024BECE004', '2024BECE005', '2024BCIV006',
-                '2099BCSE001', '2099BCSE002', '2099BCSE003', '2099BECE004', '2099BECE005', '2099BCIV006',
-                '2099BCSE999', '2099BCSE998', '2099BCSE997'
-            ]
-            deleted_legacy, _ = User.objects.filter(enrollment_number__in=legacy_debug_enrollments).delete()
-            if deleted_legacy:
-                self.stdout.write(self.style.WARNING(f'Purged {deleted_legacy} legacy debug account(s).'))
-
         if options['reset']:
             debug_enrollments = [u['enrollment_number'] for u in DEBUG_USERS]
             deleted_reset, _ = User.objects.filter(enrollment_number__in=debug_enrollments).delete()
             self.stdout.write(self.style.WARNING(f'Reset {deleted_reset} existing 20XX debug account(s).'))
 
-        # 4. Create 20XX branch debug accounts
-        resolved_debug_pw = DEBUG_PASSWORD or getattr(settings, 'DEBUG_ACCOUNT_PASSWORD', None) or 'Debug@123'
+        # 2. Create 20XX branch debug accounts
+        resolved_debug_pw = DEBUG_PASSWORD or getattr(settings, 'DEBUG_ACCOUNT_PASSWORD', None)
+        if not resolved_debug_pw:
+            resolved_debug_pw = secrets.token_urlsafe(16)
         hashed_debug_pw = make_password(resolved_debug_pw)
         created = 0
         skipped = 0
@@ -177,7 +161,7 @@ class Command(BaseCommand):
                 continue
 
             User.objects.create(**data, password=hashed_debug_pw)
-            self.stdout.write(self.style.SUCCESS(f'  CREATE {enrollment} — {data["first_name"]} {data["last_name"]} ({data["phone_number"]})'))
+            self.stdout.write(self.style.SUCCESS(f'  CREATE {enrollment} — {data["first_name"]} {data["last_name"]}'))
             created += 1
 
         self.stdout.write('')
@@ -186,4 +170,3 @@ class Command(BaseCommand):
         ))
         if super_user:
             self.stdout.write(self.style.SUCCESS(f'Active Superaccount configured: {super_user.enrollment_number} (superuser credentials provisioned).'))
-

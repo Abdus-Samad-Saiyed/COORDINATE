@@ -65,12 +65,8 @@ from .services import (
 
 def _user_has_active_ride(user) -> bool:
     """True if the user is a participant in any non-expired OPEN or FULL ride."""
-    threshold = timezone.now() - datetime.timedelta(hours=2)
-    return RideParticipant.objects.filter(
-        user=user,
-        ride__status__in=['OPEN', 'FULL'],
-        ride__departure_time__gt=threshold,
-    ).exists()
+    from coordinate.services import user_has_active_ride
+    return user_has_active_ride(user)
 
 
 def _are_friends(user1, user2) -> bool:
@@ -499,7 +495,7 @@ def my_rides(request):
 
 @login_required
 def create_ride(request):
-    if not (request.user.is_staff or request.user.is_superuser or is_verified_student(request.user)):
+    if not is_verified_student(request.user):
         messages.error(request, 'Only verified students can create rides.')
         return redirect('ride_list')
     if _user_has_active_ride(request.user):
@@ -520,6 +516,10 @@ def create_ride(request):
                 return render(request, 'coordinate/create_ride.html', {'form': form})
 
             with transaction.atomic():
+                User.objects.select_for_update().filter(id=request.user.id).first()
+                if _user_has_active_ride(request.user):
+                    messages.error(request, 'You already have an active ride.')
+                    return redirect('ride_list')
                 ride = form.save(commit=False)
                 ride.creator = request.user
                 ride.save()
@@ -572,7 +572,15 @@ def join_ride(request, ride_id):
             messages.error(request, msg)
 
     if request.htmx:
-        return HttpResponse(status=204)
+        ride = get_object_or_404(RideRequest, id=ride_id)
+        has_pending = RideJoinRequest.objects.filter(ride=ride, user=request.user, status='PENDING').exists()
+        is_participant = ride.participants.filter(user=request.user).exists()
+        return render(request, 'coordinate/partials/ride_actions.html', {
+            'ride': ride,
+            'joined': is_participant,
+            'has_pending': has_pending,
+            'has_active_ride': _user_has_active_ride(request.user),
+        })
 
     return redirect('ride_list')
 
@@ -871,6 +879,7 @@ def ride_detail(request, ride_id):
         'reviewable_user_ids': reviewable_user_ids,
         'kicked_users': ride.kicked_users.all(),
         'left_users': ride.left_users.all(),
+        'user_consent': RideConsent.objects.filter(ride=ride, user=request.user, is_revoked=False).first() if request.user.is_authenticated else None,
     })
 
 
@@ -894,6 +903,17 @@ def kick_participant(request, ride_id, participant_id):
 @require_POST
 def complete_ride(request, ride_id):
     with transaction.atomic():
+        # Canonical lock hierarchy: User (ordered by ID ASC) -> RideRequest
+        p_uids = list(RideParticipant.objects.filter(ride_id=ride_id).values_list('user_id', flat=True))
+        creator_id = RideRequest.objects.filter(id=ride_id).values_list('creator_id', flat=True).first()
+        if creator_id:
+            p_uids.append(creator_id)
+        sorted_uids = sorted(list(set(p_uids)))
+
+        locked_users = {
+            u.id: u for u in User.objects.select_for_update().filter(id__in=sorted_uids).order_by('id')
+        }
+
         ride = get_object_or_404(
             RideRequest.objects.select_for_update(),
             id=ride_id,
@@ -922,14 +942,15 @@ def complete_ride(request, ride_id):
         if len(participant_users) >= 2:
             fifteen_days_ago = timezone.now() - datetime.timedelta(days=15)
             for rp in participant_users:
+                user_obj = locked_users.get(rp.user_id, rp.user)
                 # Rides completed always increments for verified trips
-                rp.user.rides_completed = F('rides_completed') + 1
+                user_obj.rides_completed = F('rides_completed') + 1
 
                 # Anti-farming reputation rate limit: on-time reliability bonus capped at 3 boosts per 15-day rolling window
                 prior_completed_window = (
                     RideParticipant.objects
                     .filter(
-                        user=rp.user,
+                        user=user_obj,
                         ride__status='COMPLETED',
                         ride__departure_time__gte=fifteen_days_ago
                     )
@@ -937,10 +958,10 @@ def complete_ride(request, ride_id):
                     .count()
                 )
                 if prior_completed_window < 3:
-                    rp.user.on_time_count = F('on_time_count') + 1
-                    rp.user.save(update_fields=['rides_completed', 'on_time_count'])
+                    user_obj.on_time_count = F('on_time_count') + 1
+                    user_obj.save(update_fields=['rides_completed', 'on_time_count'])
                 else:
-                    rp.user.save(update_fields=['rides_completed'])
+                    user_obj.save(update_fields=['rides_completed'])
 
     messages.success(request, 'Ride marked as completed. You can now review your fellow passengers.')
     return redirect('ride_detail', ride_id=ride_id)
@@ -1053,12 +1074,43 @@ def send_message(request, ride_id):
     if not is_participant or ride.status in ['COMPLETED', 'CANCELLED'] or ride.departure_time + datetime.timedelta(hours=2) <= timezone.now():
         return HttpResponseForbidden('You cannot send messages for this ride.')
 
+    # Rate limiting on HTTP fallback send_message (5 messages per 3s)
+    from django.core.cache import cache
+    import time
+    cache_key = f"http_msg_rl:{request.user.id}"
+    now_ts = time.time()
+    history = [t for t in (cache.get(cache_key) or []) if now_ts - t < 3.0]
+    if len(history) >= 5:
+        messages.error(request, 'Message rate limit exceeded. Please wait a moment before sending again.')
+        return redirect('ride_detail', ride_id=ride_id)
+    history.append(now_ts)
+    cache.set(cache_key, history, timeout=5)
+
     form = RideMessageForm(request.POST)
     if form.is_valid():
         msg = form.save(commit=False)
         msg.ride = ride
         msg.author = request.user
         msg.save()
+
+        # Broadcast to ride Channels group so WebSocket listeners receive it in real-time
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f'ride_{ride.id}',
+                    {
+                        'type': 'chat.message',
+                        'message_id': msg.id,
+                        'author': request.user.enrollment_number,
+                        'content': msg.content,
+                        'timestamp': timezone.localtime(msg.created_at).strftime('%b %d, %H:%M'),
+                    }
+                )
+        except Exception:
+            pass
     else:
         messages.error(request, 'Message could not be sent.')
 
@@ -1147,3 +1199,27 @@ def report_incident(request, ride_id):
     )
     return redirect('ride_detail', ride_id=ride_id)
 
+
+@login_required
+@require_POST
+def toggle_ride_contact_consent(request, ride_id):
+    """Allow confirmed participants and host to dynamically grant or revoke contact sharing with co-passengers."""
+    ride = get_object_or_404(RideRequest, id=ride_id)
+    is_participant = (ride.creator_id == request.user.pk) or RideParticipant.objects.filter(ride=ride, user=request.user).exists()
+    if not is_participant:
+        return HttpResponseForbidden("Only confirmed participants can modify contact sharing.")
+
+    consent = RideConsent.objects.filter(ride=ride, user=request.user, is_revoked=False).first()
+    new_state = not (consent and consent.share_contact_details)
+    record_ride_consent(
+        ride=ride,
+        user=request.user,
+        request=request,
+        disclose_identity=True,
+        share_contact=new_state,
+    )
+    if new_state:
+        messages.success(request, "Phone number sharing enabled with confirmed co-passengers.")
+    else:
+        messages.info(request, "Phone number sharing disabled. Your contact details are now hidden from co-passengers.")
+    return redirect('ride_detail', ride_id=ride_id)

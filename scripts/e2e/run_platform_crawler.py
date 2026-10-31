@@ -239,6 +239,7 @@ def run_audit():
         for r in results:
             if not r["ok"]:
                 print(f" - {r['name']} ({r['url']}): got {r['status']}, expected {r['expected']}")
+    return failed == 0
 
 if __name__ == "__main__":
     from django.test.utils import setup_databases, teardown_databases
@@ -250,6 +251,7 @@ if __name__ == "__main__":
         if not ('memory' in db_name or 'test' in db_name):
             print("REFUSING TO RUN: audit_platform.py must only run against an isolated test database.", file=sys.stderr)
             sys.exit(1)
-        run_audit()
+        if not run_audit():
+            sys.exit(1)
     finally:
         teardown_databases(old_db_config, verbosity=0)

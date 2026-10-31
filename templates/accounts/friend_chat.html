@@ -14,7 +14,7 @@
                         <a href="{% url 'profile' friend.enrollment_number %}" class="position-relative">
                             {% if friend.profile_photo %}
                                 <img src="{{ friend.profile_photo.url }}" class="rounded-circle object-fit-cover shadow"
-                                     style="width: 48px; height: 48px;" alt="{{ friend.enrollment_number }}">
+                                     style="width: 48px; height: 48px;" alt="{{ friend.enrollment_number }}" onerror="this.onerror=null; this.style.display='none';">
                             {% else %}
                                 <div class="feature-icon" style="width: 48px; height: 48px; font-size: 1.5rem;">
                                     <i class="bi bi-person-fill"></i>
@@ -140,6 +140,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 const data = JSON.parse(e.data);
                 if (data.type === 'message') {
                     appendDirectMessage(data.sender, data.content, data.timestamp, data.is_self);
+                    if (!data.is_self && socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: 'mark_read', message_id: data.message_id }));
+                    }
+                } else if (data.type === 'session_terminated') {
+                    if (chatInput) {
+                        chatInput.disabled = true;
+                        chatInput.placeholder = data.reason || "Session terminated.";
+                    }
+                    const btn = chatForm ? chatForm.querySelector('button[type="submit"]') : null;
+                    if (btn) btn.disabled = true;
                 } else if (data.type === 'typing') {
                     if (data.is_typing) {
                         typingIndicator.classList.remove('d-none');
@@ -172,7 +182,16 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         };
 
-        socket.onclose = function () {
+        socket.onclose = function (e) {
+            if (e.code === 4001 || e.code === 4003) {
+                if (chatInput) {
+                    chatInput.disabled = true;
+                    chatInput.placeholder = "Connection ended.";
+                }
+                const btn = chatForm ? chatForm.querySelector('button[type="submit"]') : null;
+                if (btn) btn.disabled = true;
+                return;
+            }
             setTimeout(connectSocket, 3000);
         };
     }

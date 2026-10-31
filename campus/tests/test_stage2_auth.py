@@ -311,6 +311,26 @@ class Stage2ProfileSecurityTests(TestCase):
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("CurrentStrongPassword123!"))
 
+    def test_password_change_invalidates_prior_sessions(self):
+        """Old active sessions must be invalidated upon successful password change."""
+        session_store = self.client.session
+        session_store['test_marker'] = 'prior_active_session'
+        session_store.save()
+        old_session_key = session_store.session_key
+        self.user.current_session_key = old_session_key
+        self.user.save(update_fields=['current_session_key'])
+
+        resp = self.client.post(
+            reverse("password_change"),
+            data={
+                "old_password": "CurrentStrongPassword123!",
+                "new_password1": "NewStrongPassword123!",
+                "new_password2": "NewStrongPassword123!",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Session.objects.filter(session_key=old_session_key).exists())
+
 
 class Stage2DebugAccountSecurityTests(TestCase):
     """Test synthetic debug accounts are disabled when settings.DEBUG=False."""
@@ -330,6 +350,10 @@ class Stage2DebugAccountSecurityTests(TestCase):
 
     def test_is_debug_account_property_respects_debug_mode(self):
         """is_debug_account must be False under production settings."""
-        # When DEBUG is False and not in test or alpha context:
-        with patch.object(settings, "DEBUG", False), patch.object(settings, "TESTING", False, create=True), patch.object(settings, "ALPHA_MODE", False, create=True), patch("sys.argv", ["manage.py", "runserver"]):
+        with override_settings(DEBUG=False, TESTING=False, ALPHA_MODE=False):
+            self.assertFalse(self.user.is_debug_account)
+
+    def test_is_debug_account_false_in_alpha_mode(self):
+        """is_debug_account must be False even when ALPHA_MODE is True."""
+        with override_settings(DEBUG=False, TESTING=False, ALPHA_MODE=True):
             self.assertFalse(self.user.is_debug_account)

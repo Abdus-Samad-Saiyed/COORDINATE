@@ -21,6 +21,7 @@ from .views import (
     ride_list,
     send_message,
     terminate_ride,
+    toggle_ride_contact_consent,
 )
 
 urlpatterns = [
@@ -33,6 +34,7 @@ urlpatterns = [
     path('<int:ride_id>/requests/<int:request_id>/approve/',     approve_join_request,  name='approve_join_request'),
     path('<int:ride_id>/requests/<int:request_id>/decline/',     decline_join_request,  name='decline_join_request'),
     path('<int:ride_id>/requests/cancel/',                       cancel_join_request,   name='cancel_join_request'),
+    path('<int:ride_id>/consent/toggle/',                     toggle_ride_contact_consent, name='toggle_ride_contact_consent'),
     path('<int:ride_id>/leave/',                                 leave_ride,            name='leave_ride'),
     path('<int:ride_id>/reschedule/',                            reschedule_ride,       name='reschedule_ride'),
     path('<int:ride_id>/waitlist/join/',                         join_waitlist,         name='join_waitlist'),

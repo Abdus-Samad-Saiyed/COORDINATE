@@ -119,17 +119,23 @@ def service_catalogue(request):
 def enforce_single_session_login(request, user: User):
     """
     Ensure each account can only have one active session at a time.
-    Invalidates any previous session across other devices/browsers, and records current session key digest.
+    Invalidates any previous session across other devices/browsers, and records current session key.
     """
     if not request.session.session_key:
         request.session.save()
     current_key = request.session.session_key
 
+    # Fast path: revoke previously recorded session key directly
+    if user.current_session_key and user.current_session_key != current_key:
+        Session.objects.filter(session_key=user.current_session_key).delete()
+
+    prior_terminated = False
     for s in Session.objects.filter(expire_date__gt=timezone.now()):
         try:
             data = s.get_decoded()
             if str(data.get('_auth_user_id')) == str(user.id) and s.session_key != current_key:
                 s.delete()
+                prior_terminated = True
                 log_audit_event(
                     event_type='SESSION_TERMINATED_CONCURRENT',
                     actor_enrollment=user.enrollment_number,
@@ -140,6 +146,10 @@ def enforce_single_session_login(request, user: User):
 
     user.current_session_key = current_key
     user.save(update_fields=['current_session_key'])
+
+    if prior_terminated:
+        from accounts.utils import broadcast_user_session_revocation
+        transaction.on_commit(lambda: broadcast_user_session_revocation(user.id, "Prior session invalidated on concurrent login."))
 
 
 def _safe_redirect_url(request, redirect_to, fallback='dashboard'):
@@ -707,6 +717,8 @@ def forgot_password_view(request):
                 user.save()
                 request.session.pop('reset_user_id', None)
                 request.session.pop('reset_requested_at', None)
+                from accounts.utils import broadcast_user_session_revocation
+                transaction.on_commit(lambda: broadcast_user_session_revocation(user.id, "Password reset via verification code."))
                 log_audit_event(
                     event_type='SECURITY_SETTINGS_UPDATED',
                     actor_enrollment=user.enrollment_number,
@@ -832,6 +844,8 @@ def profile_view(request, enrollment_number):
     profile_user = get_object_or_404(
         User,
         enrollment_number=enrollment_number.strip().upper(),
+        is_deleted=False,
+        is_active=True,
     )
 
     is_self = profile_user == request.user
@@ -917,8 +931,23 @@ def profile_view(request, enrollment_number):
                 messages.error(request, "Uploaded file is not a valid image.")
                 return redirect('profile', enrollment_number=profile_user.enrollment_number)
 
-            photo.name = f"{uuid.uuid4().hex}{ext}"
-            profile_user.profile_photo = photo
+            from io import BytesIO
+            from django.core.files.uploadedfile import InMemoryUploadedFile
+            buffer = BytesIO()
+            img = img.convert('RGB')
+            img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+            img.save(buffer, format='JPEG', quality=85, optimize=True)
+            buffer.seek(0)
+            clean_filename = f"{uuid.uuid4().hex}.jpg"
+            clean_photo = InMemoryUploadedFile(
+                file=buffer,
+                field_name='profile_photo',
+                name=clean_filename,
+                content_type='image/jpeg',
+                size=buffer.getbuffer().nbytes,
+                charset=None,
+            )
+            profile_user.profile_photo = clean_photo
         # Phone number update
         if new_phone:
             norm_phone = normalize_phone_number(new_phone)
@@ -1007,8 +1036,10 @@ def profile_view(request, enrollment_number):
         .order_by('-created_at')[:5]
     )
 
+    registered_passkeys = list(profile_user.passkey_credentials.all()) if is_self else []
     return render(request, 'accounts/profile.html', {
         'profile_user': profile_user,
+        'registered_passkeys': registered_passkeys,
         'is_self': is_self,
         'is_friend': is_friend,
         'can_see_phone': can_see_phone,
@@ -1236,6 +1267,16 @@ def approve_application(request, application_id):
     POST only. Creates a verified User from the application, sends a
     notification email, and removes the application from the queue.
     """
+    from accounts.utils import check_step_up_or_recent_auth
+    if not check_step_up_or_recent_auth(request):
+        if getattr(request, 'htmx', False):
+            import json
+            response = HttpResponse(status=403)
+            response['HX-Trigger'] = json.dumps({'stepUpRequired': True})
+            return response
+        messages.error(request, "Privileged session expired. Please re-authenticate before approving applications.")
+        return redirect('application_list')
+
     with transaction.atomic():
         application = get_object_or_404(AccountApplication, id=application_id, approved=False)
 
@@ -1247,19 +1288,21 @@ def approve_application(request, application_id):
                 return HttpResponse('')
             return redirect('application_list')
 
+        parts = application.full_name.strip().split() if application.full_name else []
+        first_name = parts[0][:150] if parts else ''
+        last_name = ' '.join(parts[1:])[:150] if len(parts) > 1 else ''
+
         user = User.objects.create(
             enrollment_number=application.enrollment_number,
             username=application.enrollment_number,
-            first_name=application.full_name.split()[0] if application.full_name else '',
-            last_name=' '.join(application.full_name.split()[1:]) if application.full_name else '',
+            first_name=first_name,
+            last_name=last_name,
             email=application.email,
             phone_number=application.phone_number,
             gender=application.gender,
             password=application.password,   # already hashed
             verified=True,
         )
-        application.approved = True
-        application.save()
         application.delete()
         log_audit_event(
             event_type='APP_APPROVED',
@@ -1301,6 +1344,16 @@ def reject_application(request, application_id):
     POST only. Safely rejects and discards a pending student application,
     freeing the enrollment number for correction/resubmission.
     """
+    from accounts.utils import check_step_up_or_recent_auth
+    if not check_step_up_or_recent_auth(request):
+        if getattr(request, 'htmx', False):
+            import json
+            response = HttpResponse(status=403)
+            response['HX-Trigger'] = json.dumps({'stepUpRequired': True})
+            return response
+        messages.error(request, "Privileged session expired. Please re-authenticate before rejecting applications.")
+        return redirect('application_list')
+
     with transaction.atomic():
         application = get_object_or_404(AccountApplication, id=application_id, approved=False)
         enrollment = application.enrollment_number

@@ -24,7 +24,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.sessions.models import Session
 from django.contrib import messages
 from django.views.decorators.http import require_POST
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import Count
 from django.http import HttpRequest, HttpResponse, JsonResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
@@ -288,6 +288,10 @@ def operational_dashboard(request: HttpRequest) -> HttpResponse:
 @user_passes_test(_is_superuser)
 def admin_update_phone(request: HttpRequest, user_id: int) -> HttpResponse:
     """Superuser-only endpoint to update student's phone number after in-person ID check."""
+    if not check_step_up_or_recent_auth(request):
+        messages.error(request, "Privileged session expired. Please re-authenticate before modifying phone numbers.")
+        return redirect('operational_dashboard')
+
     target_user = get_object_or_404(User, id=user_id)
     if target_user.is_superuser:
         messages.error(request, "Targeting superuser accounts is strictly prohibited.")
@@ -296,7 +300,13 @@ def admin_update_phone(request: HttpRequest, user_id: int) -> HttpResponse:
     new_phone = request.POST.get('phone_number', '').strip()
     if new_phone:
         from accounts.two_factor import normalize_phone_number
-        target_user.phone_number = normalize_phone_number(new_phone)
+        norm_phone = normalize_phone_number(new_phone)
+        import re
+        digits = re.sub(r'\D', '', norm_phone)
+        if len(digits) < 10 or len(digits) > 15:
+            messages.error(request, "Invalid phone number length. Must contain between 10 and 15 digits.")
+            return redirect('operational_dashboard')
+        target_user.phone_number = norm_phone
         target_user.save(update_fields=['phone_number'])
         log_audit_event(
             event_type='ADMIN_PHONE_UPDATE',
@@ -406,6 +416,9 @@ def admin_delete_account(request: HttpRequest, user_id: int) -> HttpResponse:
     target_user.is_active = False
     target_user.save()
 
+    from accounts.utils import broadcast_user_session_revocation
+    transaction.on_commit(lambda: broadcast_user_session_revocation(target_user.id, "Account deactivated by administrator."))
+
     log_audit_event(
         event_type='ACCOUNT_DELETED',
         actor_enrollment=request.user.enrollment_number,
@@ -421,6 +434,10 @@ def admin_delete_account(request: HttpRequest, user_id: int) -> HttpResponse:
 @user_passes_test(_is_superuser)
 def admin_resolve_physical_verification(request: HttpRequest, request_id: int) -> HttpResponse:
     """Resolve an in-person physical verification request at the Campus Operations Desk. Superuser-only."""
+    if not check_step_up_or_recent_auth(request):
+        messages.error(request, "Privileged session expired. Please re-authenticate before resolving physical verifications.")
+        return redirect('operational_dashboard')
+
     pvr = get_object_or_404(PhysicalVerificationRequest, id=request_id)
     if pvr.status != 'PENDING':
         messages.error(request, "This verification request has already been processed and cannot be replayed.")
@@ -459,6 +476,9 @@ def admin_resolve_physical_verification(request: HttpRequest, request_id: int) -
                 pass
         pvr.user.current_session_key = ''
         pvr.user.save()
+
+        from accounts.utils import broadcast_user_session_revocation
+        transaction.on_commit(lambda: broadcast_user_session_revocation(pvr.user.id, "Password reset by administrator."))
 
         pvr.status = 'VERIFIED'
         pvr.verified_by = request.user
@@ -536,62 +556,67 @@ def manage_superusers(request: HttpRequest) -> HttpResponse:
             messages.error(request, "Enrollment number is required.")
             return redirect("manage_superusers")
 
-        try:
-            target_user = User.objects.get(enrollment_number=enrollment)
-        except User.DoesNotExist:
-            messages.error(request, f"No student found with enrollment number {enrollment}.")
-            return redirect("manage_superusers")
+        with transaction.atomic():
+            try:
+                target_user = User.objects.get(enrollment_number=enrollment)
+            except User.DoesNotExist:
+                messages.error(request, f"No student found with enrollment number {enrollment}.")
+                return redirect("manage_superusers")
 
-        if action == "promote":
-            if target_user.is_superuser:
-                messages.info(request, f"{target_user.enrollment_number} ({target_user.display_name}) is already a superuser.")
-            else:
-                target_user.is_superuser = True
-                target_user.is_staff = True
-                target_user.save(update_fields=["is_superuser", "is_staff"])
+            # Deterministic lock on active superusers to prevent race conditions during revocation
+            active_superusers = User.objects.select_for_update().filter(is_superuser=True, is_active=True)
+
+            if action == "promote":
+                if target_user.is_superuser:
+                    messages.info(request, f"{target_user.enrollment_number} ({target_user.display_name}) is already a superuser.")
+                elif not target_user.is_active or not target_user.verified:
+                    messages.error(request, f"Candidate {target_user.enrollment_number} must be an active and verified student to receive superuser privileges.")
+                else:
+                    target_user.is_superuser = True
+                    target_user.is_staff = True
+                    target_user.save(update_fields=["is_superuser", "is_staff"])
+                    log_audit_event(
+                        event_type="SUPERUSER_PROMOTED",
+                        actor_enrollment=request.user.enrollment_number,
+                        description=f"Promoted {target_user.enrollment_number} ({target_user.display_name}) to superuser",
+                        target_id=target_user.enrollment_number,
+                    )
+                    messages.success(request, f"Successfully granted superuser privileges to {target_user.enrollment_number} ({target_user.display_name}).")
+                return redirect("manage_superusers")
+
+            elif action == "revoke":
+                if not target_user.is_superuser:
+                    messages.info(request, f"{target_user.enrollment_number} is not a superuser.")
+                    return redirect("manage_superusers")
+
+                # Lockout protection: ensure at least one active superuser remains
+                if target_user.is_active and active_superusers.count() <= 1:
+                    messages.error(
+                        request,
+                        "Action blocked: Cannot revoke privileges from the last active superuser. "
+                        "At least one active superuser must always exist to prevent administrative lockout.",
+                    )
+                    return redirect("manage_superusers")
+
+                target_user.is_superuser = False
+                target_user.save(update_fields=["is_superuser"])
                 log_audit_event(
-                    event_type="SUPERUSER_PROMOTED",
+                    event_type="SUPERUSER_REVOKED",
                     actor_enrollment=request.user.enrollment_number,
-                    description=f"Promoted {target_user.enrollment_number} ({target_user.display_name}) to superuser",
+                    description=f"Revoked superuser privileges from {target_user.enrollment_number} ({target_user.display_name})",
                     target_id=target_user.enrollment_number,
                 )
-                messages.success(request, f"Successfully granted superuser privileges to {target_user.enrollment_number} ({target_user.display_name}).")
-            return redirect("manage_superusers")
 
-        elif action == "revoke":
-            if not target_user.is_superuser:
-                messages.info(request, f"{target_user.enrollment_number} is not a superuser.")
+                if target_user == request.user:
+                    messages.warning(request, "You have revoked superuser privileges from your own account.")
+                    return redirect("dashboard")
+
+                messages.success(request, f"Successfully revoked superuser privileges from {target_user.enrollment_number}.")
                 return redirect("manage_superusers")
 
-            # Lockout protection: ensure at least one active superuser remains
-            active_superusers = User.objects.filter(is_superuser=True, is_active=True).count()
-            if active_superusers <= 1:
-                messages.error(
-                    request,
-                    "Action blocked: Cannot revoke privileges from the last active superuser. "
-                    "At least one active superuser must always exist to prevent administrative lockout.",
-                )
+            else:
+                messages.error(request, "Invalid management action requested.")
                 return redirect("manage_superusers")
-
-            target_user.is_superuser = False
-            target_user.save(update_fields=["is_superuser"])
-            log_audit_event(
-                event_type="SUPERUSER_REVOKED",
-                actor_enrollment=request.user.enrollment_number,
-                description=f"Revoked superuser privileges from {target_user.enrollment_number} ({target_user.display_name})",
-                target_id=target_user.enrollment_number,
-            )
-
-            if target_user == request.user:
-                messages.warning(request, "You have revoked superuser privileges from your own account.")
-                return redirect("dashboard")
-
-            messages.success(request, f"Successfully revoked superuser privileges from {target_user.enrollment_number}.")
-            return redirect("manage_superusers")
-
-        else:
-            messages.error(request, "Invalid management action requested.")
-            return redirect("manage_superusers")
 
     # GET request
     superusers = User.objects.filter(is_superuser=True).order_by("enrollment_number")
@@ -629,6 +654,9 @@ def manage_superusers(request: HttpRequest) -> HttpResponse:
 def export_rides_csv(request: HttpRequest) -> HttpResponse:
     """Export rides with formula-injection sanitation and audit logging."""
     if not check_step_up_or_recent_auth(request):
+        if 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+            messages.warning(request, "Privileged session expired. Please re-authenticate via the prompt below before exporting platform data.")
+            return redirect('operational_dashboard')
         return HttpResponseForbidden("Administrative session freshness check failed. Please re-authenticate before exporting platform data.")
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="campus_nexus_rides_export.csv"'
@@ -672,6 +700,9 @@ def export_rides_csv(request: HttpRequest) -> HttpResponse:
 def export_users_csv(request: HttpRequest) -> HttpResponse:
     """Export verified users with sensitive fields strictly omitted."""
     if not check_step_up_or_recent_auth(request):
+        if 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+            messages.warning(request, "Privileged session expired. Please re-authenticate via the prompt below before exporting platform data.")
+            return redirect('operational_dashboard')
         return HttpResponseForbidden("Administrative session freshness check failed. Please re-authenticate before exporting platform data.")
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="campus_nexus_users_export.csv"'
@@ -710,6 +741,9 @@ def export_users_csv(request: HttpRequest) -> HttpResponse:
 def export_applications_csv(request: HttpRequest) -> HttpResponse:
     """Export application queue with formula-injection sanitation. Superuser only; phone redacted by default."""
     if not check_step_up_or_recent_auth(request):
+        if 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+            messages.warning(request, "Privileged session expired. Please re-authenticate via the prompt below before exporting platform data.")
+            return redirect('operational_dashboard')
         return HttpResponseForbidden("Administrative session freshness check failed. Please re-authenticate before exporting platform data.")
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="campus_nexus_applications_export.csv"'

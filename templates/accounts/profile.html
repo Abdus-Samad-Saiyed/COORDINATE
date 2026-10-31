@@ -340,6 +340,19 @@
                                 <i class="bi bi-fingerprint me-1"></i> Register Passkey
                             </button>
                         </div>
+                        {% if registered_passkeys %}
+                        <div class="mt-2 pt-2 border-top border-secondary">
+                            <div class="small fw-semibold text-secondary mb-1">Registered Passkeys:</div>
+                            {% for pk in registered_passkeys %}
+                            <div class="d-flex justify-content-between align-items-center small py-1 px-2 mb-1 bg-dark bg-opacity-50 rounded border border-secondary border-opacity-50">
+                                <span><i class="bi bi-key-fill text-warning me-1"></i> {{ pk.name|default:"Passkey" }} <span class="text-white-50">({{ pk.created_at|date:"M j, Y" }})</span></span>
+                                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 small" onclick="deletePasskey({{ pk.id }})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                         <div id="passkeyRegStatus" class="small mt-2 font-monospace" style="display: none;"></div>
                     </div>
                     <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 mb-3">
@@ -417,7 +430,17 @@ async function registerWebAuthnPasskey() {
 
     try {
         const chalRes = await fetch("{% url 'passkey_reg_challenge' %}");
-        if (!chalRes.ok) throw new Error('Challenge request failed.');
+        if (!chalRes.ok) {
+            const errData = await chalRes.json().catch(() => ({}));
+            if (chalRes.status === 403) {
+                statusDiv.className = 'small mt-2 text-warning font-monospace';
+                statusDiv.textContent = errData.error || 'Recent re-authentication required. Please enter your OTP below.';
+                const secOtpInput = document.getElementById('securityOtpInput');
+                if (secOtpInput) secOtpInput.focus();
+                return;
+            }
+            throw new Error(errData.error || 'Challenge request failed.');
+        }
         const chalData = await chalRes.json();
 
         const challengeBytes = Uint8Array.from(atob(chalData.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
@@ -594,6 +617,27 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 });
+
+async function deletePasskey(pkId) {
+    if (!confirm('Are you sure you want to remove this passkey?')) return;
+    try {
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+        const res = await fetch(`/auth/passkey/${pkId}/delete/`, {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to remove passkey. Re-authentication may be required.');
+        }
+    } catch (err) {
+        alert('Network error removing passkey.');
+    }
+}
+
 </script>
 {% endif %}
 {% endblock %}

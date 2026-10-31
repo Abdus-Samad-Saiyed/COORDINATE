@@ -212,7 +212,14 @@ async function requestSignupOtp() {
         const data = await res.json();
         if (res.ok && data.success) {
             feedback.className = 'small mt-1 text-success font-monospace';
-            feedback.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i> ' + (data.message || 'Verification code dispatched!') + '</span>';
+            feedback.replaceChildren();
+            const successSpan = document.createElement('span');
+            successSpan.className = 'text-success';
+            const checkIcon = document.createElement('i');
+            checkIcon.className = 'bi bi-check-circle-fill me-1';
+            successSpan.appendChild(checkIcon);
+            successSpan.appendChild(document.createTextNode(' ' + (data.message || 'Verification code dispatched!')));
+            feedback.appendChild(successSpan);
             const otpInput = document.getElementById('phoneOtpInput');
             if (otpInput) otpInput.focus();
 

@@ -1,12 +1,12 @@
 # COORDINATE // Campus Nexus
 
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://www.python.org/)
-[![Django 5.0](https://img.shields.io/badge/Django-5.0-green.svg)](https://www.djangoproject.com/)
+[![Django 6.0](https://img.shields.io/badge/Django-6.0-green.svg)](https://www.djangoproject.com/)
 [![Channels ASGI](https://img.shields.io/badge/Channels-ASGI%20WebSockets-teal.svg)](https://channels.readthedocs.io/)
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016-blue.svg)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Cache%20%26%20Layers-Redis%207-red.svg)](https://redis.io/)
 [![WebAuthn FIDO2](https://img.shields.io/badge/Auth-WebAuthn%20%2F%20Passkeys-orange.svg)](https://webauthn.io/)
-[![Tests](https://img.shields.io/badge/Tests-226%20Passed%20(100%25)-success.svg)](scripts/e2e/run_full_platform_e2e.py)
+[![Tests](https://img.shields.io/badge/Tests-228%20Passed%20(100%25)-success.svg)](scripts/e2e/run_full_platform_e2e.py)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Decentralized Student Ride Coordination & Verified Campus Public Utility Platform**  

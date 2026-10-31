@@ -337,7 +337,7 @@ def api_ride_detail(request: HttpRequest, ride_id: int) -> JsonResponse:
 def api_ride_create(request: HttpRequest) -> JsonResponse:
     """Create a new ride request adhering to all domain invariants."""
     user = request.api_user
-    if not (user.is_staff or user.is_superuser or is_verified_student(user)):
+    if not is_verified_student(user):
         return json_error("Authentication as a verified student required.", status=403, code="FORBIDDEN")
 
     # One active ride invariant
@@ -369,8 +369,15 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
         )
 
     valid_routes = [c[0] for c in RideRequest.ROUTE_CHOICES]
-    if route in valid_routes:
-        resolved_route = route
+    if route:
+        if route in valid_routes:
+            resolved_route = route
+        else:
+            return json_error(
+                f"Invalid route: '{route}'. Must be one of {valid_routes}.",
+                status=400,
+                code="INVALID_ROUTE",
+            )
     elif "AIRPORT" in custom_to.upper() and ("NIT" in custom_from.upper() or not custom_from):
         resolved_route = "NIT_TO_AIRPORT"
     elif "AIRPORT" in custom_from.upper() and ("NIT" in custom_to.upper() or not custom_to):
@@ -383,6 +390,9 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
         resolved_route = "CUSTOM"
     else:
         resolved_route = "NIT_TO_AIRPORT"
+
+    if len(custom_from) > 255 or len(custom_to) > 255:
+        return json_error("Location names cannot exceed 255 characters.", status=400, code="LOCATION_TOO_LONG")
 
     if resolved_route == "CUSTOM" and (not custom_from or not custom_to):
         return json_error(
@@ -436,6 +446,13 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
         return json_error("Affirmative consent to disclose identity is required.", status=400, code="CONSENT_REQUIRED")
 
     with transaction.atomic():
+        User.objects.select_for_update().filter(id=user.id).first()
+        if _user_has_active_ride(user):
+            return json_error(
+                "You already have an active ride. Leave or complete it first.",
+                status=409,
+                code="ACTIVE_RIDE_EXISTS",
+            )
         ride = RideRequest.objects.create(
             creator=user,
             route=resolved_route,

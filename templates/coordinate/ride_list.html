@@ -299,6 +299,12 @@
                                 {% elif ride.can_join %}
                                     <form method="POST" action="{% url 'join_ride' ride.id %}" class="m-0 w-100">
                                         {% csrf_token %}
+                                        <div class="form-check form-switch mb-2 text-start">
+                                            <input class="form-check-input" type="checkbox" name="share_contact" value="true" id="shareContactList{{ ride.id }}" checked>
+                                            <label class="form-check-label small text-secondary" for="shareContactList{{ ride.id }}" style="font-size: 0.75rem;">
+                                                Share phone with co-riders
+                                            </label>
+                                        </div>
                                         <button type="submit" class="btn btn-green w-100">
                                             <i class="bi bi-send-fill me-1"></i> Request to Join
                                         </button>

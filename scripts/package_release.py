@@ -14,12 +14,12 @@ from pathlib import Path
 
 # Regex rules for prohibited release artifacts
 FORBIDDEN_RULES = [
-    (r'(^|/)\.env($|\.local$|\.prod$)', 'Active .env file'),
+    (r'(^|/)\.env(\..+)?$', 'Active .env file (only .env.example allowed)'),
     (r'(^|/)secrets_local\.py$', 'Local python secrets file'),
     (r'\.sqlite3$', 'SQLite database file'),
     (r'\.pyc$', 'Compiled Python bytecode'),
     (r'(^|/)__pycache__($|/)', 'Python cache directory'),
-    (r'campus_secrets', 'Secrets documentation'),
+    (r'.*credentials.*\.md$', 'Credentials documentation'),
     (r'debug_accounts\.md$', 'Debug accounts documentation'),
     (r'test_report\.json$', 'Test report data file'),
     (r'project_dump', 'Raw project dump file'),
@@ -51,6 +51,8 @@ def build_clean_release(output_zip: str = 'campus_nexus_release.zip'):
     # 2. Verify no forbidden patterns exist in tracked files
     violations = []
     for f in tracked_files:
+        if f == '.env.example' or f.endswith('/.env.example') or f.endswith('secrets_local.example.py'):
+            continue
         for pattern, desc in FORBIDDEN_RULES:
             if re.search(pattern, f, re.IGNORECASE):
                 violations.append((f, desc))

@@ -41,8 +41,10 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
         # Canonical group naming
         u1_id, u2_id = sorted([self.user.id, self.friend.id])
         self.group_name = f'direct_chat_{u1_id}_{u2_id}'
+        self.user_group_name = f'user_{self.user.id}'
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.channel_layer.group_add(self.user_group_name, self.channel_name)
         await self.accept()
 
         # Announce online presence to the friend if not hidden and first connection
@@ -72,6 +74,8 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
                 }))
 
     async def disconnect(self, close_code):
+        if hasattr(self, 'user_group_name') and self.channel_layer:
+            await self.channel_layer.group_discard(self.user_group_name, self.channel_name)
         if hasattr(self, 'group_name'):
             if getattr(self, '_presence_incremented', False):
                 count = await self._decr_user_connection(self.user.id)
@@ -113,6 +117,8 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
 
         # Real-time typing indicator (suppressed if user hid online status)
         if event_type == 'typing':
+            if not await self._check_rate_limit('typing', limit=10, period_sec=10):
+                return
             user_hides_online = await self._user_hides_online()
             if not user_hides_online:
                 is_typing = bool(data.get('is_typing', False))
@@ -128,6 +134,13 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
 
         # Chat message
         if event_type == 'message':
+            if not await self._check_rate_limit('message', limit=5, period_sec=3):
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'error': 'Message rate limit exceeded. Please wait a moment.',
+                }))
+                return
+
             # Dynamic friendship & active status check
             if not await self._is_connection_authorized():
                 await self.send(text_data=json.dumps({
@@ -163,6 +176,14 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
     # ------------------------------------------------------------------
     # Group handlers
     # ------------------------------------------------------------------
+
+    async def user_session_revoked(self, event):
+        """Handle push-based session termination (logout, password change, deactivation)."""
+        await self.send(text_data=json.dumps({
+            'type': 'session_terminated',
+            'reason': event.get('reason', 'Session terminated by security policy.'),
+        }))
+        await self.close(code=4003)
 
     async def chat_direct_message(self, event):
         if not await self._is_connection_authorized():
@@ -306,3 +327,17 @@ class FriendChatConsumer(AsyncWebsocketConsumer):
         except (ValueError, Exception):
             cache.delete(key)
             return 0
+
+    @database_sync_to_async
+    def _check_rate_limit(self, action_key: str, limit: int, period_sec: int) -> bool:
+        from django.core.cache import cache
+        import time
+        cache_key = f"ws_rl:{self.user.id}:{action_key}"
+        now = time.time()
+        history = cache.get(cache_key) or []
+        valid_history = [t for t in history if now - t < period_sec]
+        if len(valid_history) >= limit:
+            return False
+        valid_history.append(now)
+        cache.set(cache_key, valid_history, timeout=period_sec + 2)
+        return True

@@ -503,6 +503,7 @@ def log_audit_event(
     actor_enrollment: str = '',
     description: str = '',
     target_id: str = '',
+    fail_silently: bool = True,
 ):
     """Log an operational audit event without collecting sensitive payloads."""
     try:
@@ -512,7 +513,9 @@ def log_audit_event(
             description=str(description)[:255],
             target_id=str(target_id)[:50],
         )
-    except Exception:
+    except Exception as e:
+        if not fail_silently:
+            raise
         return None
 
 
@@ -542,3 +545,15 @@ def on_user_logged_out(sender, request, user, **kwargs):
     if user and hasattr(user, 'current_session_key') and getattr(user, 'pk', None):
         user.current_session_key = ''
         user.save(update_fields=['current_session_key'])
+
+
+from django.db.models.signals import pre_delete, post_delete
+from django.core.exceptions import PermissionDenied
+
+@receiver(pre_delete, sender=User)
+def prevent_last_superuser_deletion(sender, instance, **kwargs):
+    """Ensure the system cannot delete the sole remaining active superuser."""
+    if instance.is_superuser and instance.is_active:
+        remaining_superusers = User.objects.filter(is_superuser=True, is_active=True).exclude(pk=instance.pk).count()
+        if remaining_superusers == 0:
+            raise PermissionDenied("Cannot delete the last remaining active superuser.")

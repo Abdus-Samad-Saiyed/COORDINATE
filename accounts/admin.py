@@ -21,8 +21,9 @@ from .models import (
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     """
-    Custom UserAdmin inheriting from BaseUserAdmin to ensure proper
-    password hashing, change forms, and admin user creation flows.
+    Custom UserAdmin with administrative hardening.
+    Privileges, status, and reputation fields are read-only;
+    privilege changes must go through audited multi-admin workflows.
     """
 
     list_display = [
@@ -39,16 +40,34 @@ class UserAdmin(BaseUserAdmin):
     list_filter = ['verified', 'gender', 'branch', 'degree', 'is_staff', 'is_superuser']
     search_fields = ['enrollment_number', 'first_name', 'last_name', 'phone_number']
     ordering = ['enrollment_number']
-    readonly_fields = ['branch', 'degree', 'joining_year', 'roll_number', 'last_login', 'date_joined']
-    actions = []
+    readonly_fields = [
+        'branch', 'degree', 'joining_year', 'roll_number', 'last_login', 'date_joined',
+        'rides_completed', 'on_time_count', 'late_count', 'no_show_count', 'behavior_reports',
+        'verified', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions',
+    ]
 
-    def get_readonly_fields(self, request, obj=None):
-        ro = list(super().get_readonly_fields(request, obj))
-        if not request.user.is_superuser:
-            ro.extend(['is_superuser', 'is_staff', 'user_permissions', 'groups'])
-        else:
-            ro.extend(['user_permissions'])
-        return ro
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if actions and 'delete_selected' in actions:
+            del actions['delete_selected']
+        return actions
+
+    def user_change_password(self, request, id, form_url=''):
+        user = self.get_object(request, id)
+        response = super().user_change_password(request, id, form_url)
+        if request.method == 'POST' and user:
+            from django.contrib.sessions.models import Session
+            if getattr(user, 'current_session_key', None):
+                Session.objects.filter(session_key=user.current_session_key).delete()
+                user.current_session_key = ''
+                user.save(update_fields=['current_session_key'])
+            log_audit_event(
+                event_type='ADMIN_PASSWORD_CHANGE',
+                actor_enrollment=getattr(request.user, 'enrollment_number', 'admin'),
+                description=f"Admin updated password for {user.enrollment_number}",
+                target_id=str(user.enrollment_number),
+            )
+        return response
 
     fieldsets = (
         (None, {'fields': ('enrollment_number', 'password')}),
@@ -78,8 +97,6 @@ class UserAdmin(BaseUserAdmin):
                 'gender',
                 'password1',
                 'password2',
-                'is_staff',
-                'is_superuser',
             ),
         }),
     )
@@ -133,10 +150,24 @@ class PlatformFeedbackAdmin(admin.ModelAdmin):
 
 @admin.register(DirectMessage)
 class DirectMessageAdmin(admin.ModelAdmin):
-    list_display = ['sender', 'recipient', 'content', 'is_read', 'created_at']
+    """
+    DirectMessage admin registration with privacy safeguards:
+    Message content is strictly omitted from changelist and changeform.
+    """
+    list_display = ['sender', 'recipient', 'is_read', 'created_at']
     list_filter = ['is_read', 'created_at']
-    search_fields = ['sender__enrollment_number', 'recipient__enrollment_number', 'content']
-    readonly_fields = ['created_at']
+    search_fields = ['sender__enrollment_number', 'recipient__enrollment_number']
+    readonly_fields = ['sender', 'recipient', 'is_read', 'created_at']
+    fields = ['sender', 'recipient', 'is_read', 'created_at']
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if actions and 'delete_selected' in actions:
+            del actions['delete_selected']
+        return actions
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(PhoneOTP)

@@ -48,10 +48,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     appendMessage(data.author, data.content, data.timestamp, data.is_self);
                 } else if (data.type === 'system_notice') {
                     appendSystemNotice(data.content);
-                    if (['cancelled', 'completed', 'terminated'].includes(data.action)) {
-                        isTerminated = true;
-                        disableChatUI('Ride session ended. WebSocket connection closed.');
+                    if (['cancelled', 'completed', 'terminated', 'user_kicked'].includes(data.action)) {
+                        if (data.action !== 'user_kicked' || data.user === currentUsername) {
+                            isTerminated = true;
+                            disableChatUI('Ride session ended. WebSocket connection closed.');
+                        }
                     }
+                } else if (data.type === 'session_terminated') {
+                    isTerminated = true;
+                    disableChatUI(data.reason || 'Session terminated by security policy.');
                 } else if (data.type === 'error') {
                     console.warn('Chat error from server:', data.error);
                 }
@@ -61,6 +66,10 @@ document.addEventListener('DOMContentLoaded', function () {
         };
 
         socket.onclose = function (e) {
+            if (e.code === 4001 || e.code === 4003) {
+                isTerminated = true;
+                disableChatUI('Chat session ended.');
+            }
             if (statusIndicator) {
                 statusIndicator.textContent = isTerminated ? 'Closed' : 'Disconnected';
                 statusIndicator.className = 'chat-status chat-status-disconnected';

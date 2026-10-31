@@ -92,7 +92,7 @@ sudo -u postgres psql
 ```
 Execute the following SQL commands (replace `SECURE_DB_PASSWORD_HERE` with a strong 32+ character random string):
 ```sql
-CREATE DATABASE campus_nexus_prod ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C';
+CREATE DATABASE campus_nexus_prod TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C';
 CREATE USER nexus_app WITH PASSWORD 'SECURE_DB_PASSWORD_HERE';
 GRANT ALL PRIVILEGES ON DATABASE campus_nexus_prod TO nexus_app;
 ALTER DATABASE campus_nexus_prod OWNER TO nexus_app;
@@ -102,8 +102,9 @@ ALTER DATABASE campus_nexus_prod OWNER TO nexus_app;
 ### B. Redis 7
 Enable Redis and ensure it listens strictly on localhost:
 ```bash
-# Verify redis configuration
+# Verify redis configuration: bind to localhost and enforce noeviction for reliable WebSocket pub/sub
 sudo sed -i 's/^bind .*/bind 127.0.0.1 ::1/' /etc/redis/redis.conf
+sudo sed -i 's/^# maxmemory-policy .*/maxmemory-policy noeviction/' /etc/redis/redis.conf
 sudo systemctl restart redis-server
 sudo systemctl enable redis-server
 
@@ -131,7 +132,6 @@ source venv/bin/activate
 # Upgrade pip and install production dependencies
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
-pip install psycopg2-binary
 ```
 
 ---
@@ -444,21 +444,27 @@ Create `/etc/cron.daily/campus-nexus-backup`:
 ```bash
 sudo cat << 'EOF' > /etc/cron.daily/campus-nexus-backup
 #!/bin/bash
+set -euo pipefail
+
 BACKUP_DIR="/var/backups/campus-nexus"
-TIMESTAMP=$(date +\%Y\%m\%d_\%H\%M\%S)
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 mkdir -p "$BACKUP_DIR"
 
-# Perform compressed PostgreSQL dump
+# Perform compressed PostgreSQL dump using .pgpass credentials
+export PGPASSFILE="/opt/campus-nexus/.pgpass"
 pg_dump -U nexus_app -h 127.0.0.1 campus_nexus_prod | gzip > "$BACKUP_DIR/db_$TIMESTAMP.sql.gz"
 
+# Backup user media uploads
+tar -czf "$BACKUP_DIR/media_$TIMESTAMP.tar.gz" -C /opt/campus-nexus media
+
 # Retain backups for 30 days
-find "$BACKUP_DIR" -type f -name "db_*.sql.gz" -mtime +30 -delete
+find "$BACKUP_DIR" -type f -name "*.gz" -mtime +30 -delete
 EOF
 
 sudo chmod +x /etc/cron.daily/campus-nexus-backup
 ```
 
-### C. Zero-Downtime Application Update Script
+### C. Graceful Application Update Script
 Save this script as `/opt/campus-nexus/deploy_update.sh`:
 
 ```bash

@@ -65,6 +65,11 @@ class CustomPasswordChangeView(PasswordChangeView):
         if current_key:
             user.current_session_key = current_key
             user.save(update_fields=['current_session_key'])
+
+        from accounts.utils import broadcast_user_session_revocation
+        from django.db import transaction
+        transaction.on_commit(lambda: broadcast_user_session_revocation(user.id, "Password changed."))
+
         log_audit_event(
             event_type='SECURITY_SETTINGS_UPDATED',
             actor_enrollment=user.enrollment_number,

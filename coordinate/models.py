@@ -161,7 +161,21 @@ class RideParticipant(models.Model):
                 raise ValidationError({'user': 'Female students cannot join Boys Only rides.'})
 
     def save(self, *args, **kwargs):
+        is_new = self.pk is None
         super().save(*args, **kwargs)
+        if is_new and hasattr(self, 'ride') and hasattr(self, 'user'):
+            try:
+                RideConsent.objects.get_or_create(
+                    ride=self.ride,
+                    user=self.user,
+                    defaults={
+                        'disclose_ride_identity': True,
+                        'share_contact_details': False,
+                        'is_revoked': False,
+                    }
+                )
+            except Exception:
+                pass
 
     def __str__(self) -> str:
         return f'{self.user} in {self.ride}'

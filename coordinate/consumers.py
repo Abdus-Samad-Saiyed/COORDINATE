@@ -39,10 +39,14 @@ class RideChatConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
+        self.user_group_name = f'user_{self.user.id}'
         await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.channel_layer.group_add(self.user_group_name, self.channel_name)
         await self.accept()
 
     async def disconnect(self, close_code):
+        if hasattr(self, 'user_group_name') and self.channel_layer:
+            await self.channel_layer.group_discard(self.user_group_name, self.channel_name)
         if hasattr(self, 'group_name'):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
@@ -165,6 +169,14 @@ class RideChatConsumer(AsyncWebsocketConsumer):
     async def ride_rescheduled(self, event):
         """Reschedule handler: notifies all clients of new departure time."""
         await self.system_notice(event)
+
+    async def user_session_revoked(self, event):
+        """Handle push-based session termination."""
+        await self.send(text_data=json.dumps({
+            'type': 'session_terminated',
+            'reason': event.get('reason', 'Session terminated by security policy.'),
+        }))
+        await self.close(code=4003)
 
     # ------------------------------------------------------------------
     # DB helpers

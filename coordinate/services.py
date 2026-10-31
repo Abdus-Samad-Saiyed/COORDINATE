@@ -37,10 +37,11 @@ User = get_user_model()
 
 
 def user_has_active_ride(user: User, exclude_ride_id: Optional[int] = None) -> bool:
-    """Check whether a student is already host or confirmed passenger in another active ride."""
+    """Check whether a student is already host or confirmed passenger in another active ride within the 2-hour window."""
+    threshold = timezone.now() - datetime.timedelta(hours=2)
     qs = (
         RideRequest.objects
-        .filter(status__in=['OPEN', 'FULL'], departure_time__gt=timezone.now())
+        .filter(status__in=['OPEN', 'FULL'], departure_time__gt=threshold)
         .filter(participants__user=user)
     )
     if exclude_ride_id:
@@ -96,6 +97,8 @@ def request_to_join_ride(
     granting immediate membership.
     """
     with transaction.atomic():
+        # Canonical lock hierarchy: User -> RideRequest
+        User.objects.select_for_update().filter(id=user.id).first()
         ride = (
             RideRequest.objects
             .select_for_update()
@@ -171,6 +174,14 @@ def approve_ride_join_request(
     Preserves the requester's existing explicit consent choices without synthesis.
     """
     with transaction.atomic():
+        # Fetch unlocked first to discover the requester user_id
+        pre_req = RideJoinRequest.objects.filter(id=request_id, ride_id=ride_id, status='PENDING').first()
+        if not pre_req:
+            return False, "Pending join request not found.", {"code": "REQUEST_NOT_FOUND"}
+
+        # Canonical lock hierarchy: User -> RideRequest -> RideJoinRequest
+        User.objects.select_for_update().filter(id=pre_req.user_id).first()
+
         ride = (
             RideRequest.objects
             .select_for_update()
@@ -291,8 +302,10 @@ def promote_waitlist_passenger(ride: RideRequest) -> Optional[User]:
         entry.delete()
 
         if (
-            not candidate.is_deleted
+            not getattr(candidate, 'is_deleted', False)
             and candidate.is_active
+            and is_verified_student(candidate)
+            and can_view_ride(candidate, ride)
             and candidate != ride.creator
             and not ride.kicked_users.filter(id=candidate.id).exists()
             and not user_has_active_ride(candidate, exclude_ride_id=ride.id)

@@ -74,7 +74,7 @@ def can_view_profile_field(viewer: Optional[User], target_user: User, field_name
     if field_name == 'friends':
         return getattr(target_user, 'show_friends_publicly', True) or is_friend
 
-    return True
+    return False
 
 
 def can_view_ride(viewer: Optional[User], ride) -> bool:
@@ -125,10 +125,26 @@ def can_view_ride_identity(viewer: Optional[User], ride, target_user: User) -> b
         return True
     if not can_view_ride(viewer, ride):
         return False
+
     from .models import RideConsent
-    consent = RideConsent.objects.filter(ride=ride, user=target_user, is_revoked=False).first()
-    if consent and not consent.disclose_ride_identity:
+
+    # Host identity is discoverable by verified students allowed to see the ride (Manifesto Section 2.II.3)
+    if target_user.pk == ride.creator_id:
+        consent = RideConsent.objects.filter(ride=ride, user=target_user, is_revoked=False).first()
+        if consent and not consent.disclose_ride_identity:
+            return False
+        return True
+
+    # Co-passenger identity: Spectators cannot view passenger identities (Manifesto Section 3)
+    is_confirmed_participant = (viewer.pk == ride.creator_id) or ride.participants.filter(user=viewer).exists()
+    if not is_confirmed_participant:
         return False
+
+    # Fail-closed consent check: Active affirmative consent required
+    consent = RideConsent.objects.filter(ride=ride, user=target_user, is_revoked=False).first()
+    if not consent or not consent.disclose_ride_identity:
+        return False
+
     return True
 
 def can_view_ride_contact(viewer: Optional[User], ride, target_user: User) -> bool:

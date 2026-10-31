@@ -32,8 +32,10 @@ class SecretsLocalIsolationTest(unittest.TestCase):
         self.assertTrue(example_path.exists(), "secrets_local.example.py must be tracked in the repository")
         content = example_path.read_text(encoding='utf-8')
         # Must not contain live credentials
-        self.assertNotIn('ayneofpiaixfwvhb', content)
-        self.assertNotIn('AbSm72000@123', content)
+        env_pwd = os.environ.get('EMAIL_HOST_PASSWORD')
+        if env_pwd:
+            self.assertNotIn(env_pwd, content)
+
         self.assertIn('your-google-app-password-here', content)
 
     def test_git_ignores_secrets_local_and_env(self):
