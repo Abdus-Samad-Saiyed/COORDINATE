@@ -101,7 +101,7 @@ class AccountApplicationForm(forms.ModelForm):
                 'An account with this enrollment number is already registered.'
             )
 
-        if AccountApplication.objects.filter(enrollment_number=enrollment, approved=False).exists():
+        if AccountApplication.objects.filter(enrollment_number=enrollment).exists():
             raise forms.ValidationError(
                 'An application for this enrollment number is already pending verification.'
             )
@@ -114,7 +114,7 @@ class AccountApplicationForm(forms.ModelForm):
             raise forms.ValidationError('Email address is required.')
         if User.objects.filter(email=email).exists():
             raise forms.ValidationError('An account with this email address already exists.')
-        if AccountApplication.objects.filter(email=email, approved=False).exists():
+        if AccountApplication.objects.filter(email=email).exists():
             raise forms.ValidationError('An application with this email address is already pending verification.')
         return email
 

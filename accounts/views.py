@@ -32,7 +32,7 @@ from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -1216,23 +1216,40 @@ def messages_inbox(request):
     all_chat_partner_ids = friend_ids | dm_sent_to | dm_rcvd_from
     all_chat_users = User.objects.filter(id__in=all_chat_partner_ids).distinct()
 
+    # Batch-fetch unread counts across all senders (1 query)
+    unread_counts = dict(
+        DirectMessage.objects
+        .filter(recipient=request.user, is_read=False)
+        .values('sender_id')
+        .annotate(cnt=Count('id'))
+        .values_list('sender_id', 'cnt')
+    )
+
+    # Batch-fetch latest message IDs across all chat partners (1 query + 1 fetch)
+    latest_msg_subquery = (
+        DirectMessage.objects
+        .filter(
+            Q(sender=request.user, recipient=OuterRef('pk')) |
+            Q(sender=OuterRef('pk'), recipient=request.user)
+        )
+        .order_by('-created_at')
+        .values('id')[:1]
+    )
+
+    annotated_users = all_chat_users.annotate(latest_msg_id=Subquery(latest_msg_subquery))
+    user_latest_ids = {u.id: u.latest_msg_id for u in annotated_users if u.latest_msg_id}
+
+    latest_messages = {
+        m.id: m
+        for m in DirectMessage.objects.filter(id__in=user_latest_ids.values()).select_related('sender', 'recipient')
+    }
+
     conversations = []
     for friend in all_chat_users:
-        latest = (
-            DirectMessage.objects
-            .filter(Q(sender=request.user, recipient=friend) | Q(sender=friend, recipient=request.user))
-            .order_by('-created_at')
-            .first()
-        )
-        unread = (
-            DirectMessage.objects
-            .filter(sender=friend, recipient=request.user, is_read=False)
-            .count()
-        )
         conversations.append({
             'friend': friend,
-            'latest_message': latest,
-            'unread_count': unread,
+            'latest_message': latest_messages.get(user_latest_ids.get(friend.id)),
+            'unread_count': unread_counts.get(friend.id, 0),
         })
 
     conversations.sort(

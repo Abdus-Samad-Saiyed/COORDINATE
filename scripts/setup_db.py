@@ -430,8 +430,8 @@ def print_diagnostics():
 
         # Coordinates ride count if installed
         try:
-            from coordinate.models import Ride
-            print(f"  Total Rides        : {Ride.objects.count()}")
+            from coordinate.models import RideRequest
+            print(f"  Total Rides        : {RideRequest.objects.count()}")
         except Exception:
             pass
     except Exception as e:

@@ -290,6 +290,10 @@ class DirectMessage(models.Model):
         ordering = ['created_at']
         verbose_name = 'Direct Message'
         verbose_name_plural = 'Direct Messages'
+        indexes = [
+            models.Index(fields=['sender', 'recipient', 'created_at'], name='idx_dm_sender_rcpt_created'),
+            models.Index(fields=['recipient', 'is_read', 'sender'], name='idx_dm_unread_by_sender'),
+        ]
 
     def clean(self):
         super().clean()
@@ -318,6 +322,10 @@ class PhoneOTP(models.Model):
         ordering = ['-created_at']
         verbose_name = 'Phone OTP'
         verbose_name_plural = 'Phone OTPs'
+        indexes = [
+            models.Index(fields=['user', 'purpose', 'is_used', '-created_at'], name='idx_otp_user_lookup'),
+            models.Index(fields=['phone_number', 'purpose', 'is_used', '-created_at'], name='idx_otp_phone_lookup'),
+        ]
 
     def is_valid(self) -> bool:
         return (not self.is_used) and (self.attempts_left > 0) and (timezone.now() < self.expires_at)

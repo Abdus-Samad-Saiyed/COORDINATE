@@ -68,6 +68,10 @@ class RideRequest(models.Model):
                 name='check_total_spots_range',
             ),
         ]
+        indexes = [
+            models.Index(fields=['status', 'departure_time'], name='idx_ride_status_dept'),
+            models.Index(fields=['creator', 'status'], name='idx_ride_creator_status'),
+        ]
 
     # ------------------------------------------------------------------
     # Computed helpers
@@ -309,6 +313,9 @@ class RideMessage(models.Model):
     class Meta:
         ordering = ['created_at']
         verbose_name = 'Ride Message'
+        indexes = [
+            models.Index(fields=['ride', 'created_at'], name='idx_ridemsg_ride_created'),
+        ]
 
     def clean(self):
         if not self.content or not self.content.strip():
