@@ -384,7 +384,77 @@
     if (picker) picker.value = hex;
     if (input) input.value = hex;
     if (label) label.textContent = hex;
+
+    // Real-time Dynamic Favicon Accent Sync
+    updateNexusDynamicFavicon(hex);
   };
+
+  // ------------------------------------------------------------------
+  // Dynamic Real-Time Favicon Engine (Accent Color Sync)
+  // ------------------------------------------------------------------
+  function updateNexusDynamicFavicon(hexCode) {
+    if (!hexCode) return;
+    try {
+      var c = hexCode.replace('#', '');
+      var full = (c.length === 3) ? c.split('').map(function(x) { return x + x; }).join('') : c;
+      var r = parseInt(full.slice(0, 2), 16) || 8;
+      var g = parseInt(full.slice(2, 4), 16) || 183;
+      var b = parseInt(full.slice(4, 6), 16) || 79;
+      var rB = Math.min(255, Math.round(r * 0.55 + 255 * 0.45));
+      var gB = Math.min(255, Math.round(g * 0.55 + 255 * 0.45));
+      var bB = Math.min(255, Math.round(b * 0.55 + 255 * 0.45));
+      var bright = 'rgb(' + rB + ',' + gB + ',' + bB + ')';
+      var bg1 = 'rgb(' + Math.round(r * 0.08 + 8) + ',' + Math.round(g * 0.08 + 8) + ',' + Math.round(b * 0.08 + 8) + ')';
+      var bg2 = 'rgb(' + Math.round(r * 0.03 + 4) + ',' + Math.round(g * 0.03 + 4) + ',' + Math.round(b * 0.03 + 4) + ')';
+
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">' +
+        '<defs>' +
+        '<linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="' + bg1 + '"/><stop offset="100%" stop-color="' + bg2 + '"/></linearGradient>' +
+        '<linearGradient id="accGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="' + bright + '"/><stop offset="60%" stop-color="' + hexCode + '"/><stop offset="100%" stop-color="' + hexCode + '"/></linearGradient>' +
+        '<linearGradient id="bmGrad" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="' + hexCode + '"/><stop offset="50%" stop-color="' + bright + '"/><stop offset="100%" stop-color="#FFFFFF"/></linearGradient>' +
+        '<radialGradient id="ambG" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="' + hexCode + '" stop-opacity="0.45"/><stop offset="60%" stop-color="' + hexCode + '" stop-opacity="0.12"/><stop offset="100%" stop-color="' + bg2 + '" stop-opacity="0"/></radialGradient>' +
+        '</defs>' +
+        '<rect x="2.5" y="2.5" width="59" height="59" rx="15" fill="url(#bgGrad)" stroke="' + hexCode + '" stroke-width="2.5" stroke-opacity="0.95"/>' +
+        '<circle cx="32" cy="32" r="24" fill="url(#ambG)"/>' +
+        '<circle cx="32" cy="32" r="23" fill="none" stroke="' + bright + '" stroke-width="1" stroke-opacity="0.22" stroke-dasharray="3,4"/>' +
+        '<circle cx="32" cy="32" r="15" fill="none" stroke="' + hexCode + '" stroke-width="0.8" stroke-opacity="0.28"/>' +
+        '<path d="M16 46 L16 18 C16 16.5 17.5 15.5 19 16.5 L24 20 C24.8 20.6 25.5 21.6 25.5 22.8 L25.5 44 C25.5 45.5 24 46.5 22.5 45.8 L17.5 46.5 C16.5 46.8 16 46.5 16 46 Z" fill="url(#accGrad)"/>' +
+        '<path d="M19 17.5 L45 46.5 C46.2 47.8 48 47 48 45 L48 39 C48 37.8 47.2 36.8 46.2 35.6 L26 14.5 C24.5 13 22 14.2 22 16.2 L22 17.5 Z" fill="url(#bmGrad)"/>' +
+        '<path d="M38.5 20 C38.5 18.5 40 17.5 41.5 18.2 L46.5 20.5 C47.5 21 48 22 48 23.2 L48 46 C48 47.5 46.5 48.5 45 47.8 L40 44.5 C39 43.8 38.5 42.8 38.5 41.6 Z" fill="url(#accGrad)"/>' +
+        '<circle cx="20.5" cy="18.5" r="3.2" fill="#FFFFFF"/>' +
+        '<circle cx="43.5" cy="45.5" r="3.2" fill="#FFFFFF"/>' +
+        '<circle cx="43.5" cy="22" r="2.5" fill="' + bright + '"/>' +
+        '<circle cx="20.5" cy="42" r="2.5" fill="' + bright + '"/>' +
+        '<circle cx="32" cy="32" r="2.8" fill="#FFFFFF"/>' +
+        '</svg>';
+
+      var uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      var svgLink = document.getElementById('nexus-svg-favicon');
+      if (svgLink) svgLink.href = uri;
+
+      var metaTheme = document.getElementById('nexus-theme-color-meta');
+      if (metaTheme) metaTheme.setAttribute('content', hexCode);
+
+      // Sync raster icon canvas for browser contexts that prefer PNG
+      if (typeof window.HTMLCanvasElement !== 'undefined') {
+        var img = new Image();
+        img.onload = function () {
+          try {
+            var canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, 32, 32);
+            var pngUri = canvas.toDataURL('image/png');
+            var pngFavicon = document.getElementById('nexus-png-favicon');
+            if (pngFavicon) pngFavicon.href = pngUri;
+          } catch (e) {}
+        };
+        img.src = uri;
+      }
+    } catch (e) {}
+  }
+  window.updateNexusDynamicFavicon = updateNexusDynamicFavicon;
 
   function applyNexusAccent(accent) {
     const selected = accent || localStorage.getItem('nexus_accent') || 'emerald';
@@ -415,6 +485,9 @@
     if (picker) picker.value = presetHex;
     if (input) input.value = presetHex;
     if (label) label.textContent = presetHex;
+
+    // Real-time Dynamic Favicon Accent Sync
+    updateNexusDynamicFavicon(presetHex);
   }
 
   window.setNexusAccent = function (accent) {

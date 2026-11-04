@@ -6,13 +6,66 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Campus Nexus — Centralized Student Digital Services{% endblock %}</title>
 
-    <!-- Favicon & Brand Tab Icons -->
-    <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
-    <link rel="alternate icon" type="image/png" sizes="32x32" href="{% static 'img/favicon-32x32.png' %}">
+    <!-- Favicon & Dynamic Accent-Matched Brand Icons -->
+    <link id="nexus-svg-favicon" rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
+    <link id="nexus-png-favicon" rel="alternate icon" type="image/png" sizes="32x32" href="{% static 'img/favicon-32x32.png' %}">
     <link rel="alternate icon" type="image/png" sizes="16x16" href="{% static 'img/favicon-16x16.png' %}">
     <link rel="shortcut icon" href="{% static 'favicon.ico' %}">
     <link rel="apple-touch-icon" sizes="180x180" href="{% static 'img/apple-touch-icon.png' %}">
-    <meta name="theme-color" content="#08B74F">
+    <meta id="nexus-theme-color-meta" name="theme-color" content="#08B74F">
+    <script>
+        (function() {
+            try {
+                var pMap = {
+                    emerald: '#08B74F', cyan: '#00D2FF', indigo: '#818CF8',
+                    amber: '#F59E0B', rose: '#FB7185', purple: '#A855F7',
+                    teal: '#14B8A6', orange: '#FF6B2B'
+                };
+                var acc = localStorage.getItem('nexus_accent') || 'emerald';
+                var hex = (acc === 'custom') ? (localStorage.getItem('nexus_custom_hex') || '#08B74F') : (pMap[acc] || '#08B74F');
+                if (hex) {
+                    var c = hex.replace('#', '');
+                    if (c.length === 3) c = c.split('').map(function(x) { return x + x; }).join('');
+                    var r = parseInt(c.slice(0, 2), 16) || 8;
+                    var g = parseInt(c.slice(2, 4), 16) || 183;
+                    var b = parseInt(c.slice(4, 6), 16) || 79;
+                    var rB = Math.min(255, Math.round(r * 0.55 + 255 * 0.45));
+                    var gB = Math.min(255, Math.round(g * 0.55 + 255 * 0.45));
+                    var bB = Math.min(255, Math.round(b * 0.55 + 255 * 0.45));
+                    var bright = 'rgb(' + rB + ',' + gB + ',' + bB + ')';
+                    var bg1 = 'rgb(' + Math.round(r * 0.08 + 8) + ',' + Math.round(g * 0.08 + 8) + ',' + Math.round(b * 0.08 + 8) + ')';
+                    var bg2 = 'rgb(' + Math.round(r * 0.03 + 4) + ',' + Math.round(g * 0.03 + 4) + ',' + Math.round(b * 0.03 + 4) + ')';
+
+                    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">' +
+                    '<defs>' +
+                    '<linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="' + bg1 + '"/><stop offset="100%" stop-color="' + bg2 + '"/></linearGradient>' +
+                    '<linearGradient id="accGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="' + bright + '"/><stop offset="60%" stop-color="' + hex + '"/><stop offset="100%" stop-color="' + hex + '"/></linearGradient>' +
+                    '<linearGradient id="bmGrad" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="' + hex + '"/><stop offset="50%" stop-color="' + bright + '"/><stop offset="100%" stop-color="#FFFFFF"/></linearGradient>' +
+                    '<radialGradient id="ambG" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="' + hex + '" stop-opacity="0.45"/><stop offset="60%" stop-color="' + hex + '" stop-opacity="0.12"/><stop offset="100%" stop-color="' + bg2 + '" stop-opacity="0"/></radialGradient>' +
+                    '</defs>' +
+                    '<rect x="2.5" y="2.5" width="59" height="59" rx="15" fill="url(#bgGrad)" stroke="' + hex + '" stroke-width="2.5" stroke-opacity="0.95"/>' +
+                    '<circle cx="32" cy="32" r="24" fill="url(#ambG)"/>' +
+                    '<circle cx="32" cy="32" r="23" fill="none" stroke="' + bright + '" stroke-width="1" stroke-opacity="0.22" stroke-dasharray="3,4"/>' +
+                    '<circle cx="32" cy="32" r="15" fill="none" stroke="' + hex + '" stroke-width="0.8" stroke-opacity="0.28"/>' +
+                    '<path d="M16 46 L16 18 C16 16.5 17.5 15.5 19 16.5 L24 20 C24.8 20.6 25.5 21.6 25.5 22.8 L25.5 44 C25.5 45.5 24 46.5 22.5 45.8 L17.5 46.5 C16.5 46.8 16 46.5 16 46 Z" fill="url(#accGrad)"/>' +
+                    '<path d="M19 17.5 L45 46.5 C46.2 47.8 48 47 48 45 L48 39 C48 37.8 47.2 36.8 46.2 35.6 L26 14.5 C24.5 13 22 14.2 22 16.2 L22 17.5 Z" fill="url(#bmGrad)"/>' +
+                    '<path d="M38.5 20 C38.5 18.5 40 17.5 41.5 18.2 L46.5 20.5 C47.5 21 48 22 48 23.2 L48 46 C48 47.5 46.5 48.5 45 47.8 L40 44.5 C39 43.8 38.5 42.8 38.5 41.6 Z" fill="url(#accGrad)"/>' +
+                    '<circle cx="20.5" cy="18.5" r="3.2" fill="#FFFFFF"/>' +
+                    '<circle cx="43.5" cy="45.5" r="3.2" fill="#FFFFFF"/>' +
+                    '<circle cx="43.5" cy="22" r="2.5" fill="' + bright + '"/>' +
+                    '<circle cx="20.5" cy="42" r="2.5" fill="' + bright + '"/>' +
+                    '<circle cx="32" cy="32" r="2.8" fill="#FFFFFF"/>' +
+                    '</svg>';
+
+                    var uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+                    var svgLink = document.getElementById('nexus-svg-favicon');
+                    if (svgLink) svgLink.href = uri;
+                    var metaT = document.getElementById('nexus-theme-color-meta');
+                    if (metaT) metaT.content = hex;
+                }
+            } catch(e) {}
+        })();
+    </script>
 
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
