@@ -2,7 +2,7 @@
 
 > **Institution:** National Institute of Technology Srinagar (NIT Srinagar)  
 > **Platform Version:** 2.4.0 (Dual-Channel Verification & Mechanical Zen Release)  
-> **Repository:** [Campus Nexus](https://github.com/abdus-samad-saiyed/Campus-Nexus)  
+> **Repository:** [Campus Nexus](https://github.com/Abdus-Samad-Saiyed/Campus-Nexus)  
 > **Maintainer:** Abdus Samad Saiyed (`2024BCSE065`)  
 
 ---

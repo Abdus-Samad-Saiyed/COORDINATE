@@ -171,6 +171,7 @@ Access the development portal at `http://127.0.0.1:8000/`.
 *Department:* Computer Science & Engineering  
 *Institution:* National Institute of Technology Srinagar (NIT Srinagar)  
 *GitHub:* [@Abdus-Samad-Saiyed](https://github.com/Abdus-Samad-Saiyed)
+*LinkedIn:* [abdussamadsaiyed](https://www.linkedin.com/in/abdussamadsaiyed)
 
 ---
 

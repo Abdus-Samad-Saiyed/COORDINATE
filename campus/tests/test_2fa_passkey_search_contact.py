@@ -193,7 +193,7 @@ class AuthenticationAndSecurityPageTests(TestCase):
         response = self.client.get(reverse("feedback"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Route Directly to Repository Issues")
-        self.assertContains(response, "https://github.com/abdus-samad-saiyed/Campus-Nexus/issues/new")
+        self.assertContains(response, "https://github.com/Abdus-Samad-Saiyed/Campus-Nexus/issues/new")
         self.assertContains(response, "routeToGitHubIssue()")
 
 

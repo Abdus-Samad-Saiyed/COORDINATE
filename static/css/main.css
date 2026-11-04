@@ -1265,8 +1265,8 @@ hr { border-color: var(--border); opacity: 1; }
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: clamp(480px, 68vh, 660px);
-  min-height: 420px;
+  height: clamp(380px, calc(100vh - 270px), 640px);
+  min-height: 340px;
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--border);
