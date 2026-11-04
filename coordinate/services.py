@@ -42,7 +42,7 @@ def user_has_active_ride(user: User, exclude_ride_id: Optional[int] = None) -> b
     qs = (
         RideRequest.objects
         .filter(status__in=['OPEN', 'FULL'], departure_time__gt=threshold)
-        .filter(participants__user=user)
+        .filter(participants__user=user, participants__status='CONFIRMED')
     )
     if exclude_ride_id:
         qs = qs.exclude(id=exclude_ride_id)

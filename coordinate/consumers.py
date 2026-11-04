@@ -188,6 +188,7 @@ class RideChatConsumer(AsyncWebsocketConsumer):
         return RideParticipant.objects.filter(
             ride_id=self.ride_id,
             user=self.user,
+            status='CONFIRMED',
         ).exists()
 
     @database_sync_to_async

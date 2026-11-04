@@ -9,6 +9,22 @@ from django.utils import timezone
 from accounts.models import User
 
 
+class ParticipantStatus(models.TextChoices):
+    CONFIRMED = 'CONFIRMED', 'Confirmed Active Passenger'
+    PENDING = 'PENDING', 'Pending Host Approval'
+    WAITLISTED = 'WAITLISTED', 'Standby Queue'
+    LEFT = 'LEFT', 'Voluntarily Left Ride'
+    KICKED = 'KICKED', 'Removed by Host'
+    DECLINED = 'DECLINED', 'Declined by Host'
+    CANCELLED = 'CANCELLED', 'Cancelled / Withdrawn'
+
+
+class ConfirmedManager(models.Manager):
+    """Fail-safe default manager: existing unfiltered queries automatically filter status='CONFIRMED'."""
+    def get_queryset(self):
+        return super().get_queryset().filter(status=ParticipantStatus.CONFIRMED)
+
+
 class RideRequest(models.Model):
     """A shared cab ride that students can join."""
 
@@ -87,13 +103,24 @@ class RideRequest(models.Model):
     def participant_count(self) -> int:
         if not self.pk:
             return 0
-        return self.participants.count()
+        annotated = getattr(self, 'participants_total', None)
+        if annotated is not None:
+            return int(annotated)
+        return self.participants.filter(status=ParticipantStatus.CONFIRMED).count()
 
     def spots_remaining(self) -> int:
-        return self.total_spots - self.participant_count()
+        return max(0, self.total_spots - self.participant_count())
 
     def is_full(self) -> bool:
         return self.participant_count() >= self.total_spots
+
+    @property
+    def kicked_users_qs(self):
+        return User.objects.filter(ride_participations__ride=self, ride_participations__status=ParticipantStatus.KICKED)
+
+    @property
+    def left_users_qs(self):
+        return User.objects.filter(ride_participations__ride=self, ride_participations__status=ParticipantStatus.LEFT)
 
     # ------------------------------------------------------------------
     # Status management
@@ -145,19 +172,52 @@ class RideParticipant(models.Model):
         on_delete=models.CASCADE,
         related_name='ride_participations',
     )
+    status = models.CharField(
+        max_length=20,
+        choices=ParticipantStatus.choices,
+        default=ParticipantStatus.CONFIRMED,
+        db_index=True,
+    )
     joined_at = models.DateTimeField(auto_now_add=True)
+    queued_at = models.DateTimeField(default=timezone.now)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=255, blank=True)
+
+    # Folded RideConsent fields (fail-closed defaults)
+    consent_version = models.CharField(max_length=20, default='v2.0')
+    disclose_ride_identity = models.BooleanField(default=False)
+    share_contact_details = models.BooleanField(default=False)
+    is_revoked = models.BooleanField(default=False)
+    consent_granted_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    objects = ConfirmedManager()
+    all_rows = models.Manager()
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=['ride', 'user'],
                 name='unique_ride_participant',
-            )
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=[s.value for s in ParticipantStatus]),
+                name='ride_participant_status_valid',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['ride', 'status', 'queued_at'], name='idx_rp_ride_status_queued'),
+            models.Index(fields=['user', 'status'], name='idx_rp_user_status'),
         ]
         verbose_name = 'Ride Participant'
+        verbose_name_plural = 'Ride Participants'
 
     def clean(self):
         super().clean()
+        if self.status in (ParticipantStatus.LEFT, ParticipantStatus.KICKED,
+                           ParticipantStatus.DECLINED, ParticipantStatus.CANCELLED):
+            return
         if hasattr(self, 'ride') and hasattr(self, 'user'):
             if self.ride.visibility == 'GIRLS' and self.user.gender != 'F':
                 raise ValidationError({'user': 'Male students cannot join Girls Only rides.'})

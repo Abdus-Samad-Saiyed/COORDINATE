@@ -30,8 +30,12 @@ class RideJoinRequestAdmin(admin.ModelAdmin):
 
 @admin.register(RideParticipant)
 class RideParticipantAdmin(admin.ModelAdmin):
-    list_display = ['ride', 'user', 'joined_at']
-    search_fields = ['user__enrollment_number']
+    list_display = ['ride', 'user', 'status', 'disclose_ride_identity', 'share_contact_details', 'is_revoked', 'joined_at', 'queued_at']
+    list_filter = ['status', 'is_revoked']
+    search_fields = ['user__enrollment_number', 'ride__id']
+
+    def get_queryset(self, request):
+        return self.model.all_rows.get_queryset()
 
 
 @admin.register(RideWaitlist)

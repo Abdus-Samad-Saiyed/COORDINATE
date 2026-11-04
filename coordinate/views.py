@@ -247,7 +247,7 @@ def ride_list(request):
         RideRequest.objects
         .filter(status__in=['OPEN', 'FULL'])
         .select_related('creator')
-        .annotate(participants_total=Count('participants'))
+        .annotate(participants_total=Count('participants', filter=Q(participants__status='CONFIRMED')))
     )
 
     if has_date_filter:

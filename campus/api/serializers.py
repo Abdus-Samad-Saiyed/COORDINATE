@@ -81,7 +81,7 @@ def serialize_ride_detail(ride: RideRequest, request_user: Optional[User] = None
         is_staff_override = False
 
     participants = []
-    for p in ride.participants.select_related('user').all():
+    for p in ride.participants.filter(status='CONFIRMED').select_related('user'):
         u = p.user
         is_p_creator = (u.pk == ride.creator_id)
 
