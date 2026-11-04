@@ -37,4 +37,12 @@
         {% include 'coordinate/partials/ride_list_content.html' %}
     </div>
 </div>
+
+<script>
+    try {
+        sessionStorage.removeItem('nexus_zen_transition_state');
+        sessionStorage.removeItem('nexus_zen_target_route');
+        document.documentElement.classList.remove('zen-incoming-page');
+    } catch (e) {}
+</script>
 {% endblock %}

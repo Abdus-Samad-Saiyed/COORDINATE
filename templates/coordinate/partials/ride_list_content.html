@@ -75,7 +75,12 @@
                 {% if prev_date %}
                     <a href="?date_from={{ prev_date }}&date_to={{ prev_date }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if time_from %}&time_from={{ time_from }}{% endif %}{% if time_to %}&time_to={{ time_to }}{% endif %}{% if order_by %}&order_by={{ order_by }}{% endif %}{% if queue_only %}&queue_only=1{% endif %}"
                        hx-get="?date_from={{ prev_date }}&date_to={{ prev_date }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if time_from %}&time_from={{ time_from }}{% endif %}{% if time_to %}&time_to={{ time_to }}{% endif %}{% if order_by %}&order_by={{ order_by }}{% endif %}{% if queue_only %}&queue_only=1{% endif %}"
-                       class="btn btn-dark-custom btn-sm py-1 px-2" title="Previous Day">
+                       hx-target="#coordinate-rides-container"
+                       hx-swap="innerHTML"
+                       hx-push-url="true"
+                       data-no-transition="true"
+                       data-seamless="true"
+                       class="btn btn-dark-custom btn-sm py-1 px-2 no-transition" title="Previous Day">
                         <i class="bi bi-chevron-left"></i> Prev
                     </a>
                 {% else %}
@@ -86,7 +91,12 @@
 
                 <a href="?date_from={{ next_date }}&date_to={{ next_date }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if time_from %}&time_from={{ time_from }}{% endif %}{% if time_to %}&time_to={{ time_to }}{% endif %}{% if order_by %}&order_by={{ order_by }}{% endif %}{% if queue_only %}&queue_only=1{% endif %}"
                    hx-get="?date_from={{ next_date }}&date_to={{ next_date }}{% if selected_route %}&route={{ selected_route }}{% endif %}{% if selected_visibility %}&visibility={{ selected_visibility }}{% endif %}{% if time_from %}&time_from={{ time_from }}{% endif %}{% if time_to %}&time_to={{ time_to }}{% endif %}{% if order_by %}&order_by={{ order_by }}{% endif %}{% if queue_only %}&queue_only=1{% endif %}"
-                   class="btn btn-dark-custom btn-sm py-1 px-2" title="Next Day">
+                   hx-target="#coordinate-rides-container"
+                   hx-swap="innerHTML"
+                   hx-push-url="true"
+                   data-no-transition="true"
+                   data-seamless="true"
+                   class="btn btn-dark-custom btn-sm py-1 px-2 no-transition" title="Next Day">
                     Next <i class="bi bi-chevron-right"></i>
                 </a>
             </div>

@@ -19,15 +19,22 @@
     <script src="{% static 'vendor/htmx.min.js' %}"></script>
 
     <!-- Custom Theme & Watermark Styles -->
-    <link rel="stylesheet" href="{% static 'css/main.css' %}?v=2.9.0">
-    <link rel="stylesheet" href="{% static 'css/watermark.css' %}?v=2.9.0">
+    <link rel="stylesheet" href="{% static 'css/main.css' %}?v=3.0.0">
+    <link rel="stylesheet" href="{% static 'css/watermark.css' %}?v=3.0.0">
     <script>
         (function() {
             try {
                 var state = sessionStorage.getItem('nexus_zen_transition_state');
                 var enabled = localStorage.getItem('nexus_zen_transitions');
                 if (state === 'incoming' && enabled !== 'false') {
-                    document.documentElement.classList.add('zen-incoming-page');
+                    var targetRoute = sessionStorage.getItem('nexus_zen_target_route');
+                    var currentRoute = (window.location.pathname.replace(/\/+$/, '') || '/').toLowerCase();
+                    if (targetRoute && targetRoute === currentRoute) {
+                        sessionStorage.removeItem('nexus_zen_transition_state');
+                        sessionStorage.removeItem('nexus_zen_target_route');
+                    } else {
+                        document.documentElement.classList.add('zen-incoming-page');
+                    }
                 }
             } catch (e) {}
         })();
@@ -703,7 +710,7 @@
     <!-- Bootstrap Bundle JS with Subresource Integrity (SRI) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <!-- Clockwork Watermark Engine -->
-    <script src="{% static 'js/watermark.js' %}?v=2.9.0"></script>
+    <script src="{% static 'js/watermark.js' %}?v=3.0.0"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

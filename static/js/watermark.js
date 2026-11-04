@@ -829,6 +829,9 @@
       const rawHref = anchor.getAttribute('href');
       if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) return;
 
+      // Transitions occur ONLY on true page changes: any query-only link (?date_from=...) is strictly exempt
+      if (rawHref.startsWith('?')) return;
+
       // Only same-origin navigation
       if (anchor.origin !== window.location.origin) return;
 
@@ -931,6 +934,7 @@
 
       // 2. Set incoming state for destination page
       sessionStorage.setItem('nexus_zen_transition_state', 'incoming');
+      sessionStorage.setItem('nexus_zen_target_route', targetRoute);
 
       // 3. Crisp Zen hold: panicking box rockets out by ~650ms,
       //    then hold in pure clockwork Zen for ~230ms before navigating (total ~880ms)
