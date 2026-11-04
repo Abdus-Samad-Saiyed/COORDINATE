@@ -1,0 +1,103 @@
+"""
+Channels Token & Session Authentication Middleware for Campus Nexus.
+
+Enables React Native mobile applications to connect to WebSockets using Bearer
+session tokens via query string: `ws://.../ws/ride/1/?token=<session_token>`
+or Authorization headers, while maintaining full backward-compatibility with
+browser cookie-based authentication.
+"""
+
+from urllib.parse import parse_qs, urlparse
+from channels.db import database_sync_to_async
+from channels.middleware import BaseMiddleware
+from channels.security.websocket import OriginValidator
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
+from django.contrib.sessions.models import Session
+from django.utils import timezone
+
+User = get_user_model()
+
+
+@database_sync_to_async
+def get_user_from_token(token_key: str):
+    """Retrieve and validate User instance associated with the given session key."""
+    if not token_key:
+        return AnonymousUser()
+
+    try:
+        from accounts.two_factor import hash_otp
+        session = Session.objects.filter(session_key=token_key).first()
+        if not session or session.expire_date <= timezone.now():
+            return AnonymousUser()
+
+        session_data = session.get_decoded()
+        user_id = session_data.get('_auth_user_id')
+        if not user_id:
+            return AnonymousUser()
+
+        user = User.objects.filter(pk=user_id, is_active=True).first()
+        if not user or getattr(user, 'is_deleted', False):
+            return AnonymousUser()
+
+        # Enforce single session key if set
+        token_hash = hash_otp(token_key)
+        if user.current_session_key and user.current_session_key not in (token_key, token_hash):
+            return AnonymousUser()
+
+        return user
+    except Exception:
+        return AnonymousUser()
+
+
+class TokenOrSessionAuthMiddleware(BaseMiddleware):
+    """Middleware resolving user from either Bearer token query/header or Session cookie."""
+
+    async def __call__(self, scope, receive, send):
+        # 1. Check if user was already resolved by prior middleware (e.g. cookie auth)
+        user = scope.get('user')
+        if user and user.is_authenticated:
+            return await super().__call__(scope, receive, send)
+
+        token = None
+
+        # 2. Check query string: ?token=<session_token>
+        query_string = scope.get('query_string', b'').decode('utf-8')
+        if query_string:
+            parsed = parse_qs(query_string)
+            if 'token' in parsed and parsed['token']:
+                token = parsed['token'][0].strip()
+
+        # 3. Check headers: Authorization: Bearer <token>
+        if not token and 'headers' in scope:
+            for name, val in scope['headers']:
+                if name.lower() == b'authorization':
+                    parts = val.decode('utf-8').split()
+                    if len(parts) == 2 and parts[0].lower() in ('bearer', 'token'):
+                        token = parts[1].strip()
+                        break
+
+        # 4. Resolve user from token if found
+        if token:
+            scope['user'] = await get_user_from_token(token)
+
+        return await super().__call__(scope, receive, send)
+
+
+def TokenOrSessionAuthMiddlewareStack(inner):
+    """Stack TokenOrSessionAuthMiddleware on top of standard AuthMiddlewareStack."""
+    from channels.auth import AuthMiddlewareStack
+    return TokenOrSessionAuthMiddleware(AuthMiddlewareStack(inner))
+
+
+class MobileAndAllowedHostsOriginValidator(OriginValidator):
+    """Origin validator that permits native mobile clients without an Origin header,
+    while validating Origin for browser clients against configured allowed hosts.
+    """
+
+    def valid_origin(self, parsed_origin):
+        if parsed_origin is None:
+            # Native Android/iOS mobile WebSocket clients do not supply an Origin header
+            return True
+        return super().valid_origin(parsed_origin)

@@ -46,42 +46,68 @@ if not IS_BUILD_PHASE:
         )
 valid_hosts = ALLOWED_HOSTS
 
-# --- 3. Production Database (PostgreSQL) -------------------------------------
+# --- 3. Production Database (PostgreSQL & SQLite3) ---------------------------
 database_url = env('DATABASE_URL', default='')
+allow_sqlite_prod = env.bool('DJANGO_ALLOW_SQLITE_PROD', default=False)
+
 if IS_BUILD_PHASE:
     DATABASES['default'] = {'ENGINE': 'django.db.backends.dummy'}
 else:
     if not database_url:
         raise ImproperlyConfigured(
-            'DATABASE_URL environment variable is required for production (PostgreSQL).'
+            'DATABASE_URL environment variable is required for production (PostgreSQL or SQLite).'
         )
-    if database_url.startswith('sqlite'):
+    if database_url.startswith('sqlite') and not allow_sqlite_prod:
         raise ImproperlyConfigured(
-            'SQLite is not allowed in production. DATABASE_URL must point to PostgreSQL.'
+            'SQLite is not allowed in production without DJANGO_ALLOW_SQLITE_PROD=True. '
+            'Set DJANGO_ALLOW_SQLITE_PROD=True to explicitly enable SQLite in production, '
+            'or point DATABASE_URL to PostgreSQL.'
         )
     DATABASES['default'] = env.db('DATABASE_URL')
+    if DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3':
+        DATABASES['default'].setdefault('OPTIONS', {})
+        DATABASES['default']['OPTIONS'].update({
+            'timeout': 20,
+            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;',
+            'transaction_mode': 'IMMEDIATE',
+        })
 
-# --- 4. Distributed Cache / Channel Layer (Redis) ----------------------------
+# --- 4. Distributed Cache / Channel Layer (Redis or Local) -------------------
 REDIS_URL = env('REDIS_URL', default='redis://dummy:6379/0' if IS_BUILD_PHASE else '')
-if not REDIS_URL and not IS_BUILD_PHASE:
-    raise ImproperlyConfigured(
-        'REDIS_URL environment variable is required for production (shared Channels and Cache).'
-    )
+allow_local_cache = env.bool('DJANGO_ALLOW_LOCAL_CACHE', default=False)
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [REDIS_URL],
+if not REDIS_URL and not IS_BUILD_PHASE:
+    if not allow_local_cache:
+        raise ImproperlyConfigured(
+            'REDIS_URL environment variable is required for production (shared Channels and Cache). '
+            'For standalone deployments without Redis, set DJANGO_ALLOW_LOCAL_CACHE=True.'
+        )
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
         },
-    },
-}
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': REDIS_URL,
     }
-}
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'production-locmem-cache',
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [REDIS_URL],
+            },
+        },
+    }
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+        }
+    }
 
 # --- 5. Email Configuration --------------------------------------------------
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='build-phase-dummy' if IS_BUILD_PHASE else '')
@@ -149,3 +175,10 @@ if not WEBAUTHN_ALLOWED_ORIGINS and not IS_BUILD_PHASE:
 for origin in WEBAUTHN_ALLOWED_ORIGINS:
     if not origin.startswith('https://') and not IS_BUILD_PHASE:
         raise ImproperlyConfigured(f'WebAuthn origin {origin} must use HTTPS in production.')
+
+# --- 10. CORS (Mobile & React Native Frontend Origins) -----------------------
+CORS_ALLOW_ALL_ORIGINS = env.bool('CORS_ALLOW_ALL_ORIGINS', default=False)
+CORS_ALLOWED_ORIGINS = env.list(
+    'CORS_ALLOWED_ORIGINS',
+    default=[f'https://{h}' for h in valid_hosts if not h.startswith('.')]
+)

@@ -7,6 +7,7 @@ from .views import (
     api_login,
     api_logout,
     api_me,
+    api_me_photo_upload,
     api_my_rides,
     api_ride_approve_request,
     api_ride_create,
@@ -31,6 +32,7 @@ urlpatterns = [
 
     # User profile & stats
     path("me/", api_me, name="api_me"),
+    path("me/photo/", api_me_photo_upload, name="api_me_photo_upload"),
 
     # COORDINATE Rides
     path("rides/", api_ride_list, name="api_ride_list"),

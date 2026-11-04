@@ -13,6 +13,7 @@ venv/
 .env
 .env.*
 !.env.example
+!.env.docker.example
 campus/settings/secrets_local.py
 debug_accounts.md
 superuser_password
@@ -30,6 +31,8 @@ project_dump.txt
 dump_project.py
 *.log
 screenshot_*.png
+*.zip
+experiments/
 
 # IDE
 .idea/

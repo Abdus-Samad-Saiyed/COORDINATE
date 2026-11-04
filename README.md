@@ -1,12 +1,13 @@
 # COORDINATE // Campus Nexus
 
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://www.python.org/)
-[![Django 6.0](https://img.shields.io/badge/Django-6.0-green.svg)](https://www.djangoproject.com/)
+[![Django 6.0.5](https://img.shields.io/badge/Django-6.0.5-green.svg)](https://www.djangoproject.com/)
 [![Channels ASGI](https://img.shields.io/badge/Channels-ASGI%20WebSockets-teal.svg)](https://channels.readthedocs.io/)
-[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016-blue.svg)](https://www.postgresql.org/)
+[![Database](https://img.shields.io/badge/Database-PostgreSQL%2016%20%7C%20SQLite3-blue.svg)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Cache%20%26%20Layers-Redis%207-red.svg)](https://redis.io/)
-[![WebAuthn FIDO2](https://img.shields.io/badge/Auth-WebAuthn%20%2F%20Passkeys-orange.svg)](https://webauthn.io/)
-[![Tests](https://img.shields.io/badge/Tests-228%20Passed%20(100%25)-success.svg)](scripts/e2e/run_full_platform_e2e.py)
+[![WebAuthn Passkeys](https://img.shields.io/badge/Auth-WebAuthn%20%2F%20Passkeys-orange.svg)](https://webauthn.io/)
+[![Mobile API](https://img.shields.io/badge/Mobile-React%20Native%20Ready-purple.svg)](campus/api/)
+[![Tests](https://img.shields.io/badge/Tests-237%20Passed%20(100%25)-success.svg)](scripts/e2e/run_full_platform_e2e.py)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Decentralized Student Ride Coordination & Verified Campus Public Utility Platform**  
@@ -24,6 +25,7 @@ At university campuses, commuter students and hostel residents frequently need t
 2. **Mutual Physical Accountability:** Anonymity is strictly prohibited inside moving vehicles. Confirmed co-passengers mutually share verified identities and pickup phone numbers.
 3. **Real-Time Coordination:** ASGI WebSockets deliver instant ride chat, waitlist promotions, occupancy density curves, and departure synchronization.
 4. **Institutional Security:** Cryptographic HMAC-SHA256 dual-channel OTPs, FIDO2/WebAuthn biometric passkeys, rate-limited reputation anti-farming, and single active session controls.
+5. **Multi-Client Ready:** Complete dual support for both Web (Django Templates + HTMX) and Mobile (React Native Android via Bearer Token REST & WebSocket APIs with full CORS support).
 
 ---
 
@@ -31,32 +33,34 @@ At university campuses, commuter students and hostel residents frequently need t
 
 ```mermaid
 flowchart TD
-    Client(["Student Browsers & Mobile Devices"]) -->|HTTPS:443 & WSS:443| NGINX["NGINX Reverse Proxy (SSL / HTTP/2)"]
+    Client(["Student Browsers & React Native Android Clients"]) -->|HTTPS:443 & WSS:443| NGINX["NGINX Reverse Proxy (SSL / HTTP/2)"]
     
     subgraph CorePlatform ["Campus Nexus / COORDINATE Engine"]
-        NGINX -->|HTTP Reverse Proxy| Daphne["Daphne ASGI Process Cluster (Port 8000)"]
+        NGINX -->|HTTP Reverse Proxy & REST API| Daphne["Daphne ASGI Process Cluster (Port 8000)"]
         NGINX -->|Direct Serve & Caching| WhiteNoise["WhiteNoise Compressed Static Engine"]
         
-        Daphne --> Django["Django 5 Core Application"]
-        Daphne --> Channels["Django Channels (WebSockets)"]
+        Daphne --> Django["Django 6.0.5 Core Application & REST API v1"]
+        Daphne --> Channels["Django Channels (ASGI WebSockets)"]
         
-        Channels <-->|Redis Channel Layer| Redis[("Redis 7 (Pub/Sub & Distributed Cache)")]
-        Django <-->|ORM & Check Constraints| Postgres[("PostgreSQL 16 (Relational Database)")]
+        Channels <-->|Redis Channel Layer or LocMem| Redis[("Redis 7 (Pub/Sub & Distributed Cache)")]
+        Django <-->|ORM & Check Constraints| Postgres[("PostgreSQL 16 / SQLite3 (Relational Database)")]
         
         Django -->|Protected Media Gate| MediaStorage["Media Storage (Realpath Contained)"]
         Django -->|TLS:587 SMTP Relay| MailRelay["Google SMTP OTP Relay"]
     end
 
-    Django <-->|WebAuthn Assertion / Registration| FIDO2["FIDO2 / Windows Hello Passkeys"]
+    Django <-->|WebAuthn Assertion / Registration| FIDO2["FIDO2 / Windows Hello Passkeys (webauthn package)"]
 ```
 
 ### Core Technologies
-* **Backend:** Python 3.12+, Django 5.0, Django Channels 4 (ASGI)
+* **Backend:** Python 3.12+, Django 6.0.5, Django Channels 4 (ASGI)
 * **Application Server:** Daphne ASGI cluster
-* **Database:** PostgreSQL 16 (with relational check constraints and select-for-update concurrency locks)
-* **In-Memory Cache & Message Broker:** Redis 7 (`channels_redis` channel layer & distributed rate limiters)
-* **Frontend:** Django Templates, HTMX, Vanilla ES6+ JavaScript, Bootstrap 5 Glassmorphism UI, Chart.js
-* **Security & Auth:** WebAuthn / FIDO2 Passkeys (`fido2` library), HMAC-SHA256 OTP verification, Single Active Session Enforcement
+* **Database:** PostgreSQL 16 & SQLite3 (Dual production compatibility with WAL mode tuning)
+* **In-Memory Cache & Message Broker:** Redis 7 (`channels_redis` channel layer & distributed rate limiters) with standalone LocMem fallback
+* **Mobile / Frontend APIs:**
+  * **Web Client:** Django Templates, HTMX, Vanilla ES6+ JavaScript, Bootstrap 5 Glassmorphism UI, Chart.js
+  * **React Native Android Client:** Dedicated `/api/v1/` REST endpoints, Bearer session token authentication, profile photo multipart upload, `django-cors-headers`, and `TokenOrSessionAuthMiddleware` ASGI WebSockets
+* **Security & Auth:** WebAuthn / FIDO2 Passkeys (`webauthn` library), HMAC-SHA256 OTP verification, Single Active Session Enforcement
 * **Reverse Proxy:** NGINX with Let's Encrypt TLS & HTTP/2
 
 ---
@@ -68,25 +72,26 @@ flowchart TD
 * Students apply with their official enrollment number (`YYYY[BMP][BRANCH][ROLL]`) and phone number, verify inbox ownership via a 6-digit email OTP, and present their physical Institute ID card at the campus verification desk.
 * Authorized student administrators review and approve accounts directly via the `/operations/` console.
 
-### 2. Physical Ride Accountability & Audience Comfort
+### 2. Interactive Database Setup & Management Script
+* Built-in interactive setup utility: `python setup.py` (or `python manage.py setup_db`).
+* Interactive migration runner that prompts before applying schema updates.
+* Full menu-driven database inspector: browse tables, execute DQL (`SELECT`), execute transactional DML/DDL (`INSERT`/`UPDATE`/`DELETE`), and view real-time diagnostics.
+* Abstracted User Provisioning: create Superuser Admins, Staff, or Standard Students directly in PostgreSQL or SQLite with automatic enrollment parsing and password hashing.
+
+### 3. Physical Ride Accountability & Audience Comfort
 * **No Anonymous Riders IRL:** Inside a shared motor vehicle, passengers and host mutually view each other's verified student name, enrollment, and contact number with one-click call and WhatsApp integration.
 * **Spectator Privacy:** Browsing students outside the ride see aggregate occupancy counts without access to passenger rosters or private phone numbers.
 * **Audience Comfort Settings:** Ride hosts can specify comfort preferences: `MIXED`, `BOYS`, `GIRLS`, or `FRIENDS`-only.
 * **Non-Destructive Soft Cancellation:** When all participants leave an active ride, the platform sets `status = 'CANCELLED'` rather than deleting database rows, permanently preserving safety incident reports, grievance histories, and audit evidence.
 
-### 3. Anti-Farming Reliability Reputation Engine
+### 4. Anti-Farming Reliability Reputation Engine
 * Every completed group commute increments a student's `rides_completed` counter.
 * To prevent collusion and reputation score farming on a public utility, on-time reliability score boosts (`on_time_count`) are mathematically capped at **3 boosts per 15-day rolling window** per user.
 * Enforced by database check constraint: `1 <= total_spots <= 6`.
 
-### 4. FIDO2 / WebAuthn Biometric Passkeys
-* Complete implementation of the WebAuthn standard allowing students to register and sign in with hardware security keys, Touch ID, Apple Face ID, or Windows Hello biometrics.
-* Passkey registration and deletion require step-up re-authentication (< 5 min session freshness).
-
-### 5. High-Privilege Governance & Anti-Lockout Invariant
-* **Mandatory Staff 2FA:** All staff and superusers require multi-factor authentication on every login regardless of user-level toggles.
-* **Hardened Admin:** Standard Django `UserAdmin` is locked down against backdoor privilege grants; superuser promotion and revocation are restricted to the audited `/operations/superusers/` endpoint.
-* **Anti-Lockout Invariant:** The system cryptographically and programmatically prevents revoking or deleting the sole remaining active superuser.
+### 5. FIDO2 / WebAuthn Biometric Passkeys & Mobile Token Parity
+* WebAuthn standard implementation allowing students to register and sign in with hardware security keys, Touch ID, Apple Face ID, or Windows Hello biometrics.
+* React Native Android clients authenticate using Bearer session tokens with full WebSocket parity.
 
 ---
 
@@ -95,7 +100,7 @@ flowchart TD
 Campus Nexus maintains a 100% green test suite across four distinct testing tiers:
 
 ```bash
-# 1. Django Full Unit Test Suite (226 tests in 2.3 seconds)
+# 1. Django Full Unit Test Suite (237 tests in ~2.5 seconds)
 python manage.py test campus.tests accounts coordinate --settings=campus.settings.test
 
 # 2. Automated Platform Route Crawler (49 endpoints checked)
@@ -109,17 +114,17 @@ python scripts/package_release.py
 ```
 
 ### Verified Test Results:
-* **Django Test Suite:** `226 passed, 0 failures, 0 errors` (Coverage: WebAuthn, Single-Session, Audience Filters, Concurrency Locks, Anti-Farming Capping, Protected Media Containment).
+* **Django Test Suite:** `237 passed, 0 failures, 0 errors` (Coverage: WebAuthn, Single-Session, Audience Filters, Concurrency Locks, Anti-Farming Capping, Protected Media Containment, Setup DB, React Native Mobile API, Dual Production DB).
 * **Platform Crawler:** `49 passed, 0 failed` across anonymous, authenticated, administrative, and REST API v1 routes.
 * **Full E2E Verification:** `64 passed, 0 failed` across end-to-end user journeys (Application &rarr; OTP Verification &rarr; Admin Physical Desk Approval &rarr; Ride Creation &rarr; Waitlist &rarr; Ride Teardown).
-* **Release Packager:** Zero secrets, zero bytecode, zero SQLite databases in git tracking (`0.35 MB` clean package).
+* **Release Packager:** Zero secrets, zero bytecode, zero SQLite databases in git tracking (`0.37 MB` clean package).
 
 ---
 
 ## 📖 In-Depth Project Documentation
 
 * **[MANIFESTO.md](MANIFESTO.md):** The Campus Nexus Manifesto, Design & Development Philosophy, and Data Governance/Access Control Charter.
-* **[DEPLOYMENT.md](DEPLOYMENT.md):** Full production operations guide (Ubuntu 24.04, PostgreSQL 16, Redis 7, Systemd service unit, NGINX SSL/WSS, Certbot, automated backups, and zero-downtime updates).
+* **[DEPLOYMENT.md](DEPLOYMENT.md):** Full production operations guide (Ubuntu 24.04, Docker Compose, PostgreSQL 16 / SQLite3, Redis 7, Systemd service unit, NGINX SSL/WSS, Certbot, automated backups, and zero-downtime updates).
 * **[PROJECT_MAP.md](PROJECT_MAP.md):** Exhaustive architectural file-by-file specification and code reference.
 
 ---
@@ -128,8 +133,8 @@ python scripts/package_release.py
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/Abdus-Samad-Saiyed/COORDINATE.git
-cd COORDINATE
+git clone https://github.com/Abdus-Samad-Saiyed/Campus-Nexus.git
+cd Campus-Nexus
 
 # 2. Create and activate virtual environment
 python -m venv venv
@@ -141,13 +146,17 @@ source venv/bin/activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Apply database migrations
-python manage.py migrate --settings=campus.settings.dev
+# 4. Configure environment
+cp .env.example .env
 
-# 5. Run automated test suite
-python manage.py test campus.tests accounts coordinate --settings=campus.settings.test
+# 5. Interactive Database Setup & User Provisioning
+python setup.py
+# (Or apply migrations directly: python manage.py migrate --settings=campus.settings.dev)
 
-# 6. Start development server
+# 6. Run automated test suite
+python manage.py test --settings=campus.settings.test
+
+# 7. Start development server
 python manage.py runserver --settings=campus.settings.dev
 ```
 

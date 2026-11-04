@@ -66,6 +66,7 @@ class SecretsLocalIsolationTest(unittest.TestCase):
         tracked_examples = [
             'campus/settings/secrets_local.example.py',
             '.env.example',
+            '.env.docker.example',
         ]
         for rel_path in tracked_examples:
             res = subprocess.run(
@@ -149,6 +150,19 @@ class ProductionSettingsFailSafeTest(unittest.TestCase):
         with self.assertRaises(Exception) as ctx:
             self._import_prod(env_vars)
         self.assertIn('SQLite is not allowed in production', str(ctx.exception))
+
+    def test_prod_succeeds_on_sqlite_when_allowed(self):
+        env_vars = {
+            'DJANGO_SECRET_KEY': 'production-safe-high-entropy-secret-key-at-least-50-characters-long',
+            'DATABASE_URL': 'sqlite:///db.sqlite3',
+            'DJANGO_ALLOW_SQLITE_PROD': 'True',
+            'REDIS_URL': 'redis://localhost:6379/0',
+            'DJANGO_ALLOWED_HOSTS': 'campus.nitsri.ac.in',
+            'EMAIL_HOST_PASSWORD': 'dummy_password_for_test',
+        }
+        mod = self._import_prod(env_vars)
+        self.assertEqual(mod.DATABASES['default']['ENGINE'], 'django.db.backends.sqlite3')
+        self.assertEqual(mod.DATABASES['default']['OPTIONS']['timeout'], 20)
 
     def test_prod_fails_on_missing_redis_url(self):
         env_vars = {

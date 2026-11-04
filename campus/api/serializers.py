@@ -21,6 +21,11 @@ def serialize_user(user: User, include_stats: bool = False) -> Dict[str, Any]:
         "gender": user.gender,
         "joining_year": user.joining_year,
         "is_verified": user.verified,
+        "bio": getattr(user, "bio", ""),
+        "profile_photo_url": user.profile_photo.url if (getattr(user, "profile_photo", None) and user.profile_photo.name) else None,
+        "show_friends_publicly": getattr(user, "show_friends_publicly", True),
+        "hide_online_status": getattr(user, "hide_online_status", False),
+        "show_contact_on_profile": getattr(user, "show_contact_on_profile", True),
     }
     if include_stats:
         data.update({

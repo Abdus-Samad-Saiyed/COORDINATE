@@ -74,6 +74,7 @@ def api_root(request: HttpRequest) -> JsonResponse:
             "login": "/api/v1/auth/login/",
             "logout": "/api/v1/auth/logout/",
             "me": "/api/v1/me/",
+            "me_photo": "/api/v1/me/photo/",
             "rides": "/api/v1/rides/",
             "my_rides": "/api/v1/my-rides/",
         },
@@ -199,11 +200,45 @@ def api_logout(request: HttpRequest) -> JsonResponse:
 # Current User Profile
 # ---------------------------------------------------------------------------
 
-@require_GET
+@csrf_exempt
+@require_http_methods(["GET", "PATCH", "PUT"])
 @api_auth_required
 def api_me(request: HttpRequest) -> JsonResponse:
-    """Return profile and active ride for the authenticated user."""
+    """Return or update profile and active ride for the authenticated user."""
     user = request.api_user
+
+    if request.method in ("PATCH", "PUT"):
+        body, err = parse_json_body(request)
+        if err:
+            return err
+
+        allowed_fields = {
+            "bio", "phone_number", "gender",
+            "show_friends_publicly", "hide_online_status",
+            "hide_from_search", "hide_profile_photo",
+            "show_contact_on_profile",
+        }
+        updated = []
+        for field in allowed_fields:
+            if field in body:
+                val = body[field]
+                if field == "bio":
+                    user.bio = str(val)[:500]
+                elif field == "phone_number":
+                    user.phone_number = str(val)[:15]
+                elif field == "gender" and str(val).upper() in ("M", "F"):
+                    user.gender = str(val).upper()
+                elif field in (
+                    "show_friends_publicly", "hide_online_status",
+                    "hide_from_search", "hide_profile_photo",
+                    "show_contact_on_profile"
+                ):
+                    setattr(user, field, bool(val))
+                updated.append(field)
+
+        if updated:
+            user.save(update_fields=updated)
+
     user_data = serialize_user(user, include_stats=True)
 
     active_p = (
@@ -220,6 +255,33 @@ def api_me(request: HttpRequest) -> JsonResponse:
     return json_success({
         "user": user_data,
         "active_ride": active_ride_data,
+    })
+
+
+@csrf_exempt
+@require_POST
+@api_auth_required
+def api_me_photo_upload(request: HttpRequest) -> JsonResponse:
+    """Upload or update profile photo for authenticated user from mobile or web client."""
+    user = request.api_user
+    photo = request.FILES.get("profile_photo")
+    if not photo:
+        return json_error("No 'profile_photo' file found in upload.", status=400, code="MISSING_FILE")
+
+    if photo.size > 5 * 1024 * 1024:
+        return json_error("Profile photo must be less than 5MB.", status=400, code="FILE_TOO_LARGE")
+
+    valid_content_types = {"image/jpeg", "image/png", "image/webp"}
+    if photo.content_type not in valid_content_types:
+        return json_error("Unsupported image format. Allowed: JPEG, PNG, WEBP.", status=400, code="INVALID_IMAGE_TYPE")
+
+    user.profile_photo = photo
+    user.save(update_fields=["profile_photo"])
+
+    return json_success({
+        "message": "Profile photo uploaded successfully.",
+        "profile_photo_url": user.profile_photo.url if user.profile_photo else None,
+        "user": serialize_user(user, include_stats=True),
     })
 
 

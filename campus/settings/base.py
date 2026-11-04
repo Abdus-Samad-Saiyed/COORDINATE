@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'django.contrib.humanize',
 
     # Third party
+    'corsheaders',
     'channels',
     'django_htmx',
 
@@ -49,6 +50,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -189,6 +191,24 @@ WEBAUTHN_ALLOWED_ORIGINS = env.list(
     'WEBAUTHN_ALLOWED_ORIGINS',
     default=['http://localhost:8000', 'http://127.0.0.1:8000', 'http://testserver']
 )
+
+
+# --- CORS (Cross-Origin Resource Sharing for React Native & Mobile APIs) ------
+
+CORS_ALLOW_ALL_ORIGINS = env.bool('CORS_ALLOW_ALL_ORIGINS', default=False)
+CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 
 # --- Misc --------------------------------------------------------------------

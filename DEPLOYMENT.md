@@ -2,7 +2,7 @@
 
 **Platform Version:** 2.4.0  
 **Target Environment:** Linux (Ubuntu 24.04 LTS / Debian 12)  
-**Architecture:** Django 5 + Channels 4 + Daphne ASGI + PostgreSQL 16 + Redis 7 + NGINX + WhiteNoise  
+**Architecture:** Django 6.0.5 + Channels 4 + Daphne ASGI + PostgreSQL 16 / SQLite3 + Redis 7 + NGINX + WhiteNoise  
 **Repository:** [https://github.com/Abdus-Samad-Saiyed/Campus-Nexus](https://github.com/Abdus-Samad-Saiyed/Campus-Nexus)
 
 ---
@@ -193,11 +193,11 @@ WEBAUTHN_ALLOWED_ORIGINS=https://campus-nexus.yourdomain.edu
 # SMS Gateway (Roadmap feature: keep False until telecom resources procured)
 SMS_ENABLED=False
 
-# Root Superaccount Auto-Provisioning (Optional initial setup)
-PERSONAL_SUPERACCOUNT_ENROLLMENT=2024BCSE065
-PERSONAL_SUPERACCOUNT_FIRST_NAME=Abdus
-PERSONAL_SUPERACCOUNT_LAST_NAME=Samad Saiyed
-PERSONAL_SUPERACCOUNT_EMAIL=2024bcse065@nitsri.ac.in
+# Root Superaccount Auto-Provisioning (Optional initial setup - or use python setup.py --add-user --admin)
+PERSONAL_SUPERACCOUNT_ENROLLMENT=2024BCSE001
+PERSONAL_SUPERACCOUNT_FIRST_NAME=Campus
+PERSONAL_SUPERACCOUNT_LAST_NAME=Administrator
+PERSONAL_SUPERACCOUNT_EMAIL=admin@yourdomain.edu
 PERSONAL_SUPERACCOUNT_PHONE=+919999999999
 EOF
 
@@ -223,8 +223,9 @@ python manage.py collectstatic --noinput --settings=campus.settings.prod
 mkdir -p /opt/campus-nexus/media/profiles
 chmod -R 750 /opt/campus-nexus/media
 
-# 4. Provision Root Superuser
-python manage.py createsuperuser --settings=campus.settings.prod
+# 4. Provision Root Superuser & Run Database Setup
+python setup.py --add-user --enrollment 2024BCSE001 --first-name "Campus" --last-name "Admin" --admin
+# (Or launch the interactive setup menu: python setup.py)
 
 # Exit back to root
 exit

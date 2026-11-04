@@ -51,7 +51,7 @@ def build_clean_release(output_zip: str = 'campus_nexus_release.zip'):
     # 2. Verify no forbidden patterns exist in tracked files
     violations = []
     for f in tracked_files:
-        if f == '.env.example' or f.endswith('/.env.example') or f.endswith('secrets_local.example.py'):
+        if f in ('.env.example', '.env.docker.example') or f.endswith('/.env.example') or f.endswith('/.env.docker.example') or f.endswith('secrets_local.example.py'):
             continue
         for pattern, desc in FORBIDDEN_RULES:
             if re.search(pattern, f, re.IGNORECASE):
