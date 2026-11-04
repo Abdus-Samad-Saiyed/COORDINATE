@@ -432,7 +432,8 @@ def ride_list(request):
     prev_date = (ref_date - datetime.timedelta(days=1)) if ref_date > today else None
     next_date = ref_date + datetime.timedelta(days=1)
 
-    return render(request, 'coordinate/ride_list.html', {
+    template_name = 'coordinate/partials/ride_list_content.html' if request.htmx else 'coordinate/ride_list.html'
+    return render(request, template_name, {
         'rides': visible_rides,
         'has_active_ride': has_active_ride,
         'my_ride': my_ride,

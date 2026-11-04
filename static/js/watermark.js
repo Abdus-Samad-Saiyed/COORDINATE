@@ -812,6 +812,20 @@
       if (anchor.hasAttribute('download')) return;
       if (anchor.hasAttribute('data-bs-toggle') || anchor.hasAttribute('data-bs-target')) return;
 
+      // Skip HTMX links, partial DOM swaps, and seamless in-page transitions
+      if (
+        anchor.hasAttribute('hx-get') ||
+        anchor.hasAttribute('hx-post') ||
+        anchor.hasAttribute('data-no-transition') ||
+        anchor.classList.contains('no-transition') ||
+        anchor.hasAttribute('data-seamless') ||
+        anchor.classList.contains('date-btn') ||
+        anchor.closest('[data-no-transition]') ||
+        anchor.closest('[data-seamless]') ||
+        anchor.closest('[hx-boost="true"]') ||
+        anchor.closest('[hx-target]')
+      ) return;
+
       const rawHref = anchor.getAttribute('href');
       if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) return;
 
@@ -820,6 +834,9 @@
 
       // Skip if anchor points to exact current URL
       if (anchor.href === window.location.href) return;
+
+      // Skip intra-page navigation (query parameter changes on the same route should be seamless)
+      if (anchor.pathname === window.location.pathname) return;
 
       // Skip file downloads or non-HTML API endpoints
       const pathname = anchor.pathname;

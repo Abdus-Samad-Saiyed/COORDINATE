@@ -680,3 +680,33 @@ class RideWorkflowTests(TestCase):
         self.assertRedirects(resp, reverse('ride_list'))
         p_row = RideParticipant.all_rows.get(ride=ride, user=self.other)
         self.assertTrue(p_row.share_contact_details)
+
+    def test_ride_list_seamless_quick_select_date_transition(self):
+        """Next/Prev and date strip in /coordinate provide seamless HTMX partial swaps."""
+        self.client.force_login(self.creator)
+
+        # 1. Standard GET renders full shell with container
+        resp_full = self.client.get(reverse('ride_list'))
+        self.assertEqual(resp_full.status_code, 200)
+        self.assertTemplateUsed(resp_full, 'coordinate/ride_list.html')
+        self.assertTemplateUsed(resp_full, 'coordinate/partials/ride_list_content.html')
+        content_full = resp_full.content.decode('utf-8')
+        self.assertIn('id="coordinate-rides-container"', content_full)
+        self.assertIn('data-no-transition="true"', content_full)
+        self.assertIn('hx-target="#coordinate-rides-container"', content_full)
+        self.assertIn('hx-get="?date_from=', content_full)
+
+        # 2. HTMX GET renders only partial content for seamless transition
+        target_date = (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+        resp_htmx = self.client.get(
+            f"{reverse('ride_list')}?date_from={target_date}&date_to={target_date}",
+            HTTP_HX_REQUEST='true'
+        )
+        self.assertEqual(resp_htmx.status_code, 200)
+        self.assertTemplateUsed(resp_htmx, 'coordinate/partials/ride_list_content.html')
+        self.assertTemplateNotUsed(resp_htmx, 'coordinate/ride_list.html')
+        content_htmx = resp_htmx.content.decode('utf-8')
+        self.assertNotIn('<!DOCTYPE html>', content_htmx)
+        self.assertIn(f'date_from={target_date}', content_htmx)
+        self.assertIn('Quick Select Date', content_htmx)
+        self.assertIn('Next <i class="bi bi-chevron-right"></i>', content_htmx)

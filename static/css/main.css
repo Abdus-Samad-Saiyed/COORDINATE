@@ -1242,6 +1242,17 @@ hr { border-color: var(--border); opacity: 1; }
   color: var(--green);
 }
 
+/* ── Seamless Ride List & Quick Date Swapping ──────────────── */
+.coordinate-rides-container {
+  transition: opacity 0.12s ease-in-out;
+}
+.coordinate-rides-container.htmx-swapping {
+  opacity: 0.65;
+}
+.coordinate-rides-container.htmx-settling {
+  opacity: 1;
+}
+
 /* ── Chat ────────────────────────────────────────────────────── */
 .chat-container {
   display: flex;
