@@ -6,6 +6,7 @@ from django.contrib.auth import views as auth_views
 
 from django.conf import settings
 from django.urls import include, path, re_path
+from django.views.generic.base import RedirectView
 
 from accounts.forms import EnrollmentAuthenticationForm
 from accounts.views import (
@@ -117,6 +118,7 @@ urlpatterns = [
     path('operations/export/applications/', export_applications_csv, name='export_applications_csv'),
 
     # System Health Check
+    path('favicon.ico', RedirectView.as_view(url=settings.STATIC_URL + 'favicon.ico', permanent=True)),
     path('health/', health_check, name='health_check'),
     path('healthz/', health_check, name='healthz'),
 
