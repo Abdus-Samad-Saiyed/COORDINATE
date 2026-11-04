@@ -1,5 +1,6 @@
 from datetime import timedelta
 import threading
+import unittest
 from django.db import connection, transaction
 from django.test import TransactionTestCase
 from django.utils import timezone
@@ -12,6 +13,8 @@ from coordinate.participation import transition_participant_state
 class ConcurrencyLockingTests(TransactionTestCase):
     """
     Validates atomic row-locking under concurrent threads during seat claims.
+    Multi-threaded row locking is designed for PostgreSQL row-level locks and
+    is skipped on SQLite which employs file/table-level locks.
     """
     def setUp(self):
         self.host = User.objects.create_user(
@@ -32,6 +35,7 @@ class ConcurrencyLockingTests(TransactionTestCase):
         )
         transition_participant_state(self.ride, self.host, ParticipantStatus.CONFIRMED)
 
+    @unittest.skipIf(connection.vendor == 'sqlite', "Multi-threaded row concurrency tests require PostgreSQL (skipped on SQLite)")
     def test_concurrent_claim_final_spot(self):
         """
         Two simultaneous approvals/transitions for the last remaining seat.
@@ -40,7 +44,6 @@ class ConcurrencyLockingTests(TransactionTestCase):
         results = []
 
         def claim_seat(user):
-            # Close connection so thread gets its own db session
             connection.close()
             try:
                 with transaction.atomic():

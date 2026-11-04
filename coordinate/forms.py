@@ -18,7 +18,7 @@ class RideRequestForm(forms.ModelForm):
     )
     share_contact = forms.BooleanField(
         required=False,
-        initial=False,
+        initial=True,
         label='Share contact details (phone number and email) with confirmed co-passengers during active trip',
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'id_share_contact'}),
     )

@@ -503,7 +503,7 @@ def api_ride_create(request: HttpRequest) -> JsonResponse:
 
     # Enforce affirmative identity consent BEFORE opening atomic transaction
     disclose_id = body.get("disclose_identity", True)
-    share_cont = body.get("share_contact", False) is True
+    share_cont = body.get("share_contact", True) is not False
     if disclose_id is False:
         return json_error("Affirmative consent to disclose identity is required.", status=400, code="CONSENT_REQUIRED")
 
@@ -548,12 +548,12 @@ def api_ride_join(request: HttpRequest, ride_id: int) -> JsonResponse:
         return json_error("Authentication as a verified student required.", status=403, code="FORBIDDEN")
     body, _ = parse_json_body(request)
     disclose_identity = True
-    share_contact = False
+    share_contact = True
     if body and isinstance(body, dict):
         if body.get("disclose_identity") is False:
             return json_error("Explicit consent to associate your identity with this ride is required.", status=400, code="CONSENT_REQUIRED")
         disclose_identity = bool(body.get("disclose_identity", True) is not False)
-        share_contact = bool(body.get("share_contact") is True)
+        share_contact = bool(body.get("share_contact", True) is not False)
 
     ok, msg, details = request_to_join_ride(
         ride_id=ride_id,

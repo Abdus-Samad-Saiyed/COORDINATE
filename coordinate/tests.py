@@ -643,3 +643,40 @@ class RideWorkflowTests(TestCase):
         self.assertRedirects(resp, reverse('ride_detail', args=[past_ride.id]))
         past_ride.refresh_from_db()
         self.assertNotEqual(past_ride.departure_time.strftime('%Y-%m-%d'), (timezone.now() + timedelta(days=2)).strftime('%Y-%m-%d'))
+
+    def test_create_ride_defaults_to_sharing_contact_and_no_optional_label(self):
+        """Ride creation defaults share_contact to True and does not designate it as optional."""
+        self.client.force_login(self.creator)
+        get_resp = self.client.get(reverse('create_ride'))
+        self.assertEqual(get_resp.status_code, 200)
+        content = get_resp.content.decode('utf-8')
+        self.assertNotIn('(optional, valid only during active ride)', content)
+        self.assertIn('checked', content)
+
+        dep_time = (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+        post_resp = self.client.post(reverse('create_ride'), {
+            'route': 'NIT_TO_AIRPORT',
+            'visibility': 'MIXED',
+            'departure_time': dep_time,
+            'total_spots': 3,
+            'disclose_identity': 'on',
+            'share_contact': 'on',
+        })
+        self.assertRedirects(post_resp, reverse('ride_list'))
+        ride = RideRequest.objects.filter(creator=self.creator).latest('id')
+        p_row = RideParticipant.all_rows.get(ride=ride, user=self.creator)
+        self.assertTrue(p_row.share_contact_details)
+
+    def test_join_ride_share_contact_policy(self):
+        """Joining a ride with share_contact enables contact sharing, while unchecking opts out."""
+        ride = self.create_ride(total_spots=3)
+        self.client.force_login(self.other)
+
+        # 1. Join with share_contact='true'
+        resp = self.client.post(reverse('join_ride', args=[ride.id]), {
+            'disclose_identity': 'true',
+            'share_contact': 'true',
+        })
+        self.assertRedirects(resp, reverse('ride_list'))
+        p_row = RideParticipant.all_rows.get(ride=ride, user=self.other)
+        self.assertTrue(p_row.share_contact_details)

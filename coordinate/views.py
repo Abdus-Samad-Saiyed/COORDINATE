@@ -527,7 +527,7 @@ def create_ride(request):
                 ride.save()
                 RideParticipant.objects.create(ride=ride, user=request.user)
                 disclose_identity = form.cleaned_data.get('disclose_identity', True)
-                share_contact = form.cleaned_data.get('share_contact', False)
+                share_contact = form.cleaned_data.get('share_contact', True)
                 record_ride_consent(
                     ride,
                     request.user,
