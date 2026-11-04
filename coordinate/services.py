@@ -19,6 +19,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import (
+    ParticipantStatus,
     RideConsent,
     RideJoinRequest,
     RideMessage,
@@ -26,6 +27,7 @@ from .models import (
     RideRequest,
     RideWaitlist,
 )
+from .participation import transition_participant_state
 from .policies import (
     can_view_ride,
     is_verified_student,
@@ -131,6 +133,12 @@ def request_to_join_ride(
             user=user,
             status='PENDING',
         )
+        transition_participant_state(
+            ride=ride,
+            user=user,
+            target_status=ParticipantStatus.PENDING,
+            consent_data={'disclose_ride_identity': True, 'share_contact_details': bool(share_contact)},
+        )
 
         # Record explicit affirmative consent choice for this user
         record_ride_consent(
@@ -215,8 +223,12 @@ def approve_ride_join_request(
                 "code": "ACTIVE_RIDE_EXISTS"
             }
 
-        # Add participant atomically
-        RideParticipant.objects.get_or_create(ride=ride, user=join_req.user)
+        # Add participant atomically via unified state machine
+        transition_participant_state(
+            ride=ride,
+            user=join_req.user,
+            target_status=ParticipantStatus.CONFIRMED,
+        )
         join_req.status = 'APPROVED'
         join_req.reviewed_at = timezone.now()
         join_req.save(update_fields=['status', 'reviewed_at'])
@@ -275,6 +287,10 @@ def decline_ride_join_request(
         join_req.status = 'DECLINED'
         join_req.reviewed_at = timezone.now()
         join_req.save(update_fields=['status', 'reviewed_at'])
+        try:
+            transition_participant_state(ride=ride, user=join_req.user, target_status=ParticipantStatus.DECLINED)
+        except Exception:
+            pass
 
         return True, "Join request declined.", {"status": "declined"}
 
@@ -311,7 +327,11 @@ def promote_waitlist_passenger(ride: RideRequest) -> Optional[User]:
             and not user_has_active_ride(candidate, exclude_ride_id=ride.id)
             and not ride.participants.filter(user=candidate).exists()
         ):
-            RideParticipant.objects.create(ride=ride, user=candidate)
+            transition_participant_state(
+                ride=ride,
+                user=candidate,
+                target_status=ParticipantStatus.CONFIRMED,
+            )
             RideMessage.objects.create(
                 ride=ride,
                 author=candidate,
@@ -349,7 +369,7 @@ def leave_ride_service(ride_id: int, user: User) -> Tuple[bool, str, Dict[str, A
         if ride.status in ['COMPLETED', 'CANCELLED']:
             return False, f"Cannot leave a {ride.status.lower()} ride.", {"code": "RIDE_CONCLUDED"}
 
-        participant.delete()
+        transition_participant_state(ride=ride, user=user, target_status=ParticipantStatus.LEFT)
         revoke_ride_consent(ride, user)
         ride.left_users.add(user)
 
@@ -360,7 +380,7 @@ def leave_ride_service(ride_id: int, user: User) -> Tuple[bool, str, Dict[str, A
             return True, "Successfully left ride. Ride cancelled as no participants remain.", {"promoted": None, "closed": True}
 
         if ride.creator_id == user.id:
-            next_host = RideParticipant.objects.filter(ride=ride).first()
+            next_host = RideParticipant.objects.filter(ride=ride).order_by('joined_at').first()
             if next_host:
                 ride.creator = next_host.user
                 ride.save(update_fields=['creator'])
@@ -406,7 +426,7 @@ def kick_passenger_service(ride_id: int, host_user: User, passenger_user: User) 
         if not participant:
             return False, "Target user is not a participant in this ride."
 
-        participant.delete()
+        transition_participant_state(ride=ride, user=passenger_user, target_status=ParticipantStatus.KICKED)
         revoke_ride_consent(ride, passenger_user)
         ride.kicked_users.add(passenger_user)
 
@@ -450,12 +470,18 @@ def cancel_ride_service(ride_id: int, host_user: User) -> Tuple[bool, str]:
         ride.status = 'CANCELLED'
         ride.save(update_fields=['status'])
 
+        # Bulk transition pending/waitlisted rows to CANCELLED
+        now = timezone.now()
+        RideParticipant.all_rows.filter(
+            ride=ride, status__in=[ParticipantStatus.PENDING, ParticipantStatus.WAITLISTED]
+        ).update(status=ParticipantStatus.CANCELLED, is_revoked=True, revoked_at=now)
         # Revoke all consents (retains historical consent rows for audit without hard deletion)
         RideConsent.objects.filter(ride=ride).update(
             is_revoked=True,
-            revoked_at=timezone.now(),
+            revoked_at=now,
             share_contact_details=False,
         )
+        RideParticipant.all_rows.filter(ride=ride).update(is_revoked=True, revoked_at=now)
 
         # Broadcast teardown
         try:

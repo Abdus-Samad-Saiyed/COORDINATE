@@ -32,6 +32,7 @@ from accounts.models import Friendship, User
 
 from .forms import RideMessageForm, RideRequestForm, RideReviewForm
 from .models import (
+    ParticipantStatus,
     RideConsent,
     RideIncidentReport,
     RideJoinRequest,
@@ -41,6 +42,7 @@ from .models import (
     RideReview,
     RideWaitlist,
 )
+from .participation import transition_participant_state
 from .policies import (
     can_view_ride,
     can_view_ride_contact,
@@ -628,6 +630,10 @@ def cancel_join_request(request, ride_id):
     """Student cancels their own pending join request."""
     ride = get_object_or_404(RideRequest, id=ride_id)
     deleted, _ = RideJoinRequest.objects.filter(ride=ride, user=request.user, status='PENDING').delete()
+    try:
+        transition_participant_state(ride, request.user, ParticipantStatus.CANCELLED)
+    except Exception:
+        pass
     if deleted:
         messages.info(request, 'Your join request was cancelled.')
     return redirect('ride_list')
@@ -746,6 +752,10 @@ def join_waitlist(request, ride_id):
 
     try:
         RideWaitlist.objects.create(ride=ride, user=request.user)
+        try:
+            transition_participant_state(ride, request.user, ParticipantStatus.WAITLISTED)
+        except Exception:
+            pass
         pos = ride.waitlist_entries.count()
         messages.success(request, f'Joined standby list (Position #{pos}). You will be automatically added if a spot opens up!')
     except IntegrityError:
@@ -760,6 +770,10 @@ def leave_waitlist(request, ride_id):
     """Leave the standby queue."""
     ride = get_object_or_404(RideRequest, id=ride_id)
     deleted, _ = RideWaitlist.objects.filter(ride=ride, user=request.user).delete()
+    try:
+        transition_participant_state(ride, request.user, ParticipantStatus.CANCELLED)
+    except Exception:
+        pass
     if deleted:
         messages.info(request, 'You have left the standby list.')
     return redirect('ride_list')
@@ -930,6 +944,11 @@ def complete_ride(request, ride_id):
 
         ride.status = 'COMPLETED'
         ride.save(update_fields=['status'])
+        # Bulk cancel lingering pending and waitlisted rows
+        now = timezone.now()
+        RideParticipant.all_rows.filter(
+            ride=ride, status__in=[ParticipantStatus.PENDING, ParticipantStatus.WAITLISTED]
+        ).update(status=ParticipantStatus.CANCELLED, is_revoked=True, revoked_at=now)
         transaction.on_commit(lambda: _broadcast_ride_teardown(ride, 'completed'))
 
         # RIDE-05: Update attendance and reliability statistics only for group rides (>= 2 participants)

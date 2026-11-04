@@ -90,15 +90,18 @@ def can_view_ride(viewer: Optional[User], ride) -> bool:
     if not is_verified_student(viewer):
         return False
 
-    # Creator and confirmed participants can always view
+    # Kicked users cannot see the ride (check both M2M and unified status)
+    from .models import RideParticipant, ParticipantStatus
+    if RideParticipant.all_rows.filter(ride=ride, user=viewer, status=ParticipantStatus.KICKED).exists():
+        return False
+    if hasattr(ride, 'kicked_users') and ride.kicked_users.filter(id=viewer.id).exists():
+        return False
+
+    # Creator and confirmed active participants can always view
     if ride.creator_id == viewer.id:
         return True
-    if ride.participants.filter(user=viewer).exists():
+    if ride.participants.filter(user=viewer, status=ParticipantStatus.CONFIRMED).exists():
         return True
-
-    # Kicked users cannot see the ride
-    if ride.kicked_users.filter(id=viewer.id).exists():
-        return False
 
     # Audience visibility rules
     v = ride.visibility
@@ -216,14 +219,29 @@ def record_ride_consent(
             'ip_address': ip_addr,
         }
     )
+    from .models import RideParticipant
+    RideParticipant.all_rows.filter(ride=ride, user=user).update(
+        consent_version=consent_version,
+        disclose_ride_identity=bool(disclose_identity),
+        share_contact_details=bool(share_contact),
+        is_revoked=False,
+        revoked_at=None,
+        ip_address=ip_addr,
+    )
     return consent
 
 
 def revoke_ride_consent(ride, user: User) -> None:
     """Revoke ride consent when a user leaves or is removed from a ride."""
-    from .models import RideConsent
+    from .models import RideConsent, RideParticipant
+    now = timezone.now()
     RideConsent.objects.filter(ride=ride, user=user).update(
         is_revoked=True,
-        revoked_at=timezone.now(),
+        revoked_at=now,
+        share_contact_details=False,
+    )
+    RideParticipant.all_rows.filter(ride=ride, user=user).update(
+        is_revoked=True,
+        revoked_at=now,
         share_contact_details=False,
     )
