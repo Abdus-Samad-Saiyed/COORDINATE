@@ -19,7 +19,7 @@
     <script src="{% static 'vendor/htmx.min.js' %}"></script>
 
     <!-- Custom Theme & Watermark Styles -->
-    <link rel="stylesheet" href="{% static 'css/main.css' %}?v=3.0.0">
+    <link rel="stylesheet" href="{% static 'css/main.css' %}?v=3.1.0">
     <link rel="stylesheet" href="{% static 'css/watermark.css' %}?v=3.0.0">
     <script>
         (function() {
@@ -382,7 +382,7 @@
                 </ul>
 
                 <!-- Right Utility Bar & User Controls -->
-                <div class="d-flex align-items-center gap-2 ms-lg-auto pt-2 pt-lg-0">
+                <div class="d-flex align-items-center gap-2 ms-lg-auto pt-2 pt-lg-0 navbar-utility-bar">
                     <!-- Direct Dedicated Theme Toggle Button -->
                     <button class="btn btn-icon-nav theme-toggle-btn" id="theme-toggle-btn" type="button" onclick="window.toggleNexusTheme()" title="Switch Light/Dark Mode" aria-label="Toggle theme">
                         <i class="bi bi-sun-fill text-warning theme-toggle-icon" id="theme-toggle-icon"></i>
@@ -399,7 +399,7 @@
                         <button class="btn btn-icon-nav" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Visual Controls & Custom Accents">
                             <i class="bi bi-palette2 green-accent"></i>
                         </button>
-                        <div class="dropdown-menu dropdown-menu-end shadow p-3" style="min-width: 320px;">
+                        <div class="dropdown-menu dropdown-menu-end shadow p-3 visual-controls-menu">
                             <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary">
                                 <h6 class="mb-0 text-uppercase small fw-bold">
                                     <i class="bi bi-sliders me-1 green-accent"></i> Visual Controls

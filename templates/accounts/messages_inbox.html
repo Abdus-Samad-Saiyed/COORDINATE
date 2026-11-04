@@ -22,7 +22,7 @@
             <div class="list-group list-group-flush bg-transparent">
                 {% for conv in conversations %}
                     <a href="{% url 'direct_chat' conv.friend.enrollment_number %}"
-                       class="list-group-item list-group-item-action bg-transparent text-white border-secondary p-3 d-flex justify-content-between align-items-center rounded mb-2 hover-glass">
+                       class="list-group-item list-group-item-action bg-transparent text-white border-secondary p-3 d-flex justify-content-between align-items-center rounded mb-2 hover-glass inbox-conv-item">
                         <div class="d-flex align-items-center gap-3">
                             <div class="position-relative">
                                 {% if conv.friend.profile_photo %}
@@ -45,7 +45,7 @@
                                     <h6 class="fw-bold mb-0">{{ conv.friend.display_name }}</h6>
                                     <span class="badge bg-dark border border-secondary text-secondary small">{{ conv.friend.branch }}</span>
                                 </div>
-                                <div class="small text-secondary text-truncate mt-1" style="max-width: 420px;">
+                                <div class="small text-secondary text-truncate mt-1 conv-message-preview">
                                     {% if conv.latest_message %}
                                         {% if conv.latest_message.sender == request.user %}
                                             <span class="text-white-50">You: </span>
@@ -58,7 +58,7 @@
                             </div>
                         </div>
 
-                        <div class="text-end small">
+                        <div class="text-end small conv-meta flex-shrink-0">
                             {% if conv.latest_message %}
                                 <div class="text-secondary mb-1">{{ conv.latest_message.created_at|date:"M j, H:i" }}</div>
                             {% endif %}

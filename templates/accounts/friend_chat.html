@@ -9,9 +9,9 @@
         <div class="col-lg-8">
             <div class="glass p-4">
                 <!-- Chat Header -->
-                <div class="d-flex justify-content-between align-items-center pb-3 border-bottom border-secondary mb-3">
-                    <div class="d-flex align-items-center gap-3">
-                        <a href="{% url 'profile' friend.enrollment_number %}" class="position-relative">
+                <div class="d-flex justify-content-between align-items-center pb-3 border-bottom border-secondary mb-3 flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-3" style="min-width: 0;">
+                        <a href="{% url 'profile' friend.enrollment_number %}" class="position-relative flex-shrink-0">
                             {% if friend.profile_photo %}
                                 <img src="{{ friend.profile_photo.url }}" class="rounded-circle object-fit-cover shadow"
                                      style="width: 48px; height: 48px;" alt="{{ friend.enrollment_number }}" onerror="this.onerror=null; this.style.display='none';">
@@ -23,9 +23,9 @@
                             <span id="friend-presence-dot" class="position-absolute bottom-0 end-0 p-1 bg-secondary border border-dark rounded-circle"
                                   style="width: 12px; height: 12px;" title="Offline"></span>
                         </a>
-                        <div>
-                            <div class="d-flex align-items-center gap-2">
-                                <h5 class="fw-bold mb-0">
+                        <div style="min-width: 0;">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <h5 class="fw-bold mb-0 text-truncate">
                                     <a href="{% url 'profile' friend.enrollment_number %}" class="text-white text-decoration-none">
                                         {{ friend.display_name }}
                                     </a>
@@ -41,7 +41,7 @@
                         </div>
                     </div>
 
-                    <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2 flex-shrink-0 ms-auto ms-sm-0">
                         <a href="{% url 'messages_inbox' %}" class="btn btn-dark-custom btn-sm" title="Back to All Messages">
                             <i class="bi bi-inbox-fill me-1"></i> Inbox
                         </a>
@@ -57,7 +57,7 @@
                      data-current-user="{{ request.user.enrollment_number }}">
 
                     <!-- Message stream -->
-                    <div class="chat-messages" id="direct-chat-messages" style="min-height: 380px; max-height: 480px; overflow-y: auto;">
+                    <div class="chat-messages" id="direct-chat-messages">
                         {% if chat_messages %}
                             {% for msg in chat_messages %}
                                 <div class="message-item {% if msg.sender == request.user %}message-self{% else %}message-other{% endif %}">
@@ -75,7 +75,7 @@
                     </div>
 
                     <!-- Message Input Form -->
-                    <div class="chat-footer pt-3 border-top border-secondary">
+                    <div class="chat-footer">
                         {% if read_only %}
                         <div class="alert alert-secondary mb-0 text-center py-2 text-muted small">
                             <i class="bi bi-lock-fill me-1"></i> You are no longer connected as friends with this student. Conversation history is read-only.
