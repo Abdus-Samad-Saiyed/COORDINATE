@@ -835,8 +835,13 @@
       // Skip if anchor points to exact current URL
       if (anchor.href === window.location.href) return;
 
-      // Skip intra-page navigation (query parameter changes on the same route should be seamless)
-      if (anchor.pathname === window.location.pathname) return;
+      // Transitions occur ONLY on true page changes (different route paths)
+      const currentRoute = (window.location.pathname.replace(/\/+$/, '') || '/').toLowerCase();
+      const targetRoute = (anchor.pathname.replace(/\/+$/, '') || '/').toLowerCase();
+      if (targetRoute === currentRoute) {
+        // Same page (query params, dates, filters): zero transition
+        return;
+      }
 
       // Skip file downloads or non-HTML API endpoints
       const pathname = anchor.pathname;
