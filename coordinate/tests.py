@@ -668,11 +668,19 @@ class RideWorkflowTests(TestCase):
         self.assertTrue(p_row.share_contact_details)
 
     def test_join_ride_share_contact_policy(self):
-        """Joining a ride with share_contact enables contact sharing, while unchecking opts out."""
+        """Consenting to contact sharing is mandatory to create and join rides; in-ride toggle is removed."""
         ride = self.create_ride(total_spots=3)
         self.client.force_login(self.other)
 
-        # 1. Join with share_contact='true'
+        # 1. Attempting to join with share_contact='false' fails because contact consent is mandatory
+        resp_unconsented = self.client.post(reverse('join_ride', args=[ride.id]), {
+            'disclose_identity': 'true',
+            'share_contact': 'false',
+        })
+        self.assertRedirects(resp_unconsented, reverse('ride_detail', args=[ride.id]))
+        self.assertFalse(RideParticipant.all_rows.filter(ride=ride, user=self.other).exists())
+
+        # 2. Joining with share_contact='true' succeeds and records mandatory consent
         resp = self.client.post(reverse('join_ride', args=[ride.id]), {
             'disclose_identity': 'true',
             'share_contact': 'true',
@@ -680,6 +688,25 @@ class RideWorkflowTests(TestCase):
         self.assertRedirects(resp, reverse('ride_list'))
         p_row = RideParticipant.all_rows.get(ride=ride, user=self.other)
         self.assertTrue(p_row.share_contact_details)
+
+        # 3. Ride detail page has zero in-ride toggle options for phone sharing
+        detail_resp = self.client.get(reverse('ride_detail', args=[ride.id]))
+        self.assertEqual(detail_resp.status_code, 200)
+        self.assertNotIn(b'Hide Phone', detail_resp.content)
+        self.assertNotIn(b'Phone sharing:', detail_resp.content)
+
+        # 4. Attempting to create ride without share_contact fails form validation
+        dep_time = (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+        create_resp = self.client.post(reverse('create_ride'), {
+            'route': 'NIT_TO_AIRPORT',
+            'visibility': 'MIXED',
+            'departure_time': dep_time,
+            'total_spots': 3,
+            'disclose_identity': 'on',
+            'share_contact': '',  # explicitly unconsented
+        })
+        self.assertEqual(create_resp.status_code, 200)
+        self.assertFormError(create_resp.context['form'], 'share_contact', 'You must consent to share your contact details with confirmed co-passengers to create a ride.')
 
     def test_ride_list_seamless_quick_select_date_transition(self):
         """Next/Prev and date strip in /coordinate provide seamless HTMX partial swaps."""

@@ -197,7 +197,7 @@ def record_ride_consent(
     user: User,
     request=None,
     disclose_identity: bool = True,
-    share_contact: bool = False,
+    share_contact: bool = True,
     consent_version: str = 'v2.0',
 ) -> 'RideConsent':
     """Record or update explicit affirmative consent for a ride."""

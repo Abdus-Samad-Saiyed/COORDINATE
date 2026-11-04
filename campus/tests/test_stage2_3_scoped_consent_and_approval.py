@@ -99,7 +99,7 @@ class Stage2And3ScopedConsentAndApprovalTests(TestCase):
         return res.json()["data"]["token"]
 
     def test_form_consent_validation(self):
-        """RideRequestForm requires disclose_identity consent and defaults share_contact to False."""
+        """RideRequestForm requires disclose_identity and share_contact consent."""
         now = timezone.now() + timedelta(days=1)
         valid_data = {
             "route": "NIT_TO_AIRPORT",
@@ -107,12 +107,12 @@ class Stage2And3ScopedConsentAndApprovalTests(TestCase):
             "departure_time": now.strftime("%Y-%m-%dT%H:%M"),
             "total_spots": 3,
             "disclose_identity": True,
-            "share_contact": False,
+            "share_contact": True,
         }
         form = RideRequestForm(data=valid_data)
         self.assertTrue(form.is_valid(), form.errors)
         self.assertTrue(form.cleaned_data["disclose_identity"])
-        self.assertFalse(form.cleaned_data["share_contact"])
+        self.assertTrue(form.cleaned_data["share_contact"])
 
         # Explicitly rejecting identity disclosure fails form validation
         invalid_data = valid_data.copy()
@@ -121,14 +121,29 @@ class Stage2And3ScopedConsentAndApprovalTests(TestCase):
         self.assertFalse(invalid_form.is_valid())
         self.assertIn("disclose_identity", invalid_form.errors)
 
+        # Explicitly rejecting contact sharing fails form validation
+        invalid_data_contact = valid_data.copy()
+        invalid_data_contact["share_contact"] = False
+        invalid_form_contact = RideRequestForm(data=invalid_data_contact)
+        self.assertFalse(invalid_form_contact.is_valid())
+        self.assertIn("share_contact", invalid_form_contact.errors)
+
     def test_web_join_request_flow_and_approval(self):
-        """Web join creates a PENDING request; host approval transitions to participant without synthetic consent."""
+        """Web join creates a PENDING request; host approval transitions to participant with mandatory consent."""
         self.client.force_login(self.passenger)
 
-        # Passenger requests to join with default privacy (share_contact=False)
-        resp = self.client.post(
+        # 1. Unconsented join is rejected
+        resp_reject = self.client.post(
             reverse("join_ride", kwargs={"ride_id": self.ride.id}),
             data={"disclose_identity": "true", "share_contact": "false"},
+        )
+        self.assertEqual(resp_reject.status_code, 302)
+        self.assertFalse(RideJoinRequest.objects.filter(ride=self.ride, user=self.passenger).exists())
+
+        # 2. Consented join succeeds
+        resp = self.client.post(
+            reverse("join_ride", kwargs={"ride_id": self.ride.id}),
+            data={"disclose_identity": "true", "share_contact": "true"},
         )
         self.assertEqual(resp.status_code, 302)
 
@@ -140,10 +155,10 @@ class Stage2And3ScopedConsentAndApprovalTests(TestCase):
         # Not yet a participant
         self.assertFalse(RideParticipant.objects.filter(ride=self.ride, user=self.passenger).exists())
 
-        # Consent record created with share_contact_details=False
+        # Consent record created with share_contact_details=True
         consent = RideConsent.objects.get(ride=self.ride, user=self.passenger)
         self.assertTrue(consent.disclose_ride_identity)
-        self.assertFalse(consent.share_contact_details)
+        self.assertTrue(consent.share_contact_details)
 
         # Host approves the request
         self.client.force_login(self.host)
@@ -157,11 +172,10 @@ class Stage2And3ScopedConsentAndApprovalTests(TestCase):
         join_req.refresh_from_db()
         self.assertEqual(join_req.status, "APPROVED")
 
-        # Consent was NOT synthesized to True
+        # Both can view contacts because contact consent was mandatory
         consent.refresh_from_db()
-        self.assertFalse(consent.share_contact_details)
-        # Host cannot view passenger contact because passenger opted out of contact sharing
-        self.assertFalse(can_view_ride_contact(self.host, self.ride, self.passenger))
+        self.assertTrue(consent.share_contact_details)
+        self.assertTrue(can_view_ride_contact(self.host, self.ride, self.passenger))
 
     def test_api_join_request_and_host_approval(self):
         """API join returns HTTP 202 Accepted; host can approve or decline via REST endpoints."""

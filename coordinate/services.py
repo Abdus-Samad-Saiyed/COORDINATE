@@ -91,7 +91,7 @@ def request_to_join_ride(
     user: User,
     request=None,
     disclose_identity: bool = True,
-    share_contact: bool = False,
+    share_contact: bool = True,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     """
     Submit a join request that awaits host approval.
@@ -122,9 +122,9 @@ def request_to_join_ride(
                 "request_id": existing_req.id,
             }
 
-        # Explicit identity disclosure consent is required to request membership
-        if not disclose_identity:
-            return False, "Explicit consent to associate your identity with this ride is required.", {
+        # Explicit identity disclosure and contact sharing consent are mandatory to request membership
+        if not disclose_identity or not share_contact:
+            return False, "Consenting to disclose identity and share contact details with confirmed co-passengers is mandatory to join a ride.", {
                 "code": "CONSENT_REQUIRED"
             }
 
@@ -344,7 +344,7 @@ def promote_waitlist_passenger(ride: RideRequest) -> Optional[User]:
                     ride=ride,
                     user=candidate,
                     disclose_identity=True,
-                    share_contact=False,
+                    share_contact=True,
                 )
             ride.sync_status()
             return candidate

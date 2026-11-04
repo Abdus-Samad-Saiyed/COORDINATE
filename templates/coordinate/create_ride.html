@@ -77,11 +77,11 @@
                     </div>
 
                     <div class="card bg-dark-subtle border-secondary p-3 mb-4 rounded-3">
-                        <h6 class="fw-semibold mb-2"><i class="bi bi-shield-check text-success me-1"></i> Privacy & Ride Consent</h6>
+                        <h6 class="fw-semibold mb-2"><i class="bi bi-shield-check text-success me-1"></i> Privacy & Ride Consent <span class="badge bg-success-subtle text-success small ms-1">Mandatory</span></h6>
                         <div class="form-check mb-2">
                             {{ form.disclose_identity }}
                             <label class="form-check-label small" for="{{ form.disclose_identity.id_for_label }}">
-                                Disclose my student identity (name, enrollment number, gender) to confirmed co-passengers.
+                                Disclose my student identity (name, enrollment number, gender) to confirmed co-passengers (Required).
                             </label>
                             {% if form.disclose_identity.errors %}
                                 <div class="text-danger small mt-1">{{ form.disclose_identity.errors.0 }}</div>
@@ -90,7 +90,7 @@
                         <div class="form-check">
                             {{ form.share_contact }}
                             <label class="form-check-label small" for="{{ form.share_contact.id_for_label }}">
-                                Share my phone number & email with confirmed co-passengers (valid only during active ride).
+                                Share my phone number & email with confirmed co-passengers during active trip (Required).
                             </label>
                             {% if form.share_contact.errors %}
                                 <div class="text-danger small mt-1">{{ form.share_contact.errors.0 }}</div>

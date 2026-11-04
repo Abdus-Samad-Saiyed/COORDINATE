@@ -557,7 +557,17 @@ def join_ride(request, ride_id):
     RIDE-JOIN-REQ: Students submit a join request that requires host approval.
     """
     disclose_identity = request.POST.get('disclose_identity', 'true').lower() in ('1', 'true', 'on')
-    share_contact = request.POST.get('share_contact', 'false').lower() in ('1', 'true', 'on')
+    share_contact = request.POST.get('share_contact', 'true').lower() in ('1', 'true', 'on')
+
+    if not share_contact or not disclose_identity:
+        messages.error(request, 'Consenting to disclose identity and share contact details with confirmed co-passengers is mandatory to join a ride.')
+        if request.htmx:
+            ride = get_object_or_404(RideRequest, id=ride_id)
+            return render(request, 'coordinate/partials/ride_actions.html', {
+                'ride': ride,
+                'has_active_ride': _user_has_active_ride(request.user),
+            })
+        return redirect('ride_detail', ride_id=ride_id)
 
     ok, msg, details = request_to_join_ride(
         ride_id=ride_id,
@@ -894,7 +904,6 @@ def ride_detail(request, ride_id):
         'reviewable_user_ids': reviewable_user_ids,
         'kicked_users': ride.kicked_users.all(),
         'left_users': ride.left_users.all(),
-        'user_consent': RideConsent.objects.filter(ride=ride, user=request.user, is_revoked=False).first() if request.user.is_authenticated else None,
     })
 
 
@@ -1220,26 +1229,3 @@ def report_incident(request, ride_id):
     return redirect('ride_detail', ride_id=ride_id)
 
 
-@login_required
-@require_POST
-def toggle_ride_contact_consent(request, ride_id):
-    """Allow confirmed participants and host to dynamically grant or revoke contact sharing with co-passengers."""
-    ride = get_object_or_404(RideRequest, id=ride_id)
-    is_participant = (ride.creator_id == request.user.pk) or RideParticipant.objects.filter(ride=ride, user=request.user).exists()
-    if not is_participant:
-        return HttpResponseForbidden("Only confirmed participants can modify contact sharing.")
-
-    consent = RideConsent.objects.filter(ride=ride, user=request.user, is_revoked=False).first()
-    new_state = not (consent and consent.share_contact_details)
-    record_ride_consent(
-        ride=ride,
-        user=request.user,
-        request=request,
-        disclose_identity=True,
-        share_contact=new_state,
-    )
-    if new_state:
-        messages.success(request, "Phone number sharing enabled with confirmed co-passengers.")
-    else:
-        messages.info(request, "Phone number sharing disabled. Your contact details are now hidden from co-passengers.")
-    return redirect('ride_detail', ride_id=ride_id)

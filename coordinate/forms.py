@@ -13,14 +13,14 @@ class RideRequestForm(forms.ModelForm):
     disclose_identity = forms.BooleanField(
         required=False,
         initial=True,
-        label='Disclose student identity (name, enrollment, gender) to confirmed co-passengers',
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'id_disclose_identity'}),
+        label='Disclose student identity (name, enrollment, gender) to confirmed co-passengers (Mandatory)',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'id_disclose_identity', 'required': 'required'}),
     )
     share_contact = forms.BooleanField(
         required=False,
         initial=True,
-        label='Share contact details (phone number and email) with confirmed co-passengers during active trip',
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'id_share_contact'}),
+        label='Share contact details (phone number and email) with confirmed co-passengers during active trip (Mandatory)',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'id_share_contact', 'required': 'required'}),
     )
 
     class Meta:
@@ -79,6 +79,13 @@ class RideRequestForm(forms.ModelForm):
                 self.add_error('disclose_identity', 'You must consent to disclose your identity to create a ride.')
         else:
             cleaned['disclose_identity'] = True
+
+        if 'share_contact' in self.data:
+            if not cleaned.get('share_contact'):
+                self.add_error('share_contact', 'You must consent to share your contact details with confirmed co-passengers to create a ride.')
+        else:
+            cleaned['share_contact'] = True
+
         if cleaned.get('route') == 'CUSTOM':
             if not cleaned.get('custom_from_location'):
                 self.add_error('custom_from_location', 'Required for custom routes.')
