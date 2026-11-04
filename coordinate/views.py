@@ -51,6 +51,7 @@ from .policies import (
     revoke_ride_consent,
 )
 from .services import (
+    alter_ride_capacity_service,
     approve_ride_join_request,
     cancel_ride_service,
     decline_ride_join_request,
@@ -754,6 +755,42 @@ def reschedule_ride(request, ride_id):
 
 @login_required
 @require_POST
+def alter_ride_capacity(request, ride_id):
+    """Host alters ride total spots (increasing or decreasing capacity)."""
+    ride = get_object_or_404(RideRequest, id=ride_id)
+
+    if ride.creator != request.user:
+        messages.error(request, 'Only the ride host can alter capacity.')
+        return redirect('ride_detail', ride_id=ride_id)
+
+    if ride.status in ['COMPLETED', 'CANCELLED']:
+        messages.error(request, 'Completed or cancelled rides cannot be modified.')
+        return redirect('ride_detail', ride_id=ride_id)
+
+    try:
+        new_capacity = int(request.POST.get('total_spots', ''))
+    except (ValueError, TypeError):
+        messages.error(request, 'Please provide a valid numeric capacity.')
+        return redirect('ride_detail', ride_id=ride_id)
+
+    kick_user_ids = request.POST.getlist('kick_users')
+    ok, msg, data = alter_ride_capacity_service(
+        ride_id=ride_id,
+        host_user=request.user,
+        new_capacity=new_capacity,
+        kick_user_ids=kick_user_ids,
+    )
+
+    if ok:
+        messages.success(request, msg)
+    else:
+        messages.error(request, msg)
+
+    return redirect('ride_detail', ride_id=ride_id)
+
+
+@login_required
+@require_POST
 def join_waitlist(request, ride_id):
     """Join the standby queue for a full ride."""
     ride = get_object_or_404(RideRequest, id=ride_id)
@@ -896,6 +933,8 @@ def ride_detail(request, ride_id):
         'can_join': can_join,
         'user_waitlist_pos': user_waitlist_pos,
         'participants': participants,
+        'non_host_participants': [p for p in participants if p.user_id != ride.creator_id],
+        'confirmed_count': len(participants),
         'waitlist_entries': waitlist_entries,
         'pending_join_requests': pending_join_requests,
         'chat_messages': chat_messages,

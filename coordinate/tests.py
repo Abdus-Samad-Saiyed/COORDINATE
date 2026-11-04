@@ -12,6 +12,7 @@ from .models import (
     RideParticipant,
     RideRequest,
     RideReview,
+    RideWaitlist,
 )
 
 
@@ -737,3 +738,140 @@ class RideWorkflowTests(TestCase):
         self.assertIn(f'date_from={target_date}', content_htmx)
         self.assertIn('Quick Select Date', content_htmx)
         self.assertIn('Next <i class="bi bi-chevron-right"></i>', content_htmx)
+
+    def test_alter_capacity_increase_promotes_waitlist(self):
+        """Increasing ride capacity opens spots and automatically promotes waitlisted students."""
+        self.client.force_login(self.creator)
+        ride = self.create_ride(total_spots=2)
+        # 1. Other user is confirmed participant (ride now full: 2/2)
+        RideParticipant.objects.create(ride=ride, user=self.other)
+        ride.sync_status()
+        ride.refresh_from_db()
+        self.assertEqual(ride.participant_count(), 2)
+        self.assertEqual(ride.status, 'FULL')
+
+        # 2. Third user joins waitlist
+        user_c = User.objects.create_user(
+            username='WaitlistC',
+            enrollment_number='2024BCSE888',
+            email='waitlist_cap@nitsri.ac.in',
+            phone_number='9876543888',
+            password='password123',
+            gender='M',
+            branch='CSE',
+            is_active=True,
+            verified=True,
+        )
+        self.client.force_login(user_c)
+        resp_w = self.client.post(reverse('join_waitlist', args=[ride.id]))
+        self.assertTrue(RideWaitlist.objects.filter(ride=ride, user=user_c).exists())
+
+        # 3. Host alters capacity from 2 to 3
+        self.client.force_login(self.creator)
+        resp = self.client.post(reverse('alter_ride_capacity', args=[ride.id]), {'total_spots': 3})
+        self.assertRedirects(resp, reverse('ride_detail', args=[ride.id]))
+
+        ride.refresh_from_db()
+        self.assertEqual(ride.total_spots, 3)
+        # user_c was promoted to confirmed passenger!
+        self.assertFalse(RideWaitlist.objects.filter(ride=ride, user=user_c).exists())
+        self.assertTrue(RideParticipant.objects.filter(ride=ride, user=user_c, status='CONFIRMED').exists())
+        self.assertEqual(ride.participant_count(), 3)
+        self.assertEqual(ride.status, 'FULL')
+
+    def test_alter_capacity_decrease_safe_no_kicks_needed(self):
+        """Host can decrease capacity if new capacity is >= current confirmed member count."""
+        self.client.force_login(self.creator)
+        ride = self.create_ride(total_spots=5)
+        # Other is confirmed participant (total 2 members: host + other)
+        RideParticipant.objects.create(ride=ride, user=self.other)
+        ride.sync_status()
+        ride.refresh_from_db()
+        self.assertEqual(ride.participant_count(), 2)
+
+        # Host reduces capacity from 5 to 3 (which is >= 2 members)
+        self.client.force_login(self.creator)
+        resp = self.client.post(reverse('alter_ride_capacity', args=[ride.id]), {'total_spots': 3})
+        self.assertRedirects(resp, reverse('ride_detail', args=[ride.id]))
+
+        ride.refresh_from_db()
+        self.assertEqual(ride.total_spots, 3)
+        self.assertEqual(ride.participant_count(), 2)
+        self.assertEqual(ride.status, 'OPEN')
+
+    def test_alter_capacity_decrease_requires_selecting_kicks(self):
+        """Decreasing capacity below current member count without selecting kicks is rejected."""
+        self.client.force_login(self.creator)
+        ride = self.create_ride(total_spots=3)
+        # Other joins (now 2 members: host + other)
+        RideParticipant.objects.create(ride=ride, user=self.other)
+        ride.sync_status()
+        ride.refresh_from_db()
+        self.assertEqual(ride.participant_count(), 2)
+
+        # Host tries to reduce capacity to 1 without specifying kick_users
+        self.client.force_login(self.creator)
+        resp = self.client.post(reverse('alter_ride_capacity', args=[ride.id]), {'total_spots': 1})
+        self.assertRedirects(resp, reverse('ride_detail', args=[ride.id]))
+
+        # Ride capacity remained unchanged because kicks were required
+        ride.refresh_from_db()
+        self.assertEqual(ride.total_spots, 3)
+        self.assertEqual(ride.participant_count(), 2)
+
+        # Decreasing capacity with passenger selected to kick succeeds
+        resp2 = self.client.post(reverse('alter_ride_capacity', args=[ride.id]), {
+            'total_spots': 1,
+            'kick_users': [self.other.id],
+        })
+        self.assertRedirects(resp2, reverse('ride_detail', args=[ride.id]))
+
+        ride.refresh_from_db()
+        self.assertEqual(ride.total_spots, 1)
+        self.assertEqual(ride.participant_count(), 1)
+        self.assertEqual(ride.status, 'FULL')
+        # other is now KICKED
+        self.assertIn(self.other, ride.kicked_users.all())
+
+    def test_non_host_cannot_alter_capacity(self):
+        """Non-host member or stranger cannot alter ride capacity."""
+        self.client.force_login(self.creator)
+        ride = self.create_ride(total_spots=3)
+
+        self.client.force_login(self.other)
+        resp = self.client.post(reverse('alter_ride_capacity', args=[ride.id]), {'total_spots': 4})
+        self.assertRedirects(resp, reverse('ride_detail', args=[ride.id]))
+
+        ride.refresh_from_db()
+        self.assertEqual(ride.total_spots, 3)
+
+    def test_alter_capacity_range_and_completed_guards(self):
+        """Capacity must be between 1 and 6, and cannot be altered on completed rides."""
+        self.client.force_login(self.creator)
+        ride = self.create_ride(total_spots=3)
+        # Other is confirmed participant so confirmed count is 2 (host + other)
+        RideParticipant.objects.create(ride=ride, user=self.other)
+        ride.sync_status()
+        ride.refresh_from_db()
+        self.assertEqual(ride.participant_count(), 2)
+
+        self.client.force_login(self.creator)
+        # Range invalid (0 or 7)
+        resp_zero = self.client.post(reverse('alter_ride_capacity', args=[ride.id]), {'total_spots': 0})
+        self.assertRedirects(resp_zero, reverse('ride_detail', args=[ride.id]))
+        ride.refresh_from_db()
+        self.assertEqual(ride.total_spots, 3)
+
+        resp_seven = self.client.post(reverse('alter_ride_capacity', args=[ride.id]), {'total_spots': 7})
+        self.assertRedirects(resp_seven, reverse('ride_detail', args=[ride.id]))
+        ride.refresh_from_db()
+        self.assertEqual(ride.total_spots, 3)
+
+        # Host cannot kick themselves when kicks are needed (reducing 2 members to 1 capacity)
+        resp_self_kick = self.client.post(reverse('alter_ride_capacity', args=[ride.id]), {
+            'total_spots': 1,
+            'kick_users': [self.creator.id],
+        })
+        self.assertRedirects(resp_self_kick, reverse('ride_detail', args=[ride.id]))
+        ride.refresh_from_db()
+        self.assertEqual(ride.total_spots, 3)

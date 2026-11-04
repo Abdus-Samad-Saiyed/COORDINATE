@@ -499,3 +499,158 @@ def cancel_ride_service(ride_id: int, host_user: User) -> Tuple[bool, str]:
             pass
 
         return True, "Ride cancelled successfully."
+
+
+
+def alter_ride_capacity_service(
+    ride_id: int,
+    host_user: User,
+    new_capacity: int,
+    kick_user_ids: Optional[list] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Host alters ride capacity (total spots).
+    Increasing capacity is permitted seamlessly and promotes waitlisted users if spots open.
+    Decreasing capacity below the current confirmed members count requires selecting and
+    kicking out enough passengers to satisfy the new limit.
+    """
+    with transaction.atomic():
+        ride = (
+            RideRequest.objects
+            .select_for_update()
+            .filter(id=ride_id, creator=host_user)
+            .first()
+        )
+        if not ride:
+            return False, "Ride not found or you are not the creator.", {}
+
+        if ride.status in ('COMPLETED', 'CANCELLED'):
+            return False, f"Cannot alter capacity of a {ride.get_status_display().lower()} ride.", {}
+
+        try:
+            new_capacity = int(new_capacity)
+        except (ValueError, TypeError):
+            return False, "Ride capacity must be a valid number.", {}
+
+        if new_capacity < 1 or new_capacity > 6:
+            return False, "Ride capacity must be between 1 and 6 spots.", {}
+
+        if new_capacity == ride.total_spots:
+            return True, f"Ride capacity is already {new_capacity} spots.", {
+                "updated": False,
+                "new_capacity": new_capacity,
+                "kicked": [],
+                "promoted": [],
+            }
+
+        # Current confirmed participants (including host)
+        confirmed_participants = list(
+            RideParticipant.objects
+            .filter(ride=ride, status=ParticipantStatus.CONFIRMED)
+            .select_related('user')
+            .order_by('joined_at')
+        )
+        confirmed_count = len(confirmed_participants)
+        old_capacity = ride.total_spots
+        kicked_enrollments = []
+        promoted_enrollments = []
+
+        # If reducing capacity below current confirmed members count
+        if new_capacity < confirmed_count:
+            needed_kicks = confirmed_count - new_capacity
+            cleaned_kick_ids = []
+            for uid in (kick_user_ids or []):
+                try:
+                    cleaned_kick_ids.append(int(uid))
+                except (ValueError, TypeError):
+                    continue
+
+            # Remove duplicates preserving order
+            cleaned_kick_ids = list(dict.fromkeys(cleaned_kick_ids))
+
+            if host_user.id in cleaned_kick_ids:
+                return False, "Host cannot be removed from their own ride.", {}
+
+            if len(cleaned_kick_ids) < needed_kicks:
+                return (
+                    False,
+                    f"Decreasing capacity to {new_capacity} spots requires selecting at least {needed_kicks} passenger(s) to remove.",
+                    {"requires_kick": True, "needed_kicks": needed_kicks, "current_count": confirmed_count},
+                )
+
+            # Map user_id to participant
+            participant_map = {p.user_id: p for p in confirmed_participants if p.user_id != host_user.id}
+            invalid_uids = [uid for uid in cleaned_kick_ids if uid not in participant_map]
+            if invalid_uids:
+                return False, "Selected users include individuals who are not active confirmed passengers in this ride.", {}
+
+            # Execute kicks for the selected passengers
+            for uid in cleaned_kick_ids:
+                p = participant_map[uid]
+                passenger_user = p.user
+                transition_participant_state(ride=ride, user=passenger_user, target_status=ParticipantStatus.KICKED)
+                revoke_ride_consent(ride, passenger_user)
+                ride.kicked_users.add(passenger_user)
+                kicked_enrollments.append(passenger_user.enrollment_number)
+
+                # WebSocket kick notice
+                try:
+                    channel_layer = get_channel_layer()
+                    if channel_layer:
+                        async_to_sync(channel_layer.group_send)(
+                            f'ride_{ride.id}',
+                            {
+                                'type': 'system.notice',
+                                'action': 'user_kicked',
+                                'user': passenger_user.enrollment_number,
+                                'content': f"🚫 {passenger_user.enrollment_number} was removed due to ride capacity reduction.",
+                            }
+                        )
+                except Exception:
+                    pass
+
+        # Update total spots
+        ride.total_spots = new_capacity
+        ride.save(update_fields=['total_spots'])
+
+        # If increasing capacity, promote any waitlisted candidates into newly opened spots
+        if new_capacity > old_capacity:
+            while not ride.is_full():
+                promoted = promote_waitlist_passenger(ride)
+                if not promoted:
+                    break
+                promoted_enrollments.append(promoted.enrollment_number)
+
+        ride.sync_status()
+
+        # WebSocket capacity notice
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f'ride_{ride.id}',
+                    {
+                        'type': 'system.notice',
+                        'action': 'capacity_altered',
+                        'new_capacity': new_capacity,
+                        'content': f"⚙️ Ride capacity updated to {new_capacity} spots by the host.",
+                    }
+                )
+        except Exception:
+            pass
+
+        # Build informative feedback message
+        if kicked_enrollments:
+            msg = f"Ride capacity updated to {new_capacity} spots. Removed {len(kicked_enrollments)} passenger(s) ({', '.join(kicked_enrollments)}) to fit new capacity."
+        elif promoted_enrollments:
+            msg = f"Ride capacity increased to {new_capacity} spots. Promoted {len(promoted_enrollments)} waitlisted student(s) ({', '.join(promoted_enrollments)})."
+        else:
+            msg = f"Ride capacity successfully updated to {new_capacity} spots."
+
+        return True, msg, {
+            "updated": True,
+            "old_capacity": old_capacity,
+            "new_capacity": new_capacity,
+            "kicked": kicked_enrollments,
+            "promoted": promoted_enrollments,
+        }

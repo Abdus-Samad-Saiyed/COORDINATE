@@ -3,6 +3,7 @@
 from django.urls import path
 
 from .views import (
+    alter_ride_capacity,
     approve_join_request,
     cancel_join_request,
     complete_ride,
@@ -35,6 +36,7 @@ urlpatterns = [
     path('<int:ride_id>/requests/cancel/',                       cancel_join_request,   name='cancel_join_request'),
     path('<int:ride_id>/leave/',                                 leave_ride,            name='leave_ride'),
     path('<int:ride_id>/reschedule/',                            reschedule_ride,       name='reschedule_ride'),
+    path('<int:ride_id>/alter-capacity/',                        alter_ride_capacity,   name='alter_ride_capacity'),
     path('<int:ride_id>/waitlist/join/',                         join_waitlist,         name='join_waitlist'),
     path('<int:ride_id>/waitlist/leave/',                        leave_waitlist,        name='leave_waitlist'),
     path('<int:ride_id>/terminate/',                             terminate_ride,        name='terminate_ride'),

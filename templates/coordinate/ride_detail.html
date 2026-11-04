@@ -26,6 +26,9 @@
 
             <div class="d-flex gap-2 align-items-center flex-wrap">
                 {% if is_creator and ride.status != 'COMPLETED' %}
+                    <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#alterCapacityModal">
+                        <i class="bi bi-people-fill me-1"></i> Edit Capacity
+                    </button>
                     <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#rescheduleRideModal">
                         <i class="bi bi-calendar-event me-1"></i> Reschedule
                     </button>
@@ -157,9 +160,16 @@
                     <h5 class="fw-bold mb-0">
                         <i class="bi bi-people-fill green-accent me-2"></i>Passengers
                     </h5>
-                    <span class="badge bg-dark border border-secondary text-secondary">
-                        {{ participants.count }} / {{ ride.total_spots }} Spots
-                    </span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-dark border border-secondary text-secondary">
+                            {{ participants|length }} / {{ ride.total_spots }} Spots
+                        </span>
+                        {% if is_creator and ride.status != 'COMPLETED' %}
+                            <button type="button" class="btn btn-outline-info btn-sm py-0 px-2" data-bs-toggle="modal" data-bs-target="#alterCapacityModal" title="Alter ride capacity">
+                                <i class="bi bi-pencil-square me-1"></i> Edit
+                            </button>
+                        {% endif %}
+                    </div>
                 </div>
 
 
@@ -478,6 +488,209 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Alter Ride Capacity -->
+<div class="modal fade" id="alterCapacityModal" tabindex="-1" aria-labelledby="alterCapacityModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content glass border-info-subtle text-white">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold text-info d-flex align-items-center gap-2" id="alterCapacityModalLabel">
+                    <i class="bi bi-people-fill"></i> Alter Ride Capacity
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="alter-capacity-form" action="{% url 'alter_ride_capacity' ride.id %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <!-- Current Status Banner -->
+                    <div class="d-flex justify-content-between align-items-center p-3 mb-3 rounded bg-black bg-opacity-40 border border-secondary">
+                        <div>
+                            <div class="text-secondary small">Current Capacity</div>
+                            <div class="fw-bold fs-5 text-white">{{ ride.total_spots }} Spots</div>
+                        </div>
+                        <div class="text-end">
+                            <div class="text-secondary small">Confirmed Members</div>
+                            <div class="fw-bold fs-5 text-info" id="current-members-count" data-count="{{ confirmed_count }}">
+                                {{ confirmed_count }} / {{ ride.total_spots }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Capacity Stepper Input -->
+                    <div class="mb-3">
+                        <label for="alter-capacity-input" class="form-label small fw-semibold text-white">
+                            New Total Capacity (1 – 6 Spots)
+                        </label>
+                        <div class="input-group">
+                            <button class="btn btn-outline-secondary" type="button" id="cap-decrement-btn">
+                                <i class="bi bi-dash-lg"></i>
+                            </button>
+                            <input type="number" id="alter-capacity-input" name="total_spots"
+                                   class="form-control text-center fw-bold fs-5"
+                                   min="1" max="6" value="{{ ride.total_spots }}" required>
+                            <button class="btn btn-outline-secondary" type="button" id="cap-increment-btn">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
+                        </div>
+                        <div class="form-text text-secondary small">
+                            Includes you (the host) plus all passenger seats.
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Hint: Increase Capacity -->
+                    <div id="cap-increase-hint" class="alert alert-success d-none py-2 px-3 small align-items-center gap-2">
+                        <i class="bi bi-arrow-up-circle-fill fs-5"></i>
+                        <div>
+                            <strong>Increasing capacity:</strong> Opens additional seats for new requests or automatically promotes waitlisted students.
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Hint: Safe Decrease -->
+                    <div id="cap-safe-decrease-hint" class="alert alert-info d-none py-2 px-3 small align-items-center gap-2">
+                        <i class="bi bi-info-circle-fill fs-5"></i>
+                        <div>
+                            <strong>Reducing vacant spots:</strong> All <span class="fw-bold">{{ confirmed_count }}</span> currently confirmed members will remain in the ride.
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Warning: Decrease requiring kicks -->
+                    <div id="cap-kick-required-box" class="alert alert-danger d-none py-2 px-3 small">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="bi bi-exclamation-triangle-fill fs-5 text-danger"></i>
+                            <div>
+                                <strong>Passenger Reduction Required:</strong> The new capacity (<span id="cap-target-val"></span>) is less than the current members joined (<span id="cap-current-val">{{ confirmed_count }}</span>).
+                            </div>
+                        </div>
+                        <p class="mb-2 text-white">
+                            You must select at least <span id="cap-needed-kicks" class="badge bg-danger fs-6">0</span> passenger(s) to remove:
+                        </p>
+
+                        <div class="d-flex flex-column gap-2 mt-2" id="cap-kick-passengers-list">
+                            {% for p in non_host_participants %}
+                                <div class="form-check p-2 rounded bg-black bg-opacity-60 border border-danger border-opacity-50 d-flex align-items-center justify-content-between">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <input class="form-check-input cap-kick-checkbox ms-0 me-2" type="checkbox"
+                                               name="kick_users" value="{{ p.user.id }}" id="kick-p-{{ p.user.id }}">
+                                        <label class="form-check-label text-white fw-semibold small cursor-pointer" for="kick-p-{{ p.user.id }}">
+                                            {{ p.user.enrollment_number }}
+                                            {% if p.user.display_name %}<span class="text-secondary fw-normal">({{ p.user.display_name }})</span>{% endif %}
+                                        </label>
+                                    </div>
+                                    <span class="badge bg-dark border border-secondary text-secondary small">{{ p.user.branch }}</span>
+                                </div>
+                            {% empty %}
+                                <div class="text-muted small">No non-host passengers in this ride.</div>
+                            {% endfor %}
+                        </div>
+                        <div id="cap-kick-error" class="text-danger fw-bold small mt-2 d-none">
+                            <i class="bi bi-x-circle me-1"></i>Please select the required number of passengers before submitting.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-dark-custom" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" id="alter-capacity-submit-btn" class="btn btn-info px-4">
+                        Update Capacity
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const capInput = document.getElementById('alter-capacity-input');
+    const form = document.getElementById('alter-capacity-form');
+    if (!capInput || !form) return;
+
+    const currentSpots = parseInt('{{ ride.total_spots }}', 10);
+    const confirmedCount = parseInt('{{ confirmed_count }}', 10);
+
+    const increaseHint = document.getElementById('cap-increase-hint');
+    const safeDecreaseHint = document.getElementById('cap-safe-decrease-hint');
+    const kickBox = document.getElementById('cap-kick-required-box');
+    const targetValSpan = document.getElementById('cap-target-val');
+    const neededKicksSpan = document.getElementById('cap-needed-kicks');
+    const kickError = document.getElementById('cap-kick-error');
+    const decBtn = document.getElementById('cap-decrement-btn');
+    const incBtn = document.getElementById('cap-increment-btn');
+
+    function syncUI() {
+        let val = parseInt(capInput.value, 10);
+        if (isNaN(val)) val = currentSpots;
+        if (val < 1) val = 1;
+        if (val > 6) val = 6;
+        capInput.value = val;
+
+        if (targetValSpan) targetValSpan.textContent = val;
+
+        if (increaseHint) increaseHint.classList.add('d-none');
+        if (safeDecreaseHint) safeDecreaseHint.classList.add('d-none');
+        if (kickBox) kickBox.classList.add('d-none');
+        if (kickError) kickError.classList.add('d-none');
+
+        if (val > currentSpots) {
+            if (increaseHint) {
+                increaseHint.classList.remove('d-none');
+                increaseHint.classList.add('d-flex');
+            }
+        } else if (val < currentSpots) {
+            if (val >= confirmedCount) {
+                if (safeDecreaseHint) {
+                    safeDecreaseHint.classList.remove('d-none');
+                    safeDecreaseHint.classList.add('d-flex');
+                }
+            } else {
+                const needed = confirmedCount - val;
+                if (neededKicksSpan) neededKicksSpan.textContent = needed;
+                if (kickBox) kickBox.classList.remove('d-none');
+            }
+        }
+    }
+
+    if (decBtn) {
+        decBtn.addEventListener('click', function () {
+            let val = parseInt(capInput.value, 10) || currentSpots;
+            if (val > 1) {
+                capInput.value = val - 1;
+                syncUI();
+            }
+        });
+    }
+
+    if (incBtn) {
+        incBtn.addEventListener('click', function () {
+            let val = parseInt(capInput.value, 10) || currentSpots;
+            if (val < 6) {
+                capInput.value = val + 1;
+                syncUI();
+            }
+        });
+    }
+
+    capInput.addEventListener('input', syncUI);
+    capInput.addEventListener('change', syncUI);
+
+    form.addEventListener('submit', function (e) {
+        const val = parseInt(capInput.value, 10);
+        if (val < confirmedCount) {
+            const needed = confirmedCount - val;
+            const checkedCount = document.querySelectorAll('.cap-kick-checkbox:checked').length;
+            if (checkedCount < needed) {
+                e.preventDefault();
+                if (kickError) {
+                    kickError.textContent = `Please select at least ${needed} passenger(s) to remove (currently selected: ${checkedCount}).`;
+                    kickError.classList.remove('d-none');
+                }
+                return false;
+            }
+        }
+    });
+
+    syncUI();
+});
+</script>
 {% endif %}
 
 <!-- Modal: Request to Join Ride -->
