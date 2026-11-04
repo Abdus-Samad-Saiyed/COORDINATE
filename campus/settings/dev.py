@@ -39,3 +39,32 @@ if EMAIL_HOST_PASSWORD and EMAIL_HOST_USER:
     EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
 else:
     EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+
+# Allow access across local subnets, hotspots, and dev tunnels in dev mode
+ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['*'])
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+    'http://*.local',
+    'http://10.*',
+    'http://172.16.*',
+    'http://172.17.*',
+    'http://172.18.*',
+    'http://172.19.*',
+    'http://172.20.*',
+    'http://172.21.*',
+    'http://172.22.*',
+    'http://172.23.*',
+    'http://172.24.*',
+    'http://172.25.*',
+    'http://172.26.*',
+    'http://172.27.*',
+    'http://172.28.*',
+    'http://172.29.*',
+    'http://172.30.*',
+    'http://172.31.*',
+    'http://192.168.*',
+    'https://*.trycloudflare.com',
+    'https://*.ngrok-free.app',
+    'https://*.pinggy.link',
+])
