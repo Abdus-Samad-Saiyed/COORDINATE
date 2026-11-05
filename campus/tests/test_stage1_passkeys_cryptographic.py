@@ -511,3 +511,56 @@ class Stage1WebAuthnEndpointTests(TestCase):
 
         # Client is now authenticated
         self.assertEqual(int(self.client.session.get("_auth_user_id")), self.user.id)
+
+    def test_passkey_registration_labeled_by_device_of_origin_and_time(self):
+        """Verify biometric keys are labeled by device of origin and time, both with and without client hints."""
+        from accounts.views import get_device_of_origin_from_ua
+
+        # 1. Test UA device detector helper
+        ua_win = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ua_iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        ua_mac = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ua_android = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+
+        self.assertEqual(get_device_of_origin_from_ua(ua_win), "Windows PC (Chrome)")
+        self.assertEqual(get_device_of_origin_from_ua(ua_iphone), "iPhone (Safari)")
+        self.assertEqual(get_device_of_origin_from_ua(ua_mac), "Mac (Chrome)")
+        self.assertEqual(get_device_of_origin_from_ua(ua_android), "Android (Chrome)")
+
+        # 2. Registration with client device and local time
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["security_otp_verified_until"] = (timezone.now() + timedelta(minutes=10)).isoformat()
+        session.save()
+
+        chal_res = self.client.get(reverse("passkey_reg_challenge"))
+        challenge = chal_res.json()["challenge"]
+
+        reg_payload, _, _ = make_registration_response(
+            challenge_b64=challenge,
+            credential_id=b"cred_label_test_001",
+            origin="http://testserver",
+            rp_id="testserver",
+            private_key=self.private_key,
+        )
+        reg_payload["device"] = "Windows PC (Chrome)"
+        reg_payload["client_time"] = "Nov 05, 2026, 10:22 PM"
+
+        verify_res = self.client.post(
+            reverse("passkey_reg_verify"),
+            data=json.dumps(reg_payload),
+            content_type="application/json",
+            HTTP_USER_AGENT=ua_win,
+        )
+        self.assertEqual(verify_res.status_code, 200)
+
+        cred = PasskeyCredential.objects.filter(user=self.user).first()
+        self.assertIn("Windows PC (Chrome)", cred.name)
+        self.assertIn("Nov 05, 2026, 10:22 PM", cred.name)
+        self.assertEqual(cred.device_icon, "bi-windows text-info")
+
+        # 3. Profile view renders device icon and label
+        profile_res = self.client.get(reverse("profile", args=[self.user.enrollment_number]))
+        self.assertEqual(profile_res.status_code, 200)
+        self.assertContains(profile_res, "Windows PC (Chrome)")
+        self.assertContains(profile_res, "bi-windows")

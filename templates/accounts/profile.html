@@ -360,11 +360,29 @@
                         </div>
                         {% if registered_passkeys %}
                         <div class="mt-2 pt-2 border-top border-secondary">
-                            <div class="small fw-semibold text-secondary mb-1">Registered Passkeys:</div>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-semibold text-secondary">Registered Biometric Keys:</span>
+                                <span class="badge bg-secondary-subtle text-secondary small">{{ registered_passkeys|length }} Active</span>
+                            </div>
                             {% for pk in registered_passkeys %}
-                            <div class="d-flex justify-content-between align-items-center small py-1 px-2 mb-1 bg-dark bg-opacity-50 rounded border border-secondary border-opacity-50">
-                                <span><i class="bi bi-key-fill text-warning me-1"></i> {{ pk.name|default:"Passkey" }} <span class="text-white-50">({{ pk.created_at|date:"M j, Y" }})</span></span>
-                                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 small" onclick="deletePasskey({{ pk.id }})">
+                            <div class="d-flex justify-content-between align-items-center small py-2 px-3 mb-2 bg-dark bg-opacity-60 rounded border border-secondary border-opacity-50">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="fs-6">
+                                        <i class="bi {{ pk.device_icon }}"></i>
+                                    </div>
+                                    <div>
+                                        <div class="fw-semibold text-light" style="font-size: 0.85rem;">
+                                            {{ pk.name|default:"Biometric Key" }}
+                                        </div>
+                                        <div class="text-secondary" style="font-size: 0.75rem;">
+                                            <i class="bi bi-clock-history me-1"></i>Enrolled {{ pk.created_at|date:"M j, Y — h:i A" }}
+                                            {% if pk.last_used_at %}
+                                                &middot; Last used {{ pk.last_used_at|timesince }} ago
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2 small ms-2" onclick="deletePasskey({{ pk.id }})" title="Remove Passkey">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>
@@ -513,6 +531,57 @@ async function registerWebAuthnPasskey() {
 
         const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
 
+        function getDeviceOfOrigin() {
+            const ua = navigator.userAgent;
+            let os = 'Windows PC';
+            if (/Windows NT/i.test(ua)) {
+                os = 'Windows PC';
+            } else if (/iPhone/i.test(ua)) {
+                os = 'iPhone';
+            } else if (/iPad/i.test(ua)) {
+                os = 'iPad';
+            } else if (/Macintosh|Mac OS X/i.test(ua)) {
+                os = 'Mac';
+            } else if (/Android/i.test(ua)) {
+                os = 'Android';
+            } else if (/Linux/i.test(ua)) {
+                os = 'Linux';
+            } else if (/CrOS/i.test(ua)) {
+                os = 'Chromebook';
+            }
+
+            let browser = '';
+            if (/Edg\//i.test(ua)) {
+                browser = 'Edge';
+            } else if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) {
+                browser = 'Chrome';
+            } else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) {
+                browser = 'Safari';
+            } else if (/Firefox\//i.test(ua)) {
+                browser = 'Firefox';
+            } else if (/Opera|OPR\//i.test(ua)) {
+                browser = 'Opera';
+            }
+
+            return browser ? `${os} (${browser})` : os;
+        }
+
+        function getFormattedLocalTime() {
+            const now = new Date();
+            return now.toLocaleString('en-US', {
+                month: 'short',
+                day: '2-digit',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        const deviceOrigin = getDeviceOfOrigin();
+        const localTimeStr = getFormattedLocalTime();
+        const keyLabel = `${deviceOrigin} — ${localTimeStr}`;
+
         const verifyRes = await fetch("{% url 'passkey_reg_verify' %}", {
             method: 'POST',
             headers: {
@@ -528,16 +597,19 @@ async function registerWebAuthnPasskey() {
                     attestationObject: bufferToBase64url(credential.response.attestationObject),
                     transports: credential.response.getTransports ? credential.response.getTransports() : []
                 },
-                name: 'Windows Hello / Biometric Passkey',
+                device: deviceOrigin,
+                client_time: localTimeStr,
+                name: keyLabel,
             })
         });
 
         const verifyData = await verifyRes.json();
         if (verifyData.success) {
             statusDiv.className = 'small mt-2 text-success font-monospace';
-            statusDiv.textContent = 'Passkey active! 2-Factor Authentication enabled.';
+            statusDiv.textContent = `Passkey active (${keyLabel})! 2-Factor Authentication enabled.`;
             const switchEl = document.getElementById('twoFactorSwitch');
             if (switchEl) switchEl.checked = true;
+            setTimeout(() => { location.reload(); }, 1200);
         } else {
             throw new Error(verifyData.error || 'Failed to register passkey.');
         }

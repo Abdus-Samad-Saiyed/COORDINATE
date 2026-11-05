@@ -98,6 +98,18 @@
                         <i class="bi bi-fingerprint fs-5 text-warning"></i>
                         <span>Bypass with Windows Hello / Passkey</span>
                     </button>
+                    {% if registered_passkeys %}
+                        <div class="mt-2 text-center">
+                            <span class="text-secondary small d-block mb-1">Enrolled Biometric Keys:</span>
+                            <div class="d-flex flex-wrap justify-content-center gap-1">
+                                {% for pk in registered_passkeys %}
+                                    <span class="badge bg-dark border border-secondary text-light small py-1 px-2 font-monospace">
+                                        <i class="bi bi-key-fill text-warning me-1"></i>{{ pk.name }}
+                                    </span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
                     <div id="passkeyAuthStatus" class="small mt-2 text-center font-monospace" style="display: none;"></div>
                 </div>
 

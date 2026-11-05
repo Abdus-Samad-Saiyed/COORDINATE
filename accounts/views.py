@@ -492,6 +492,43 @@ def passkey_reg_challenge(request):
     })
 
 
+def get_device_of_origin_from_ua(user_agent: str) -> str:
+    """Extract human-readable device of origin and browser from User-Agent string."""
+    if not user_agent:
+        return "Biometric Key"
+    ua = user_agent
+    if "Windows" in ua:
+        device = "Windows PC"
+    elif "iPhone" in ua:
+        device = "iPhone"
+    elif "iPad" in ua:
+        device = "iPad"
+    elif "Macintosh" in ua or "Mac OS" in ua:
+        device = "Mac"
+    elif "Android" in ua:
+        device = "Android"
+    elif "Linux" in ua:
+        device = "Linux"
+    elif "CrOS" in ua:
+        device = "Chromebook"
+    else:
+        device = "Biometric Key"
+
+    if "Edg/" in ua:
+        browser = "Edge"
+    elif "Chrome/" in ua and "Edg/" not in ua:
+        browser = "Chrome"
+    elif "Safari/" in ua and "Chrome/" not in ua:
+        browser = "Safari"
+    elif "Firefox/" in ua:
+        browser = "Firefox"
+    elif "Opera" in ua or "OPR/" in ua:
+        browser = "Opera"
+    else:
+        browser = ""
+
+    return f"{device} ({browser})" if browser else device
+
 @login_required
 @rate_limit(key_prefix='passkey_reg_ver', limit=10, period_seconds=60)
 @require_POST
@@ -521,7 +558,40 @@ def passkey_reg_verify(request):
 
     try:
         data = json.loads(request.body.decode('utf-8'))
-        key_name = data.get('name', '').strip() or 'Windows Hello / Biometric Key'
+
+        # Label biometric keys by device of origin and time
+        device_origin = data.get('device') or data.get('device_name')
+        if not device_origin or device_origin in [
+            'Windows Hello / Biometric Key',
+            'Windows Hello / Biometric Passkey',
+            'Windows Hello Device',
+            'Biometric Key',
+            'Passkey',
+        ]:
+            ua_header = request.META.get('HTTP_USER_AGENT', '')
+            device_origin = get_device_of_origin_from_ua(ua_header)
+
+        client_time = data.get('client_time')
+        if not client_time:
+            now = timezone.localtime(timezone.now())
+            client_time = now.strftime("%b %d, %Y, %I:%M %p")
+
+        raw_name = data.get('name', '').strip()
+        default_placeholders = [
+            'Windows Hello / Biometric Key',
+            'Windows Hello / Biometric Passkey',
+            'Windows Hello Device',
+            'Passkey',
+            'Biometric Key',
+        ]
+        if raw_name and raw_name not in default_placeholders:
+            if "—" in raw_name or "•" in raw_name:
+                key_name = raw_name
+            else:
+                key_name = f"{raw_name} — {client_time}"
+        else:
+            key_name = f"{device_origin} — {client_time}"
+
         effective_origin, server_rp_id, _ = _get_webauthn_origin_and_rp_id(request)
 
         success, msg, cred_info = verify_passkey_registration(

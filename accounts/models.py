@@ -378,6 +378,22 @@ class PasskeyCredential(models.Model):
         verbose_name = 'Passkey Credential'
         verbose_name_plural = 'Passkey Credentials'
 
+    @property
+    def device_icon(self) -> str:
+        """Bootstrap icon class based on device of origin."""
+        name_lower = (self.name or '').lower()
+        if 'windows' in name_lower:
+            return 'bi-windows text-info'
+        elif any(k in name_lower for k in ['apple', 'mac', 'iphone', 'ipad', 'ios']):
+            return 'bi-apple text-light'
+        elif 'android' in name_lower:
+            return 'bi-android2 text-success'
+        elif 'linux' in name_lower or 'ubuntu' in name_lower:
+            return 'bi-ubuntu text-danger'
+        elif 'chromebook' in name_lower or 'cros' in name_lower:
+            return 'bi-laptop text-primary'
+        return 'bi-fingerprint text-warning'
+
     def __str__(self) -> str:
         return f'{self.name} — {self.user.enrollment_number}'
 
