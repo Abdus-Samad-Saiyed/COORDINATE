@@ -9,7 +9,7 @@ import json
 import logging
 import secrets
 from datetime import timedelta
-from typing import Tuple
+from typing import Optional, Tuple
 
 from django.conf import settings
 from django.utils import timezone
@@ -423,11 +423,11 @@ def verify_passkey_assertion(
     credential_id: str,
     client_data_json_b64: str = '',
     session_challenge: str = '',
-    signature: str = None,
-    authenticator_data_b64: str = None,
-    full_credential: dict = None,
-    expected_rp_id: str = None,
-    expected_origin: str = None,
+    signature: Optional[str] = None,
+    authenticator_data_b64: Optional[str] = None,
+    full_credential: Optional[dict] = None,
+    expected_rp_id: Optional[str] = None,
+    expected_origin: Optional[str] = None,
 ) -> Tuple[bool, str]:
     """
     Validate WebAuthn client assertion using py_webauthn library verification.

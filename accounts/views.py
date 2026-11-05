@@ -1024,7 +1024,8 @@ def profile_view(request, enrollment_number):
                 img.verify()
                 photo.seek(0)
                 img = Image.open(photo)
-                if img.format.lower() not in ('jpeg', 'png', 'webp'):
+                img_format = (img.format or '').lower()
+                if img_format not in ('jpeg', 'png', 'webp'):
                     messages.error(request, "Invalid or unsupported image format.")
                     return redirect('profile', enrollment_number=profile_user.enrollment_number)
             except Exception:
@@ -1047,7 +1048,7 @@ def profile_view(request, enrollment_number):
                 size=buffer.getbuffer().nbytes,
                 charset=None,
             )
-            profile_user.profile_photo = clean_photo
+            setattr(profile_user, 'profile_photo', clean_photo)
         # Phone number update
         if new_phone:
             norm_phone = normalize_phone_number(new_phone)
@@ -1136,7 +1137,7 @@ def profile_view(request, enrollment_number):
         .order_by('-created_at')[:5]
     )
 
-    registered_passkeys = list(profile_user.passkey_credentials.all()) if is_self else []
+    registered_passkeys = list(PasskeyCredential.objects.filter(user=profile_user)) if is_self else []
     return render(request, 'accounts/profile.html', {
         'profile_user': profile_user,
         'registered_passkeys': registered_passkeys,
@@ -1191,17 +1192,17 @@ def user_search(request):
     sent_request_ids = set(
         FriendRequest.objects.filter(sender=request.user).values_list('receiver_id', flat=True)
     )
-    incoming_requests_map = {
-        fr.sender_id: fr.id for fr in FriendRequest.objects.filter(receiver=request.user)
-    }
+    incoming_requests_map = dict(
+        FriendRequest.objects.filter(receiver=request.user).values_list('sender_id', 'id')
+    )
 
     student_list = []
     for s in students_qs:
         student_list.append({
             'student': s,
-            'is_friend': s.id in friend_ids,
-            'request_sent': s.id in sent_request_ids,
-            'incoming_request_id': incoming_requests_map.get(s.id),
+            'is_friend': s.pk in friend_ids,
+            'request_sent': s.pk in sent_request_ids,
+            'incoming_request_id': incoming_requests_map.get(s.pk),
         })
 
     return render(request, 'accounts/user_search.html', {
@@ -1311,13 +1312,13 @@ def messages_inbox(request):
         Q(user1=request.user) | Q(user2=request.user)
     ).select_related('user1', 'user2')
     friends_list = [f.user2 if f.user1 == request.user else f.user1 for f in friendships]
-    friend_ids = {f.id for f in friends_list}
+    friend_ids = {f.pk for f in friends_list}
 
     # Include former friends with chat history
     dm_sent_to = set(DirectMessage.objects.filter(sender=request.user).values_list('recipient_id', flat=True))
     dm_rcvd_from = set(DirectMessage.objects.filter(recipient=request.user).values_list('sender_id', flat=True))
     all_chat_partner_ids = friend_ids | dm_sent_to | dm_rcvd_from
-    all_chat_users = User.objects.filter(id__in=all_chat_partner_ids).distinct()
+    all_chat_users = User.objects.filter(pk__in=all_chat_partner_ids).distinct()
 
     # Batch-fetch unread counts across all senders (1 query)
     unread_counts = dict(
@@ -1339,20 +1340,25 @@ def messages_inbox(request):
         .values('id')[:1]
     )
 
-    annotated_users = all_chat_users.annotate(latest_msg_id=Subquery(latest_msg_subquery))
-    user_latest_ids = {u.id: u.latest_msg_id for u in annotated_users if u.latest_msg_id}
+    user_latest_ids = {
+        user_pk: msg_id
+        for user_pk, msg_id in all_chat_users.annotate(
+            latest_msg_id=Subquery(latest_msg_subquery)
+        ).values_list('pk', 'latest_msg_id')
+        if msg_id
+    }
 
     latest_messages = {
-        m.id: m
-        for m in DirectMessage.objects.filter(id__in=user_latest_ids.values()).select_related('sender', 'recipient')
+        m.pk: m
+        for m in DirectMessage.objects.filter(pk__in=user_latest_ids.values()).select_related('sender', 'recipient')
     }
 
     conversations = []
     for friend in all_chat_users:
         conversations.append({
             'friend': friend,
-            'latest_message': latest_messages.get(user_latest_ids.get(friend.id)),
-            'unread_count': unread_counts.get(friend.id, 0),
+            'latest_message': latest_messages.get(user_latest_ids.get(friend.pk)),
+            'unread_count': unread_counts.get(friend.pk, 0),
         })
 
     conversations.sort(
