@@ -13,6 +13,7 @@ import os
 from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.management import call_command, load_command_class
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -133,6 +134,7 @@ class EarlyLaunchViewTests(TestCase):
     """Test HTTP views and templates under Early Launch Mode."""
 
     def setUp(self):
+        cache.clear()
         self.client = Client()
 
     @override_settings(EARLY_LAUNCH_MODE=True)
@@ -420,6 +422,7 @@ class TemporaryUserPermanentApplicationTests(TestCase):
     """Test authenticated temporary users applying for permanent verified ID and elevation."""
 
     def setUp(self):
+        cache.clear()
         self.admin = User.objects.create_superuser(
             username="2020BCSE001",
             enrollment_number="2020BCSE001",

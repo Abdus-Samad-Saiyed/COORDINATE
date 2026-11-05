@@ -875,3 +875,49 @@ class RideWorkflowTests(TestCase):
         self.assertRedirects(resp_self_kick, reverse('ride_detail', args=[ride.id]))
         ride.refresh_from_db()
         self.assertEqual(ride.total_spots, 3)
+
+    def test_ride_list_displays_host_name_and_enrollment_and_joined_riders(self):
+        """Verify that students browsing rides see the host's full name & enrollment and joined riders' full names & enrollments."""
+        self.creator.first_name = 'Farhan'
+        self.creator.last_name = 'Qureshi'
+        self.creator.save()
+
+        self.other.first_name = 'Raju'
+        self.other.last_name = 'Rastogi'
+        self.other.save()
+
+        ride = self.create_ride(total_spots=4)
+        RideParticipant.objects.create(ride=ride, user=self.other)
+        ride.sync_status()
+
+        # Spectator browsing rides
+        spectator = User.objects.create_user(
+            username='Spectator',
+            enrollment_number='2024BCSE999',
+            first_name='Rancho',
+            last_name='Chanchad',
+            gender='M',
+            phone_number='9999900000',
+            password='password123',
+            verified=True,
+        )
+        self.client.force_login(spectator)
+
+        resp = self.client.get(reverse('ride_list'))
+        self.assertEqual(resp.status_code, 200)
+
+        # Host name and enrollment displayed
+        self.assertContains(resp, 'Farhan Qureshi (2024BCSE001)')
+        # Joined rider name and enrollment displayed
+        self.assertContains(resp, 'Raju Rastogi (2024BCSE002)')
+
+        # API serialization also contains host and participants
+        from campus.api.serializers import serialize_ride
+        serialized = serialize_ride(ride, request_user=spectator)
+        self.assertEqual(serialized['creator']['enrollment_number'], '2024BCSE001')
+        self.assertEqual(serialized['creator']['name'], 'Farhan Qureshi')
+
+        participant_names = [p['name'] for p in serialized['participants']]
+        participant_enrollments = [p['enrollment_number'] for p in serialized['participants']]
+        self.assertIn('Raju Rastogi', participant_names)
+        self.assertIn('2024BCSE002', participant_enrollments)

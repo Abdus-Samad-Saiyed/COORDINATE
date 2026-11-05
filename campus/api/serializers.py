@@ -39,7 +39,18 @@ def serialize_user(user: User, include_stats: bool = False) -> Dict[str, Any]:
 
 
 def serialize_ride(ride: RideRequest, request_user: Optional[User] = None) -> Dict[str, Any]:
-    """Serialize ride summary for lists and cards."""
+    """Serialize ride summary for lists and cards, including host and joined participants."""
+    participants = []
+    for p in ride.participants.filter(status='CONFIRMED').select_related('user'):
+        u = p.user
+        can_see_id = not request_user or can_view_ride_identity(request_user, ride, u)
+        participants.append({
+            "enrollment_number": u.enrollment_number if can_see_id else "PROTECTED",
+            "name": u.display_name if can_see_id else (f"Student ({u.gender})" if u.gender else "Student"),
+            "gender": u.gender,
+            "is_creator": u.pk == ride.creator_id,
+        })
+
     data = {
         "id": ride.id,
         "route": ride.route,
@@ -57,48 +68,26 @@ def serialize_ride(ride: RideRequest, request_user: Optional[User] = None) -> Di
             "name": ride.creator.display_name if not request_user or can_view_ride_identity(request_user, ride, ride.creator) else (f"Student ({ride.creator.gender})" if ride.creator.gender else "Student"),
             "gender": ride.creator.gender,
         },
+        "participants": participants,
     }
     if request_user:
-        data["is_user_participant"] = ride.participants.filter(user=request_user).exists()
+        data["is_user_participant"] = any(p["enrollment_number"] == getattr(request_user, 'enrollment_number', None) for p in participants)
         data["is_user_creator"] = ride.creator_id == request_user.pk
     return data
 
 
 def serialize_ride_detail(ride: RideRequest, request_user: Optional[User] = None) -> Dict[str, Any]:
     """Serialize full ride details including confirmed participants with affirmative consent contact controls."""
-    from coordinate.policies import can_view_ride_contact, can_view_ride_identity
+    from coordinate.policies import can_view_ride_contact
 
     data = serialize_ride(ride, request_user=request_user)
-    data["participant_count"] = ride.participants.count()
+    data["participant_count"] = len(data.get("participants", []))
 
-    is_confirmed_participant = False
-    is_host = False
-    if request_user and request_user.is_authenticated:
-        is_host = (ride.creator_id == request_user.pk)
-        is_confirmed_participant = is_host or ride.participants.filter(user=request_user).exists()
-        is_staff_override = request_user.is_staff or request_user.is_superuser
-    else:
-        is_staff_override = False
-
-    participants = []
-    for p in ride.participants.filter(status='CONFIRMED').select_related('user'):
+    # Add contact details for authorized participants
+    for p_info, p in zip(data["participants"], ride.participants.filter(status='CONFIRMED').select_related('user')):
         u = p.user
-        is_p_creator = (u.pk == ride.creator_id)
-
-        # Spectator Privacy Boundary (Manifesto §3): Spectators cannot view passenger rosters
-        if not (is_confirmed_participant or is_staff_override) and not is_p_creator:
-            continue
-        can_see_id = not request_user or can_view_ride_identity(request_user, ride, u)
-        p_info = {
-            "enrollment_number": u.enrollment_number if can_see_id else "PROTECTED",
-            "name": u.display_name if can_see_id else (f"Student ({u.gender})" if u.gender else "Student"),
-            "gender": u.gender,
-            "is_creator": u.pk == ride.creator_id,
-        }
         if request_user and can_view_ride_contact(request_user, ride, u):
             p_info["phone_number"] = u.phone_number
             p_info["email"] = u.email
 
-        participants.append(p_info)
-    data["participants"] = participants
     return data

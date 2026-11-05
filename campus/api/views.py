@@ -302,7 +302,7 @@ def api_ride_list(request: HttpRequest) -> JsonResponse:
         RideRequest.objects
         .filter(status="OPEN", departure_time__gt=now)
         .select_related("creator")
-        .prefetch_related("participants")
+        .prefetch_related("participants__user")
         .order_by("departure_time")
     )
 
@@ -380,7 +380,7 @@ def api_ride_detail(request: HttpRequest, ride_id: int) -> JsonResponse:
         RideRequest.objects
         .filter(pk=ride_id)
         .select_related("creator")
-        .prefetch_related("participants")
+        .prefetch_related("participants__user")
         .first()
     )
     if not ride:

@@ -30,7 +30,22 @@
                                     <span class="text-secondary small">{{ ride.departure_time|date:"M j, H:i" }}</span>
                                 </div>
                                 <h5 class="fw-bold mb-1">{{ ride.route_display }}</h5>
-                                <p class="text-secondary small mb-3">Host: {{ ride.creator.enrollment_number }} &middot; {{ ride.participant_count }}/{{ ride.total_spots }} spots</p>
+                                <p class="text-secondary small mb-2">
+                                    Host: <strong>{% if ride.creator.get_full_name %}{{ ride.creator.get_full_name }} ({{ ride.creator.enrollment_number }}){% else %}{{ ride.creator.enrollment_number }}{% endif %}</strong>
+                                    &middot; {{ ride.participant_count }}/{{ ride.total_spots }} spots
+                                </p>
+                                {% if ride.co_riders %}
+                                    <div class="small text-secondary mb-3">
+                                        <span class="d-block mb-1"><i class="bi bi-people-fill me-1"></i>Joined Riders:</span>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            {% for p in ride.co_riders %}
+                                                <span class="badge bg-dark border border-secondary text-light py-1 px-2">
+                                                    {% if p.user.get_full_name %}{{ p.user.get_full_name }} ({{ p.user.enrollment_number }}){% else %}{{ p.user.enrollment_number }}{% endif %}
+                                                </span>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                {% endif %}
                             </div>
                             <a href="{% url 'ride_detail' ride.id %}" class="btn btn-outline-green btn-sm w-100">
                                 <i class="bi bi-chat-dots me-1"></i> Open Ride & Chat
@@ -69,7 +84,7 @@
                                 <tr>
                                     <td><strong>{{ ride.route_display }}</strong></td>
                                     <td>{{ ride.departure_time|date:"M j, Y — H:i" }}</td>
-                                    <td>{{ ride.creator.enrollment_number }}</td>
+                                    <td>{% if ride.creator.get_full_name %}{{ ride.creator.get_full_name }} ({{ ride.creator.enrollment_number }}){% else %}{{ ride.creator.enrollment_number }}{% endif %}</td>
                                     <td>
                                         {% if ride.status == 'COMPLETED' %}
                                             <span class="badge bg-info-subtle text-info">Completed</span>

@@ -131,23 +131,15 @@ def can_view_ride_identity(viewer: Optional[User], ride, target_user: User) -> b
     if not can_view_ride(viewer, ride):
         return False
 
-    from .models import RideConsent
+    from .models import RideConsent, RideParticipant, ParticipantStatus
 
-    # Host identity is discoverable by verified students allowed to see the ride (Manifesto Section 2.II.3)
-    if target_user.pk == ride.creator_id:
-        consent = RideConsent.objects.filter(ride=ride, user=target_user, is_revoked=False).first()
-        if consent and not consent.disclose_ride_identity:
-            return False
-        return True
-
-    # Co-passenger identity: Spectators cannot view passenger identities (Manifesto Section 3)
-    is_confirmed_participant = (viewer.pk == ride.creator_id) or ride.participants.filter(user=viewer).exists()
-    if not is_confirmed_participant:
+    # Fail closed if participant record indicates explicit revocation
+    rp = RideParticipant.all_rows.filter(ride=ride, user=target_user, status=ParticipantStatus.CONFIRMED).first()
+    if rp and rp.is_revoked:
         return False
 
-    # Fail-closed consent check: Active affirmative consent required
     consent = RideConsent.objects.filter(ride=ride, user=target_user, is_revoked=False).first()
-    if not consent or not consent.disclose_ride_identity:
+    if consent and not consent.disclose_ride_identity:
         return False
 
     return True

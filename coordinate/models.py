@@ -115,6 +115,20 @@ class RideRequest(models.Model):
         return self.participant_count() >= self.total_spots
 
     @property
+    def co_riders(self):
+        """Confirmed participants excluding the creator/host."""
+        if not self.pk:
+            return []
+        return [p for p in self.participants.all() if p.user_id != self.creator_id]
+
+    @property
+    def confirmed_participants(self):
+        """All confirmed participants in the ride."""
+        if not self.pk:
+            return []
+        return list(self.participants.all())
+
+    @property
     def kicked_users_qs(self):
         return User.objects.filter(ride_participations__ride=self, ride_participations__status=ParticipantStatus.KICKED)
 

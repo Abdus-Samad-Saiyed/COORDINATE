@@ -119,8 +119,18 @@
                     <h3 class="fw-bold mb-1">{{ active_participation.ride.route_display }}</h3>
                     <p class="text-secondary small mb-0">
                         <i class="bi bi-clock-fill me-1"></i> {{ active_participation.ride.departure_time|date:"l, F j — h:i A" }}
-                        &middot; Host: <strong>{{ active_participation.ride.creator.enrollment_number }}</strong>
+                        &middot; Host: <strong>{% if active_participation.ride.creator.get_full_name %}{{ active_participation.ride.creator.get_full_name }} ({{ active_participation.ride.creator.enrollment_number }}){% else %}{{ active_participation.ride.creator.enrollment_number }}{% endif %}</strong>
                     </p>
+                    {% if active_participation.ride.co_riders %}
+                        <div class="small text-secondary mt-2">
+                            <span><i class="bi bi-people-fill me-1"></i>Joined Riders:</span>
+                            {% for p in active_participation.ride.co_riders %}
+                                <span class="badge bg-dark border border-secondary text-light ms-1">
+                                    {% if p.user.get_full_name %}{{ p.user.get_full_name }} ({{ p.user.enrollment_number }}){% else %}{{ p.user.enrollment_number }}{% endif %}
+                                </span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
                 </div>
                 <div>
                     <a href="{% url 'ride_detail' active_participation.ride.id %}" class="btn btn-green px-4">

@@ -250,6 +250,12 @@ def ride_list(request):
         RideRequest.objects
         .filter(status__in=['OPEN', 'FULL'])
         .select_related('creator')
+        .prefetch_related(
+            Prefetch(
+                'participants',
+                queryset=RideParticipant.objects.filter(status=ParticipantStatus.CONFIRMED).select_related('user'),
+            )
+        )
         .annotate(participants_total=Count('participants', filter=Q(participants__status='CONFIRMED')))
     )
 
@@ -466,7 +472,12 @@ def my_rides(request):
         RideParticipant.objects
         .filter(user=request.user)
         .select_related('ride', 'ride__creator')
-        .prefetch_related('ride__participants')
+        .prefetch_related(
+            Prefetch(
+                'ride__participants',
+                queryset=RideParticipant.objects.filter(status=ParticipantStatus.CONFIRMED).select_related('user'),
+            )
+        )
         .order_by('-ride__departure_time')
     )
 
