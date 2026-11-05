@@ -8,6 +8,7 @@ and will not be stored permanently or conflict with real accounts.
 import os
 from django.conf import settings
 from django.core.management import call_command
+from django.db import connections
 from daphne.management.commands.runserver import Command as DaphneRunserverCommand
 
 
@@ -29,38 +30,47 @@ class Command(DaphneRunserverCommand):
             os.environ['CAMPUS_EARLY_LAUNCH_MODE'] = 'True'
             settings.EARLY_LAUNCH_MODE = True
 
-            # Ensure settings DATABASES is pointed to temporary database
+            # Safely configure DATABASES using connections.configure_settings to guarantee all Django keys (TIME_ZONE, etc.)
             early_db_path = getattr(settings, 'EARLY_LAUNCH_DB_PATH', settings.BASE_DIR / 'temp_early_access.sqlite3')
             import environ
             env = environ.Env()
             if 'permanent' not in settings.DATABASES:
                 settings.DATABASES['permanent'] = dict(settings.DATABASES['default'])
-            settings.DATABASES['default'] = env.db(
+
+            temp_config = env.db(
                 'EARLY_LAUNCH_DATABASE_URL',
                 default=f'sqlite:///{early_db_path}'
             )
+            # Use configure_settings to ensure TIME_ZONE, CONN_MAX_AGE, etc. are populated
+            configured = connections.configure_settings({'default': temp_config})
+            settings.DATABASES['default'] = configured['default']
 
-            # Auto-migrate the temporary database schema
-            self.stdout.write(self.style.MIGRATE_HEADING("Auto-migrating temporary database (temp_early_access.sqlite3)..."))
-            call_command('migrate', database='default', interactive=False, verbosity=0)
+            # Reset connection handler for 'default' so it uses the configured dictionary
+            connections.close_all()
+            if 'default' in connections:
+                del connections['default']
 
-            # Sync superusers from permanent DB if present
-            self._sync_superusers_to_temp_db()
+            # Only run migrations & print banner once (in worker process if autoreload, or parent if no reload)
+            is_worker = os.environ.get('RUN_MAIN') == 'true' or not options.get('use_reloader', True)
+            if is_worker:
+                self.stdout.write(self.style.MIGRATE_HEADING("Auto-migrating temporary database (temp_early_access.sqlite3)..."))
+                call_command('migrate', database='default', interactive=False, verbosity=0)
+                self._sync_superusers_to_temp_db()
 
-            self.stdout.write(self.style.WARNING(
-                "\n" + "=" * 70 + "\n"
-                "CAMPUS NEXUS — EARLY LAUNCH MODE ACTIVE (TEMPORARY DATABASE)\n"
-                "  * Isolated database: temp_early_access.sqlite3\n"
-                "  * Permanent database is untouched; zero conflict with real accounts.\n"
-                "  * Self-declared accounts are untrusted (verified=False).\n"
-                "  * Account records will NOT be stored permanently.\n"
-                + "=" * 70 + "\n"
-            ))
+                self.stdout.write(self.style.WARNING(
+                    "\n" + "=" * 70 + "\n"
+                    "CAMPUS NEXUS — EARLY LAUNCH MODE ACTIVE (TEMPORARY DATABASE)\n"
+                    "  * Isolated database: temp_early_access.sqlite3\n"
+                    "  * Permanent database is untouched; zero conflict with real accounts.\n"
+                    "  * Self-declared accounts are untrusted (verified=False).\n"
+                    "  * Account records will NOT be stored permanently.\n"
+                    + "=" * 70 + "\n"
+                ))
+
         super().handle(*args, **options)
 
     def _sync_superusers_to_temp_db(self):
         """Seed or copy administrative superusers into temporary DB for administrative access."""
-        from django.db import connections
         from accounts.models import User
         try:
             if 'permanent' in connections:

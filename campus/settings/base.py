@@ -3,6 +3,7 @@ Django base settings for COORDINATE.
 """
 
 import os
+import sys
 import environ
 from pathlib import Path
 
@@ -98,9 +99,10 @@ TEMPLATES = [
 # Untrusted self-declared accounts are stored temporarily and will not conflict with real accounts.
 # Can be toggled via CLI: python manage.py runserver --early-launch
 # Or via environment variable: EARLY_LAUNCH_MODE=True
-EARLY_LAUNCH_MODE = env.bool(
-    'EARLY_LAUNCH_MODE',
-    default=os.environ.get('CAMPUS_EARLY_LAUNCH_MODE', 'False').lower() in ('true', '1', 'yes')
+EARLY_LAUNCH_MODE = (
+    '--early-launch' in sys.argv
+    or os.environ.get('CAMPUS_EARLY_LAUNCH_MODE', '').lower() in ('true', '1', 'yes')
+    or env.bool('EARLY_LAUNCH_MODE', default=False)
 )
 
 EARLY_LAUNCH_DB_PATH = BASE_DIR / 'temp_early_access.sqlite3'
