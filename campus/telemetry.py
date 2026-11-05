@@ -4,9 +4,11 @@ Tracks server traffic, throughput, response latency, and generates operational m
 requests today, average daily requests, unique user sign-ins today, and interval telemetry.
 """
 
+import asyncio
 import threading
 import time
 from datetime import datetime, timedelta
+from asgiref.sync import iscoroutinefunction
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -22,12 +24,18 @@ KEY_WINDOW_REQ_COUNT = 'nexus_telemetry_window_req_count'
 
 
 class TrafficTelemetryMiddleware:
-    """Lightweight, thread-safe request telemetry middleware."""
+    """Lightweight, thread-safe request telemetry middleware supporting sync and ASGI async."""
+    sync_capable = True
+    async_capable = True
 
     def __init__(self, get_response):
         self.get_response = get_response
+        self.async_mode = iscoroutinefunction(self.get_response)
 
     def __call__(self, request):
+        if self.async_mode:
+            return self.__acall__(request)
+
         # Ignore static and media asset requests from traffic count
         path = request.path_info
         if path.startswith('/static/') or path.startswith('/media/') or path == '/favicon.ico':
@@ -38,6 +46,26 @@ class TrafficTelemetryMiddleware:
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
         # Record metrics safely without blocking response
+        try:
+            self._record_request_telemetry(elapsed_ms)
+        except Exception:
+            pass
+
+        return response
+
+    async def __acall__(self, request):
+        path = request.path_info
+        if path.startswith('/static/') or path.startswith('/media/') or path == '/favicon.ico':
+            return await self.get_response(request)
+
+        start_time = time.perf_counter()
+        try:
+            response = await self.get_response(request)
+        except asyncio.CancelledError:
+            # Cleanly handle client disconnect / navigation abort without tracebacks
+            raise
+        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+
         try:
             self._record_request_telemetry(elapsed_ms)
         except Exception:
@@ -61,21 +89,25 @@ class TrafficTelemetryMiddleware:
             if not cache.add(hour_key, 1, timeout=3600 * 4):
                 cache.incr(hour_key)
 
-            with _LOCK:
-                tot_lat = cache.get(KEY_TOTAL_LATENCY_MS, 0.0)
-                cache.set(KEY_TOTAL_LATENCY_MS, tot_lat + latency_ms, timeout=None)
+            # Non-blocking lock prevents request queuing and thread contention
+            if _LOCK.acquire(blocking=False):
+                try:
+                    tot_lat = cache.get(KEY_TOTAL_LATENCY_MS, 0.0)
+                    cache.set(KEY_TOTAL_LATENCY_MS, tot_lat + latency_ms, timeout=None)
 
-                now_sec = int(time.time())
-                window_ts = cache.get(KEY_LAST_WINDOW_TS, 0)
-                if now_sec == window_ts:
-                    win_count = cache.get(KEY_WINDOW_REQ_COUNT, 0) + 1
-                    cache.set(KEY_WINDOW_REQ_COUNT, win_count, timeout=10)
-                    peak = cache.get(KEY_PEAK_RPS, 0)
-                    if win_count > peak:
-                        cache.set(KEY_PEAK_RPS, win_count, timeout=None)
-                else:
-                    cache.set(KEY_LAST_WINDOW_TS, now_sec, timeout=10)
-                    cache.set(KEY_WINDOW_REQ_COUNT, 1, timeout=10)
+                    now_sec = int(time.time())
+                    window_ts = cache.get(KEY_LAST_WINDOW_TS, 0)
+                    if now_sec == window_ts:
+                        win_count = cache.get(KEY_WINDOW_REQ_COUNT, 0) + 1
+                        cache.set(KEY_WINDOW_REQ_COUNT, win_count, timeout=10)
+                        peak = cache.get(KEY_PEAK_RPS, 0)
+                        if win_count > peak:
+                            cache.set(KEY_PEAK_RPS, win_count, timeout=None)
+                    else:
+                        cache.set(KEY_LAST_WINDOW_TS, now_sec, timeout=10)
+                        cache.set(KEY_WINDOW_REQ_COUNT, 1, timeout=10)
+                finally:
+                    _LOCK.release()
         except Exception:
             pass
 

@@ -156,10 +156,10 @@
       }
     }
 
-    // Sync Zen Page Transitions Switch
+    // Sync Zen Page Transitions Switch (off by default)
     const zenTransitionsSwitch = document.getElementById('fx-zen-transitions-switch');
     if (zenTransitionsSwitch) {
-      const zenTransitionsEnabled = localStorage.getItem('nexus_zen_transitions') !== 'false';
+      const zenTransitionsEnabled = localStorage.getItem('nexus_zen_transitions') === 'true';
       zenTransitionsSwitch.checked = zenTransitionsEnabled;
     }
   }
@@ -906,8 +906,8 @@
       // Left click only, without modifier keys
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 
-      // Check if user has enabled Zen Page Transitions (default: true)
-      if (localStorage.getItem('nexus_zen_transitions') === 'false') return;
+      // Check if user has enabled Zen Page Transitions (default: false, strictly opt-in)
+      if (localStorage.getItem('nexus_zen_transitions') !== 'true') return;
 
       const anchor = e.target.closest('a');
       if (!anchor) return;
@@ -1041,11 +1041,10 @@
       sessionStorage.setItem('nexus_zen_transition_state', 'incoming');
       sessionStorage.setItem('nexus_zen_target_route', targetRoute);
 
-      // 3. Crisp Zen hold: panicking box rockets out by ~650ms,
-      //    then hold in pure clockwork Zen for ~230ms before navigating (total ~880ms)
+      // 3. Crisp Zen hold: brief snappy scatter before navigating
       setTimeout(() => {
         window.location.href = anchor.href;
-      }, 880);
+      }, 180);
     });
 
     // Reset if restored from bfcache or back button
@@ -1077,6 +1076,7 @@
     const prefersReducedMotion = reducedMotionQuery ? reducedMotionQuery.matches : false;
 
     // Smooth real-time clock and ambient slight-speed mechanical gear loop
+    let cachedGears = Array.from(document.querySelectorAll('.gear-edge'));
     function animateLoop() {
       const now = new Date();
       const angles = calculateClockAngles(now);
@@ -1086,8 +1086,12 @@
       gearImpulse *= 0.95;
       ambientGearAngle += 0.035 + (gearImpulse * 0.04);
 
-      const allGears = document.querySelectorAll('.gear-edge');
-      allGears.forEach(function (gear, idx) {
+      if (cachedGears.length === 0) {
+        cachedGears = Array.from(document.querySelectorAll('.gear-edge'));
+      }
+
+      for (let idx = 0; idx < cachedGears.length; idx++) {
+        const gear = cachedGears[idx];
         const cx = gear.getAttribute('data-cx');
         const cy = gear.getAttribute('data-cy');
         const speed = parseFloat(gear.getAttribute('data-speed') || ((idx % 2 === 0) ? '1' : '-1'));
@@ -1098,7 +1102,7 @@
         } else {
           gear.style.transform = `rotate(${totalAngle.toFixed(2)}deg)`;
         }
-      });
+      }
 
       if (!prefersReducedMotion) {
         requestAnimationFrame(animateLoop);
