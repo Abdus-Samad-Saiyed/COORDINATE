@@ -1018,10 +1018,18 @@ def dashboard(request):
             approved=False,
         ).first()
 
+    incoming_friend_requests = (
+        FriendRequest.objects
+        .filter(receiver=request.user)
+        .select_related('sender')
+        .order_by('-created_at')
+    )
+
     return render(request, 'accounts/dashboard.html', {
         'active_participation': active_participation,
         'services': get_all_services(),
         'pending_application': pending_application,
+        'incoming_friend_requests': incoming_friend_requests,
     })
 
 
@@ -1735,7 +1743,8 @@ def send_friend_request(request, enrollment_number):
         enrollment_number=enrollment_number.strip().upper(),
     )
 
-    if not target.is_active or getattr(target, 'is_deleted', False) or not target.verified:
+    from coordinate.policies import is_verified_student
+    if not target.is_active or getattr(target, 'is_deleted', False) or not is_verified_student(target):
         messages.error(request, "This student account is not available for friend connections.")
         return redirect('user_search')
 
@@ -1784,7 +1793,8 @@ def accept_friend_request(request, request_id):
         receiver=request.user,
     )
 
-    if not friend_request.sender.is_active or getattr(friend_request.sender, 'is_deleted', False) or not friend_request.sender.verified:
+    from coordinate.policies import is_verified_student
+    if not friend_request.sender.is_active or getattr(friend_request.sender, 'is_deleted', False) or not is_verified_student(friend_request.sender):
         friend_request.delete()
         messages.error(request, "This student account is no longer active.")
         return redirect('profile', enrollment_number=request.user.enrollment_number)

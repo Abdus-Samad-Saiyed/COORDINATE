@@ -449,6 +449,11 @@
                         <li class="nav-item">
                             <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active fw-semibold{% endif %}" href="{% url 'dashboard' %}">
                                 <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                                {% if incoming_friend_requests_count > 0 %}
+                                    <span class="badge rounded-pill bg-warning text-dark ms-1" style="font-size: 0.65rem;" title="{{ incoming_friend_requests_count }} incoming friend request{{ incoming_friend_requests_count|pluralize }}">
+                                        {{ incoming_friend_requests_count }}
+                                    </span>
+                                {% endif %}
                             </a>
                         </li>
                         <li class="nav-item">

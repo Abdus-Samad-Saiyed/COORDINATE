@@ -34,7 +34,24 @@ class Command(BaseCommand):
                 return
 
         try:
-            from django.db import connections
+            from django.db import connections, models
+            from accounts.models import Friendship, FriendRequest
+            for db_name in ['permanent', 'default']:
+                if db_name in connections:
+                    try:
+                        deleted_fr, _ = FriendRequest.objects.using(db_name).filter(
+                            models.Q(sender__verified=False) | models.Q(receiver__verified=False)
+                        ).delete()
+                        deleted_fs, _ = Friendship.objects.using(db_name).filter(
+                            models.Q(user1__verified=False) | models.Q(user2__verified=False)
+                        ).delete()
+                        if deleted_fr or deleted_fs:
+                            self.stdout.write(self.style.SUCCESS(
+                                f"Scrubbed {deleted_fs} temporary friendships and {deleted_fr} temporary friend requests from '{db_name}' database."
+                            ))
+                    except Exception:
+                        pass
+
             for conn in connections.all():
                 conn.close()
             os.remove(temp_db_path)

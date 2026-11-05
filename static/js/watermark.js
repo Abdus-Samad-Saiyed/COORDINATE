@@ -644,8 +644,20 @@
           // If section is a standard row of column cards (without its own glass/card container wrapper)
           if (section.matches('.row') && !section.classList.contains('glass') && !section.classList.contains('card')) {
             Array.from(section.children).forEach(col => {
-              const card = col.querySelector('.glass, .card') || col;
-              targets.push(card);
+              // Collect all direct children of the column that are glass/card blocks (e.g. User Info + Friends, or Reliability + Peer Reviews on profile pages)
+              const directCards = Array.from(col.children).filter(child => child.classList.contains('glass') || child.classList.contains('card'));
+              if (directCards.length > 0) {
+                directCards.forEach(c => targets.push(c));
+              } else {
+                // If cards are nested deeper, collect top-level cards
+                const allCards = Array.from(col.querySelectorAll('.glass, .card'));
+                if (allCards.length > 0) {
+                  const topCards = allCards.filter(c => !allCards.some(other => other !== c && other.contains(c)));
+                  topCards.forEach(c => targets.push(c));
+                } else {
+                  targets.push(col);
+                }
+              }
             });
           } else {
             // Direct composite card (e.g. Campus Utilities div.glass.p-4.mt-4),
@@ -656,10 +668,13 @@
       });
     }
 
-    // Deduplicate and filter out restore banner or watermark
+    // Deduplicate and filter out restore banner, watermark, or modals
     let uniqueTargets = Array.from(new Set(targets)).filter(el => {
       if (!el || typeof el.closest !== 'function') return false;
-      return !el.closest('#zen-restore-banner') && !el.closest('.clockwork-watermark-container');
+      return !el.closest('#zen-restore-banner') &&
+             !el.closest('.clockwork-watermark-container') &&
+             !el.classList.contains('modal') &&
+             !el.closest('.modal');
     });
 
     // Ensure no element is contained inside another target element (keep only the topmost container)

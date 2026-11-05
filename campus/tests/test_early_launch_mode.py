@@ -527,3 +527,85 @@ class TemporaryUserPermanentApplicationTests(TestCase):
 
             # Pending application is consumed/purged upon approval
             self.assertFalse(AccountApplication.objects.filter(id=app.id).exists())
+
+
+class TemporaryUserFriendshipTests(TestCase):
+    """Test temporary users forming friendships during Early Launch mode and purging behavior."""
+
+    def setUp(self):
+        from accounts.models import FriendRequest, Friendship
+        self.verified_user = User.objects.create_user(
+            username="2022BCSE101",
+            enrollment_number="2022BCSE101",
+            email="verified101@nitsri.ac.in",
+            password="VerifiedPassword123!",
+            verified=True,
+            is_active=True,
+            phone_number="+919876543201",
+            first_name="Aamir",
+            last_name="Lone",
+        )
+        self.temp_user = User.objects.create_user(
+            username="2024BCSE999",
+            enrollment_number="2024BCSE999",
+            email="temp999@nitsri.ac.in",
+            password="TempPassword123!",
+            verified=False,
+            is_active=True,
+            phone_number="+919876543299",
+            first_name="Bilal",
+            last_name="Wani",
+        )
+
+    def test_temp_user_can_send_and_receive_friend_request_in_early_launch(self):
+        """Temporary user can send friend requests to verified users and receive them in Early Launch mode."""
+        from accounts.models import FriendRequest
+        # Verified user sends to temporary user
+        self.client.force_login(self.verified_user)
+        with override_settings(EARLY_LAUNCH_MODE=True):
+            send_res = self.client.post(
+                reverse("send_friend_request", args=[self.temp_user.enrollment_number])
+            )
+            self.assertEqual(send_res.status_code, 302)
+            self.assertTrue(
+                FriendRequest.objects.filter(
+                    sender=self.verified_user, receiver=self.temp_user
+                ).exists()
+            )
+
+            # Temporary user logs in and sees prominent friend request on dashboard
+            self.client.force_login(self.temp_user)
+            dash_res = self.client.get(reverse("dashboard"))
+            self.assertEqual(dash_res.status_code, 200)
+            self.assertContains(dash_res, "Incoming Connection Request")
+            self.assertContains(dash_res, self.verified_user.enrollment_number)
+            self.assertContains(dash_res, "Accept")
+
+            # Temporary user accepts the friend request
+            req = FriendRequest.objects.get(sender=self.verified_user, receiver=self.temp_user)
+            accept_res = self.client.post(reverse("accept_friend_request", args=[req.id]))
+            self.assertEqual(accept_res.status_code, 302)
+
+            from accounts.models import Friendship
+            from django.db.models import Q
+            self.assertTrue(
+                Friendship.objects.filter(
+                    Q(user1=self.verified_user, user2=self.temp_user) |
+                    Q(user1=self.temp_user, user2=self.verified_user)
+                ).exists()
+            )
+
+    def test_temp_user_friend_request_blocked_in_standard_mode(self):
+        """In standard mode (EARLY_LAUNCH_MODE=False), unverified users cannot form friendships."""
+        from accounts.models import FriendRequest
+        self.client.force_login(self.verified_user)
+        with override_settings(EARLY_LAUNCH_MODE=False):
+            send_res = self.client.post(
+                reverse("send_friend_request", args=[self.temp_user.enrollment_number])
+            )
+            self.assertEqual(send_res.status_code, 302)
+            self.assertFalse(
+                FriendRequest.objects.filter(
+                    sender=self.verified_user, receiver=self.temp_user
+                ).exists()
+            )

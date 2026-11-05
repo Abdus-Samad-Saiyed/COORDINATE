@@ -33,6 +33,76 @@
         </div>
     </div>
 
+    <!-- Incoming Friend Requests Prominent Alert Card -->
+    {% if incoming_friend_requests %}
+        <div class="glass p-4 mb-4 border-warning-subtle glass-glow position-relative" style="background: rgba(245, 158, 11, 0.06); border: 1.5px solid rgba(245, 158, 11, 0.45); box-shadow: 0 0 24px rgba(245, 158, 11, 0.12);">
+            <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="feature-icon" style="width: 38px; height: 38px; font-size: 1.15rem; background: rgba(245, 158, 11, 0.2); color: #f59e0b;">
+                        <i class="bi bi-person-plus-fill"></i>
+                    </span>
+                    <div>
+                        <h5 class="fw-bold mb-0 text-white">
+                            Incoming Connection Request{{ incoming_friend_requests|length|pluralize }}
+                        </h5>
+                        <span class="text-secondary small">
+                            You have {{ incoming_friend_requests|length }} student connection invitation{{ incoming_friend_requests|length|pluralize }} waiting for your response.
+                        </span>
+                    </div>
+                </div>
+                <a href="{% url 'user_search' %}" class="btn btn-dark-custom btn-sm text-secondary">
+                    <i class="bi bi-people me-1"></i> Student Directory &rarr;
+                </a>
+            </div>
+
+            <div class="row g-3">
+                {% for req in incoming_friend_requests %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="p-3 rounded bg-black bg-opacity-40 border border-secondary h-100 d-flex flex-column justify-content-between">
+                            <div class="d-flex align-items-center gap-3 mb-3">
+                                {% if req.sender.profile_photo %}
+                                    <img src="{{ req.sender.profile_photo.url }}" class="rounded-circle object-fit-cover flex-shrink-0" style="width: 44px; height: 44px;">
+                                {% else %}
+                                    <div class="rounded-circle bg-dark border border-secondary d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px;">
+                                        <i class="bi bi-person-fill text-secondary fs-5"></i>
+                                    </div>
+                                {% endif %}
+                                <div class="overflow-hidden">
+                                    <a href="{% url 'profile' req.sender.enrollment_number %}" class="text-white text-decoration-none fw-bold d-block text-truncate">
+                                        {{ req.sender.display_name }}
+                                    </a>
+                                    <div class="text-secondary small font-monospace">
+                                        <code>{{ req.sender.enrollment_number }}</code>
+                                        {% if not req.sender.verified %}
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle py-0 px-1 ms-1" style="font-size: 0.65rem;">Early Access</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-secondary small text-truncate">
+                                        {{ req.sender.branch|default:"General" }} &middot; Batch of {{ req.sender.joining_year|default:"-" }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <form action="{% url 'accept_friend_request' req.id %}" method="POST" class="flex-grow-1 m-0">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-green btn-sm w-100 fw-semibold">
+                                        <i class="bi bi-check-lg me-1"></i> Accept
+                                    </button>
+                                </form>
+                                <form action="{% url 'decline_friend_request' req.id %}" method="POST" class="m-0">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-secondary btn-sm px-2" title="Decline">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
     <!-- Active Ride Banner if present -->
     {% if active_participation %}
         <div class="glass p-4 mb-4 glass-glow border-success">
