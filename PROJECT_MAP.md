@@ -9,7 +9,7 @@
 **Campus Nexus** is a centralized campus community and student coordination platform designed for the National Institute of Technology (NIT) Srinagar community. The platform unifies identity verification, student social connectivity, and shared campus logistics into a unified web application.
 
 - **Flagship Subsystem:** **COORDINATE** — A verified peer-to-peer cab-sharing and travel coordination system for airport, railway, and local transit.
-- **Service Modular Platform:** Includes a centralized Service Catalogue (`campus/services.py`) with active and upcoming micro-modules (e.g., Print Hub, Lost & Found, Mess Mate).
+- **Service Modular Platform:** Includes a centralized Service Catalogue (`campus/services.py`) featuring active and upcoming modules.
 - **Core Technology Stack:**
   - **Language / Runtime:** Python 3.12 / 3.14
   - **Web Framework:** Django 6.0.5

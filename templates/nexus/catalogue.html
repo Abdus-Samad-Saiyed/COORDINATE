@@ -35,6 +35,7 @@
                         <p class="text-secondary small fw-semibold mb-2">{{ svc.tagline }}</p>
                         <p class="text-muted small mb-3">{{ svc.description }}</p>
 
+                        {% if svc.features %}
                         <div class="mb-3">
                             <h6 class="text-white-50 small fw-bold mb-1">Key Modules:</h6>
                             <ul class="text-secondary small mb-0 ps-3">
@@ -43,6 +44,7 @@
                                 {% endfor %}
                             </ul>
                         </div>
+                        {% endif %}
                     </div>
 
                     <div class="pt-3 border-top border-secondary">
@@ -52,7 +54,7 @@
                             </a>
                         {% else %}
                             <a href="{% url 'service_gateway' svc.slug %}" class="btn btn-dark-custom w-100 text-secondary">
-                                <i class="bi bi-clock-history me-1"></i> View Roadmap / In Development
+                                <i class="bi bi-hourglass-split me-1"></i> Coming Soon
                             </a>
                         {% endif %}
                     </div>

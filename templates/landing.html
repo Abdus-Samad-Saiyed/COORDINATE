@@ -17,7 +17,7 @@
                 All Campus Services.
             </h1>
             <p class="hero-subtitle mb-4">
-                Campus Nexus is the centralized digital ecosystem connecting students across hostels, departments, and services. Launch <strong>COORDINATE</strong> for cab shares today, with print queues, lost & found, and mess tracking coming soon.
+                Campus Nexus is the centralized digital ecosystem connecting students across hostels, departments, and services. Launch <strong>COORDINATE</strong> for cab shares today, with additional campus modules coming soon.
             </p>
             <div class="d-flex gap-3 flex-wrap">
                 <a href="{% url 'apply_account' %}" class="btn btn-green px-4 py-2 fs-6">
@@ -103,6 +103,7 @@
                             <p class="text-secondary small fw-semibold mb-2">{{ svc.tagline }}</p>
                             <p class="text-muted small mb-3">{{ svc.description }}</p>
 
+                            {% if svc.features %}
                             <div class="mb-3">
                                 <h6 class="text-white-50 small fw-bold mb-1">Capabilities:</h6>
                                 <ul class="text-secondary small mb-0 ps-3">
@@ -111,6 +112,7 @@
                                     {% endfor %}
                                 </ul>
                             </div>
+                            {% endif %}
                         </div>
 
                         <div class="pt-3 border-top border-secondary">
@@ -120,7 +122,7 @@
                                 </a>
                             {% else %}
                                 <a href="{% url 'service_gateway' svc.slug %}" class="btn btn-dark-custom w-100 text-secondary">
-                                    <i class="bi bi-tools me-1"></i> View Roadmap / Status
+                                    <i class="bi bi-hourglass-split me-1"></i> Coming Soon
                                 </a>
                             {% endif %}
                         </div>

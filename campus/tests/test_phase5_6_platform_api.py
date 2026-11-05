@@ -83,8 +83,8 @@ class Phase5PlatformShellWatermarkTests(TestCase):
         """Disabled services cannot be bypassed and return HTTP 403 Forbidden."""
         response = self.client.get(reverse("service_gateway", kwargs={"slug": "print-hub"}))
         self.assertEqual(response.status_code, 403)
-        self.assertContains(response, "PRINT HUB", status_code=403)
-        self.assertContains(response, "Under Active Development", status_code=403)
+        self.assertContains(response, "UPCOMING", status_code=403)
+        self.assertContains(response, "Coming Soon", status_code=403)
 
     def test_server_authoritative_gateway_unknown_service(self):
         """Non-existent services return HTTP 404."""
@@ -98,9 +98,8 @@ class Phase5PlatformShellWatermarkTests(TestCase):
         self.assertContains(response, "CAMPUS")
         self.assertContains(response, "NEXUS")
         self.assertContains(response, "COORDINATE")
-        self.assertContains(response, "PRINT HUB")
-        self.assertContains(response, "LOST &amp; FOUND")
-        self.assertContains(response, "MESS MATE")
+        self.assertContains(response, "UPCOMING")
+        self.assertContains(response, "COMING SOON")
 
     def test_dedicated_service_catalogue_view(self):
         """Dedicated catalogue view renders for both public and logged in users."""

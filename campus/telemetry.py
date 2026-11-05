@@ -4,11 +4,9 @@ Tracks server traffic, throughput, response latency, and generates operational m
 requests today, average daily requests, unique user sign-ins today, and interval telemetry.
 """
 
-import asyncio
 import threading
 import time
 from datetime import datetime, timedelta
-from asgiref.sync import iscoroutinefunction
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -24,18 +22,12 @@ KEY_WINDOW_REQ_COUNT = 'nexus_telemetry_window_req_count'
 
 
 class TrafficTelemetryMiddleware:
-    """Lightweight, thread-safe request telemetry middleware supporting sync and ASGI async."""
-    sync_capable = True
-    async_capable = True
+    """Lightweight, thread-safe request telemetry middleware."""
 
     def __init__(self, get_response):
         self.get_response = get_response
-        self.async_mode = iscoroutinefunction(self.get_response)
 
     def __call__(self, request):
-        if self.async_mode:
-            return self.__acall__(request)
-
         # Ignore static and media asset requests from traffic count
         path = request.path_info
         if path.startswith('/static/') or path.startswith('/media/') or path == '/favicon.ico':
@@ -43,27 +35,6 @@ class TrafficTelemetryMiddleware:
 
         start_time = time.perf_counter()
         response = self.get_response(request)
-        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-
-        # Record metrics safely without blocking response
-        try:
-            self._record_request_telemetry(elapsed_ms)
-        except Exception:
-            pass
-
-        return response
-
-    async def __acall__(self, request):
-        path = request.path_info
-        if path.startswith('/static/') or path.startswith('/media/') or path == '/favicon.ico':
-            return await self.get_response(request)
-
-        start_time = time.perf_counter()
-        try:
-            response = await self.get_response(request)
-        except asyncio.CancelledError:
-            # Cleanly handle client disconnect / navigation abort without tracebacks
-            raise
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
         try:

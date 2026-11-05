@@ -19,7 +19,6 @@ Welcome to the central documentation suite for **Campus Nexus** and its flagship
 | [**`MECHANICAL_ZEN_AND_THEMES.md`**](file:///s:/Campus-Project/docs/MECHANICAL_ZEN_AND_THEMES.md) | Frontend Engineers, Designers | Real-time SVG clockwork hands, ambient gear physics, foreground scatter animation with hesitation/rocket exit, eccentric light mode dialogues, and inter-page transitions. |
 | [**`DEPLOYMENT_AND_PRODUCTION.md`**](file:///s:/Campus-Project/docs/DEPLOYMENT_AND_PRODUCTION.md) | DevOps, System Admins | Production checklist, PostgreSQL migration, Redis channel clustering, Nginx reverse proxy, Daphne systemd services, and DLT/SMTP setup. |
 | [**`API_REFERENCE.md`**](file:///s:/Campus-Project/docs/API_REFERENCE.md) | Mobile/Client Devs | Versioned REST API (v1) endpoints, JSON schemas, authentication challenge workflows, and Channels WebSocket packet protocol. |
-| [**`FUTURE_ROADMAP.md`**](file:///s:/Campus-Project/docs/FUTURE_ROADMAP.md) | Product Owners, Leads | Upcoming modules: PRINT HUB, LOST & FOUND, MESS MATE, DigiLocker integration, and institutional Google Workspace SSO. |
 
 ---
 
@@ -30,11 +29,11 @@ Welcome to the central documentation suite for **Campus Nexus** and its flagship
                                |          CAMPUS NEXUS UMBRELLA         |
                                +-------------------+--------------------+
                                                    |
-                 +--------------------+------------+------------+--------------------+
-                 |                    |                         |                    |
-                 v                    v                         v                    v
-          [ COORDINATE ]        [ PRINT HUB ]            [ LOST & FOUND ]       [ MESS MATE ]
-       (Live — Ridesharing)   (In Development)          (In Development)      (In Development)
+                 +--------------------+------------+
+                 |                                 |
+                 v                                 v
+          [ COORDINATE ]                      [ UPCOMING ]
+       (Live — Ridesharing)                  (Coming Soon)
                  |
                  +---> Dual-Channel OTP (MIME/SMTP Email + Carrier SMS)
                  +---> WebAuthn / FIDO2 Passkeys (Windows Hello / Touch ID)

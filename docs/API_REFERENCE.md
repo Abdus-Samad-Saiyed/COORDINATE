@@ -27,7 +27,7 @@ List all umbrella services registered on Campus Nexus.
       {
         "id": "stationery_print",
         "slug": "print-hub",
-        "name": "PRINT HUB",
+        "name": "UPCOMING",
         "is_active": false
       }
     ]
