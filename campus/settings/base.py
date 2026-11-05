@@ -92,11 +92,32 @@ TEMPLATES = [
 ]
 
 
+# --- Early Launch Mode -------------------------------------------------------
+# When enabled, in-person physical verification is waived and students can immediately
+# self-declare with their enrollment number & phone number in an isolated temporary database.
+# Untrusted self-declared accounts are stored temporarily and will not conflict with real accounts.
+# Can be toggled via CLI: python manage.py runserver --early-launch
+# Or via environment variable: EARLY_LAUNCH_MODE=True
+EARLY_LAUNCH_MODE = env.bool(
+    'EARLY_LAUNCH_MODE',
+    default=os.environ.get('CAMPUS_EARLY_LAUNCH_MODE', 'False').lower() in ('true', '1', 'yes')
+)
+
+EARLY_LAUNCH_DB_PATH = BASE_DIR / 'temp_early_access.sqlite3'
+
+
 # --- Database ----------------------------------------------------------------
 
-DATABASES = {
-    'default': env.db('DATABASE_URL', default=f'sqlite:///{BASE_DIR}/db.sqlite3')
-}
+if EARLY_LAUNCH_MODE:
+    DATABASES = {
+        'default': env.db('EARLY_LAUNCH_DATABASE_URL', default=f'sqlite:///{EARLY_LAUNCH_DB_PATH}'),
+        'permanent': env.db('DATABASE_URL', default=f'sqlite:///{BASE_DIR}/db.sqlite3'),
+    }
+else:
+    DATABASES = {
+        'default': env.db('DATABASE_URL', default=f'sqlite:///{BASE_DIR}/db.sqlite3'),
+        'temp_early_access': env.db('EARLY_LAUNCH_DATABASE_URL', default=f'sqlite:///{EARLY_LAUNCH_DB_PATH}'),
+    }
 
 
 # --- Channels / Redis --------------------------------------------------------
@@ -109,17 +130,6 @@ CHANNEL_LAYERS = {
         },
     },
 }
-
-
-# --- Early Launch Mode -------------------------------------------------------
-# When enabled, in-person physical verification is waived and students can immediately
-# self-declare with their enrollment number & phone number.
-# Can be toggled via CLI: python manage.py runserver --early-launch
-# Or via environment variable: EARLY_LAUNCH_MODE=True
-EARLY_LAUNCH_MODE = env.bool(
-    'EARLY_LAUNCH_MODE',
-    default=os.environ.get('CAMPUS_EARLY_LAUNCH_MODE', 'False').lower() in ('true', '1', 'yes')
-)
 
 
 # --- Auth / Users ------------------------------------------------------------

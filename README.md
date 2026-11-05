@@ -7,7 +7,7 @@
 [![Redis](https://img.shields.io/badge/Cache%20%26%20Layers-Redis%207-red.svg)](https://redis.io/)
 [![WebAuthn Passkeys](https://img.shields.io/badge/Auth-WebAuthn%20%2F%20Passkeys-orange.svg)](https://webauthn.io/)
 [![Mobile API](https://img.shields.io/badge/Mobile-React%20Native%20Ready-purple.svg)](campus/api/)
-[![Tests](https://img.shields.io/badge/Tests-268%20Passed%20(100%25)-success.svg)](scripts/e2e/run_full_platform_e2e.py)
+[![Tests](https://img.shields.io/badge/Tests-271%20Passed%20(100%25)-success.svg)](scripts/e2e/run_full_platform_e2e.py)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Decentralized Student Ride Coordination & Verified Campus Public Utility Platform**  
@@ -72,10 +72,11 @@ flowchart TD
 * Students apply with their official enrollment number (`YYYY[BMP][BRANCH][ROLL]`) and phone number, verify inbox ownership via a 6-digit email OTP, and present their physical Institute ID card at the campus verification desk.
 * Authorized student administrators review and approve accounts directly via the `/operations/` console.
 
-### 2. Early Launch Mode (`--early-launch`) for Transit Rushes
+### 2. Early Launch Mode (`--early-launch`) & Temporary Database Isolation
 * During end-of-term transit surges when in-person desk verification creates an onboarding bottleneck, the system can be started with the `--early-launch` CLI flag or `EARLY_LAUNCH_MODE=True`.
-* Students self-declare with enrollment number, WhatsApp phone number, gender, and password for immediate active verified account creation and instant ride coordination.
-* Cleanly reversible: omitting `--early-launch` restores strict physical desk requirements without affecting underlying database records or verification queues.
+* **Isolated Temporary Database:** All early access self-declarations, rides, and chats are written to `temp_early_access.sqlite3`. The permanent database is never touched, completely eliminating data corruption or conflicts with real accounts.
+* **Untrusted Status (`verified=False`):** Self-declared accounts are explicitly marked untrusted, badged in profiles and rosters, and temporary.
+* **Purgeable & Reversible:** Omitting `--early-launch` restores the pristine permanent database. Run `python manage.py purge_early_launch` to purge the temporary database post-rush.
 
 ### 3. Dynamic Ride Capacity Modification & Surplus Ejection
 * Hosts can adjust total vehicle capacity post-creation (`1 <= total_spots <= 6`).

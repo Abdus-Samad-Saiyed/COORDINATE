@@ -98,10 +98,12 @@ Administrators can download sanitized CSV datasets for institutional reporting:
 
 ---
 
-## 7. Operating in Early Launch Mode
+## 7. Operating in Early Launch Mode & Managing the Temporary Database
 
 ### 7.1 When to Activate Early Launch
 Activate Early Launch Mode when sudden, high-volume campus transit requirements (such as end-of-semester departure surges, emergency campus vacations, or transit strikes) prevent proctors and administrators from conducting physical ID verification for hundreds of students in real-time.
+
+Early access accounts are classified as untrusted and are stored in an isolated temporary database (`temp_early_access.sqlite3`) so they never conflict with or pollute permanent student records.
 
 ### 7.2 Starting the Server
 Run Daphne via the custom management command with the `--early-launch` flag:
@@ -109,13 +111,14 @@ Run Daphne via the custom management command with the `--early-launch` flag:
 python manage.py runserver --early-launch 0.0.0.0:8000
 ```
 
-Upon launch, Daphne outputs an operational confirmation banner:
+Upon launch, Daphne auto-migrates the temporary database, syncs administrator credentials, and outputs an operational confirmation banner:
 ```text
 ======================================================================
-CAMPUS NEXUS — EARLY LAUNCH MODE ACTIVE
-  * Physical verification desk requirements bypassed.
-  * Student self-declaration active (Enrollment + Phone Number).
-  * Instant account activation & full COORDINATE access enabled.
+CAMPUS NEXUS — EARLY LAUNCH MODE ACTIVE (TEMPORARY DATABASE)
+  * Isolated database: temp_early_access.sqlite3
+  * Permanent database is untouched; zero conflict with real accounts.
+  * Self-declared accounts are untrusted (verified=False).
+  * Account records will NOT be stored permanently.
 ======================================================================
 ```
 
@@ -129,9 +132,17 @@ EARLY_LAUNCH_MODE=True python manage.py runserver 0.0.0.0:8000
 2. **User Exports:** Use `/operations/export/users/` to download CSV records of all self-declared students with phone numbers and enrollment codes.
 3. **Emergency Disciplinary Actions:** Administrators can immediately deactivate or delete problematic accounts from `/operations/` with the standard soft-deletion safeguards.
 
-### 7.4 Transitioning Back to Standard Mode
-To revert to strict physical verification desk operations:
-1. Restart the server without the `--early-launch` flag.
-2. Ensure `EARLY_LAUNCH_MODE` is unset or set to `False` in environment variables.
+### 7.4 Purging Early Launch Data & Transitioning Back to Standard Mode
+When the transit rush has concluded and physical verification resumes:
+1. **Purge the Temporary Database:** Run the management command:
+   ```bash
+   python manage.py purge_early_launch
+   # Or without prompt in automated scripts:
+   python manage.py purge_early_launch --force
+   ```
+2. **Restart Without Flag:** Restart the server without the `--early-launch` flag:
+   ```bash
+   python manage.py runserver 0.0.0.0:8000
+   ```
 3. The platform immediately restores the physical verification desk flow on `/accounts/apply/` and the application review queue on `/operations/`.
-4. Accounts created during Early Launch remain active and can be audited against official departmental roll sheets during routine proctorial checks.
+4. The permanent database (`db.sqlite3` / PostgreSQL) has remained 100% clean and untouched throughout the entire early launch period, with zero conflicting accounts or corrupted records.

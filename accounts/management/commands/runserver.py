@@ -1,11 +1,13 @@
 """Extended Daphne runserver management command with --early-launch support.
 
-Enables instant student self-declaration (enrollment + phone number) without
-requiring in-person physical admin verification.
+Runs server against an isolated temporary database (temp_early_access.sqlite3).
+Early access self-declared accounts are marked untrusted (verified=False)
+and will not be stored permanently or conflict with real accounts.
 """
 
 import os
 from django.conf import settings
+from django.core.management import call_command
 from daphne.management.commands.runserver import Command as DaphneRunserverCommand
 
 
@@ -19,19 +21,65 @@ class Command(DaphneRunserverCommand):
             action='store_true',
             dest='early_launch',
             default=False,
-            help='Run server in Early Launch Mode (instant student self-declaration, skips physical verification)',
+            help='Run server in Early Launch Mode (temporary isolated database, untrusted self-declarations)',
         )
 
     def handle(self, *args, **options):
         if options.get('early_launch'):
             os.environ['CAMPUS_EARLY_LAUNCH_MODE'] = 'True'
             settings.EARLY_LAUNCH_MODE = True
+
+            # Ensure settings DATABASES is pointed to temporary database
+            early_db_path = getattr(settings, 'EARLY_LAUNCH_DB_PATH', settings.BASE_DIR / 'temp_early_access.sqlite3')
+            import environ
+            env = environ.Env()
+            if 'permanent' not in settings.DATABASES:
+                settings.DATABASES['permanent'] = dict(settings.DATABASES['default'])
+            settings.DATABASES['default'] = env.db(
+                'EARLY_LAUNCH_DATABASE_URL',
+                default=f'sqlite:///{early_db_path}'
+            )
+
+            # Auto-migrate the temporary database schema
+            self.stdout.write(self.style.MIGRATE_HEADING("Auto-migrating temporary database (temp_early_access.sqlite3)..."))
+            call_command('migrate', database='default', interactive=False, verbosity=0)
+
+            # Sync superusers from permanent DB if present
+            self._sync_superusers_to_temp_db()
+
             self.stdout.write(self.style.WARNING(
                 "\n" + "=" * 70 + "\n"
-                "CAMPUS NEXUS — EARLY LAUNCH MODE ACTIVE\n"
-                "  * Physical verification desk requirements bypassed.\n"
-                "  * Student self-declaration active (Enrollment + Phone Number).\n"
-                "  * Instant account activation & full COORDINATE access enabled.\n"
+                "CAMPUS NEXUS — EARLY LAUNCH MODE ACTIVE (TEMPORARY DATABASE)\n"
+                "  * Isolated database: temp_early_access.sqlite3\n"
+                "  * Permanent database is untouched; zero conflict with real accounts.\n"
+                "  * Self-declared accounts are untrusted (verified=False).\n"
+                "  * Account records will NOT be stored permanently.\n"
                 + "=" * 70 + "\n"
             ))
         super().handle(*args, **options)
+
+    def _sync_superusers_to_temp_db(self):
+        """Seed or copy administrative superusers into temporary DB for administrative access."""
+        from django.db import connections
+        from accounts.models import User
+        try:
+            if 'permanent' in connections:
+                perm_superusers = User.objects.using('permanent').filter(is_superuser=True)
+                for su in perm_superusers:
+                    if not User.objects.using('default').filter(enrollment_number=su.enrollment_number).exists():
+                        User.objects.using('default').create(
+                            username=su.username,
+                            enrollment_number=su.enrollment_number,
+                            password=su.password,
+                            email=su.email,
+                            first_name=su.first_name,
+                            last_name=su.last_name,
+                            phone_number=su.phone_number,
+                            gender=su.gender,
+                            is_superuser=True,
+                            is_staff=True,
+                            is_active=True,
+                            verified=True,
+                        )
+        except Exception:
+            pass

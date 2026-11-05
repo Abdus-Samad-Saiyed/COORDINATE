@@ -133,20 +133,24 @@ To eliminate OTP verification fatigue when a student is updating multiple profil
 
 ---
 
-## 7. Early Launch Mode: Accelerated Self-Declaration vs Physical Desk
+## 7. Early Launch Mode: Untrusted Self-Declaration & Temporary Storage
 
 To accommodate high-stakes, time-sensitive campus situations (such as end-of-term transit rushes where thousands of students need to arrange shared transport before semester closing), Campus Nexus supports an **Early Launch Mode**.
+
+Because self-declared credentials cannot be physically authenticated in real time, early access accounts are classified as **untrusted**, stored in an isolated temporary database (`temp_early_access.sqlite3`), and explicitly prevented from polluting or colliding with permanent accounts.
 
 ### 7.1 Comparison of Operational Modes
 
 | Dimension | Standard Verification Mode | Early Launch Mode (`--early-launch`) |
 | :--- | :--- | :--- |
 | **Activation Trigger** | Default operational state (`EARLY_LAUNCH_MODE=False`). | Started via `manage.py runserver --early-launch` or `EARLY_LAUNCH_MODE=True`. |
-| **Registration Flow** | Student submits application + validates phone/email OTP -> Application queues in `AccountApplication` -> Admin verifies physical ID card. | Student submits self-declaration form with enrollment, name, gender, phone, and password -> Account is activated immediately. |
-| **Initial Account Status** | `verified=False`, `is_active=False` until physical desk sign-off. | `verified=True`, `is_active=True` upon form submission. |
+| **Database Target** | Permanent database (`db.sqlite3` / PostgreSQL). | Isolated temporary database (`temp_early_access.sqlite3`). |
+| **Registration Flow** | Student submits application + validates phone/email OTP -> Application queues in `AccountApplication` -> Admin verifies physical ID card. | Student submits self-declaration form with enrollment, name, gender, phone, and password -> Account is activated immediately in temp DB. |
+| **Account Trust Status** | `verified=True` once physically approved. | `verified=False` (untrusted self-declaration). Badged as `Untrusted • Early Access`. |
+| **Account Retention** | Permanent institutional record. | **Temporary:** Wiped via `purge_early_launch` post-transit rush. |
+| **Conflict Potential** | N/A (single source of truth). | **Zero Conflict:** Temp DB is completely isolated; permanent records are untouched. |
 | **Login Session** | Student must wait for approval before logging in. | Student is automatically logged in and redirected to `/dashboard/`. |
-| **Pending Applications** | Queued in `AccountApplication` table awaiting review. | Any pre-existing pending applications for that enrollment are purged automatically. |
-| **COORDINATE Access** | Requires `user.verified=True`. | Granted via `user.verified=True` and `is_verified_student` policy waiver. |
+| **COORDINATE Access** | Requires `user.verified=True`. | Granted via `is_verified_student` policy waiver for the duration of early launch. |
 | **Audit Trail** | `APPLICATION_SUBMITTED`, `PHYSICAL_VERIFICATION_RESOLVED`. | `EARLY_LAUNCH_SELF_DECLARATION` logged to `AuditEvent`. |
 
 ### 7.2 Safety Guarantees Maintained During Early Launch
@@ -156,4 +160,5 @@ Even though physical verification queues are waived during Early Launch, mutual 
 3. **Gender Preference Enforcement:** Gender selection is mandatory, preserving safety comfort settings for female-only rides.
 4. **Zero Anonymity Inside Cabs:** Co-passengers and ride hosts mutually inspect each other's full name, enrollment number, and phone number upon joining a ride.
 5. **Rate Limiting:** Registration endpoint is throttled to 5 requests per 60 seconds to protect against automated account generation.
-6. **Post-Exam Physical Protocol:** A physical audit is conducted by the Proctorial Board at the start of the subsequent academic term.
+6. **Untrusted Visual Badging:** Profile pages, search results, and ride rosters explicitly mark early access participants with `Untrusted • Early Access`.
+7. **Post-Exam Physical Protocol:** When the new term begins, students undergo standard in-person verification to establish trusted, permanent accounts.

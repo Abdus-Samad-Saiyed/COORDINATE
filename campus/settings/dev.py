@@ -89,3 +89,8 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
 # Early Launch Mode override from environment flag
 if os.environ.get('CAMPUS_EARLY_LAUNCH_MODE', '').lower() in ('true', '1', 'yes') or env.bool('EARLY_LAUNCH_MODE', default=False):
     EARLY_LAUNCH_MODE = True
+    EARLY_LAUNCH_DB_PATH = BASE_DIR / 'temp_early_access.sqlite3'
+    DATABASES = {
+        'default': env.db('EARLY_LAUNCH_DATABASE_URL', default=f'sqlite:///{EARLY_LAUNCH_DB_PATH}'),
+        'permanent': env.db('DATABASE_URL', default=f'sqlite:///{BASE_DIR}/db.sqlite3'),
+    }

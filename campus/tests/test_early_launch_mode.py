@@ -1,16 +1,19 @@
-"""Automated tests for Early Launch Mode.
+"""Automated tests for Early Launch Mode & Temporary Database Isolation.
 
 Validates:
-1. EarlyLaunchDeclarationForm validation, atomic user provisioning, and pending application purge.
+1. EarlyLaunchDeclarationForm validation, untrusted self-declaration (verified=False), and pending application purge.
 2. Self-declaration flow via apply_account view under EARLY_LAUNCH_MODE=True.
 3. Fallback to standard physical verification application when EARLY_LAUNCH_MODE=False.
-4. COORDINATE policy integration (is_verified_student waivers).
-5. Daphne runserver --early-launch management command option registration.
+4. COORDINATE policy integration (is_verified_student waivers for untrusted active users).
+5. Temporary database routing & isolation settings.
+6. Management commands: runserver --early-launch and purge_early_launch.
 """
 
+import os
+from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.management import get_commands, load_command_class
+from django.core.management import call_command, load_command_class
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -22,9 +25,9 @@ User = get_user_model()
 
 
 class EarlyLaunchFormTests(TestCase):
-    """Test EarlyLaunchDeclarationForm validation and persistence."""
+    """Test EarlyLaunchDeclarationForm validation, untrusted status, and persistence."""
 
-    def test_valid_form_submission_creates_verified_user(self):
+    def test_valid_form_submission_creates_untrusted_user(self):
         # Create a pre-existing pending application to verify it gets cleaned up
         AccountApplication.objects.create(
             enrollment_number="2024BCSE901",
@@ -55,7 +58,8 @@ class EarlyLaunchFormTests(TestCase):
         self.assertEqual(user.last_name, "Khan")
         self.assertEqual(user.phone_number, "+919876543210")
         self.assertEqual(user.email, "zaid901@nitsri.ac.in")
-        self.assertTrue(user.verified)
+        # Early access accounts are untrusted
+        self.assertFalse(user.verified)
         self.assertTrue(user.is_active)
         self.assertTrue(user.check_password("SecurePassword123!"))
 
@@ -77,6 +81,7 @@ class EarlyLaunchFormTests(TestCase):
         user = form.save()
         self.assertEqual(user.email, "2024bcse902@nitsri.ac.in")
         self.assertEqual(user.gender, "F")
+        self.assertFalse(user.verified)
 
     def test_invalid_enrollment_format_rejected(self):
         form_data = {
@@ -135,8 +140,8 @@ class EarlyLaunchViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsInstance(response.context["form"], EarlyLaunchDeclarationForm)
         self.assertTrue(response.context.get("early_launch_mode"))
-        self.assertContains(response, "EARLY LAUNCH ACCESS")
-        self.assertContains(response, "Instant Student Registration")
+        self.assertContains(response, "TEMPORARY EARLY ACCESS (UNTRUSTED)")
+        self.assertContains(response, "Temporary Student Registration")
         self.assertNotContains(response, "Designated Application Approvers")
 
     @override_settings(EARLY_LAUNCH_MODE=True)
@@ -153,9 +158,9 @@ class EarlyLaunchViewTests(TestCase):
         response = self.client.post(reverse("apply_account"), data=post_data, follow=True)
         self.assertRedirects(response, reverse("dashboard"))
 
-        # Verify user was created with active, verified status
+        # Verify user was created with active, untrusted status (verified=False)
         user = User.objects.get(enrollment_number="2024BCSE905")
-        self.assertTrue(user.verified)
+        self.assertFalse(user.verified)
         self.assertTrue(user.is_active)
 
         # Verify audit log was recorded
@@ -177,7 +182,7 @@ class EarlyLaunchViewTests(TestCase):
         self.assertFalse(response.context.get("early_launch_mode", False))
         self.assertContains(response, "STUDENT REGISTRATION")
         self.assertContains(response, "Apply for Verification")
-        self.assertNotContains(response, "EARLY LAUNCH ACCESS")
+        self.assertNotContains(response, "TEMPORARY EARLY ACCESS")
 
     @override_settings(EARLY_LAUNCH_MODE=True)
     def test_landing_page_renders_early_launch_banners_and_cta(self):
@@ -185,7 +190,7 @@ class EarlyLaunchViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Early Launch Mode Active")
         self.assertContains(response, "Instant Student Access")
-        self.assertContains(response, "End-of-Term Early Launch")
+        self.assertContains(response, "End-of-Term Temporary Launch")
 
     @override_settings(EARLY_LAUNCH_MODE=False)
     def test_landing_page_renders_standard_banners_and_cta(self):
@@ -193,6 +198,35 @@ class EarlyLaunchViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Apply for Verification")
         self.assertNotContains(response, "Instant Student Access")
+
+    @override_settings(EARLY_LAUNCH_MODE=True)
+    def test_dashboard_displays_untrusted_badge_for_early_access_user(self):
+        user = User.objects.create_user(
+            enrollment_number="2024BCSE906",
+            username="2024BCSE906",
+            password="SecurePassword123!",
+            verified=False,
+            is_active=True,
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Untrusted &bull; Early Access")
+        self.assertContains(response, "Temporary Account:")
+
+    @override_settings(EARLY_LAUNCH_MODE=True)
+    def test_profile_displays_untrusted_badge(self):
+        user = User.objects.create_user(
+            enrollment_number="2024BCSE907",
+            username="2024BCSE907",
+            password="SecurePassword123!",
+            verified=False,
+            is_active=True,
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("profile", kwargs={"enrollment_number": "2024BCSE907"}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Untrusted &bull; Early Access")
 
 
 class EarlyLaunchPolicyTests(TestCase):
@@ -229,7 +263,7 @@ class EarlyLaunchPolicyTests(TestCase):
 
     def test_is_verified_student_under_early_launch_mode(self):
         with override_settings(EARLY_LAUNCH_MODE=True):
-            # Unverified active student is granted verification privileges
+            # Untrusted active student is granted temporary coordination privileges
             self.assertTrue(is_verified_student(self.unverified_user))
             self.assertTrue(is_verified_student(self.verified_user))
             # Inactive student is still barred
@@ -237,7 +271,7 @@ class EarlyLaunchPolicyTests(TestCase):
 
 
 class EarlyLaunchManagementCommandTests(TestCase):
-    """Test that manage.py runserver recognizes the --early-launch flag."""
+    """Test manage.py runserver and purge_early_launch commands."""
 
     def test_runserver_command_argument_parsing(self):
         cmd = load_command_class("accounts", "runserver")
@@ -245,3 +279,14 @@ class EarlyLaunchManagementCommandTests(TestCase):
         parsed = parser.parse_args(["--early-launch", "0.0.0.0:8000"])
         self.assertTrue(parsed.early_launch)
         self.assertEqual(parsed.addrport, "0.0.0.0:8000")
+
+    def test_purge_early_launch_command(self):
+        # Create a mock temporary db file
+        mock_path = settings.BASE_DIR / "test_temp_early_access.sqlite3"
+        with open(mock_path, "w") as f:
+            f.write("mock db content")
+        self.assertTrue(os.path.exists(mock_path))
+
+        with override_settings(EARLY_LAUNCH_DB_PATH=mock_path):
+            call_command("purge_early_launch", force=True)
+            self.assertFalse(os.path.exists(mock_path))

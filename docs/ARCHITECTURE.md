@@ -114,34 +114,38 @@ application = ProtocolTypeRouter({
 
 ---
 
-## 5. Early Launch Mode Architecture
+## 5. Early Launch Mode & Temporary Database Isolation Architecture
 
 ### 5.1 Motivation & Context
-During end-of-term academic periods, student transit volume surges dramatically as thousands book cabs to Srinagar Airport and railway stations. Requiring physical in-person identity verification at the Proctorial Board desk before students can coordinate rides would create severe operational bottlenecks. Early Launch Mode enables instant student onboarding while preserving system integrity and accountability.
+During end-of-term academic periods, student transit volume surges dramatically as thousands book cabs to Srinagar Airport and railway stations. Physical in-person identity verification at the Proctorial Board desk cannot scale quickly enough to meet this immediate demand. However, self-declared accounts are fundamentally **untrustworthy**. To prevent polluting the permanent institutional database or conflicting with real student records, Early Launch Mode segregates all early access activity into an isolated, temporary database (`temp_early_access.sqlite3`).
 
 ### 5.2 Control Surface & CLI Invocation
 Early Launch Mode is toggled via command-line flag or environment configuration:
 ```bash
-# Option 1: CLI invocation (extends Daphne runserver)
+# Option 1: CLI invocation (extends Daphne runserver with auto-migration)
 python manage.py runserver --early-launch 0.0.0.0:8000
 
 # Option 2: Environment variable
-EARLY_LAUNCH_MODE=True python manage.py runserver
+EARLY_LAUNCH_MODE=True python manage.py runserver 0.0.0.0:8000
+
+# Purge temporary database post-launch
+python manage.py purge_early_launch [--force]
 ```
 
-### 5.3 System Mechanics
-1. **Command Precedence:** `'accounts'` is positioned before `'daphne'` in `INSTALLED_APPS`, allowing `accounts.management.commands.runserver.Command` to intercept execution.
-2. **StatReloader Environment Propagation:** The `--early-launch` handler exports `os.environ['CAMPUS_EARLY_LAUNCH_MODE'] = 'True'`, guaranteeing that worker processes spawned during code reloading inherit early launch state.
-3. **Atomic Self-Declaration (`EarlyLaunchDeclarationForm`):**
-   - Collects `enrollment_number`, `full_name`, `gender`, `phone_number`, optional `email`, and `password`.
-   - Cleans up any prior `AccountApplication` entries for that enrollment.
-   - Creates the `User` with `verified=True` and `is_active=True`.
-   - Logs an immutable `EARLY_LAUNCH_SELF_DECLARATION` event to `AuditEvent`.
-   - Directly authenticates the user into the active session and redirects to the dashboard.
-4. **Policy Decoupling (`coordinate.policies.is_verified_student`):**
-   - Returns `True` if `user.verified or settings.EARLY_LAUNCH_MODE`.
-   - Inactive or deleted accounts remain barred under all modes.
-5. **Reversibility:** When `--early-launch` is omitted and the environment variable is false, the system immediately reverts to strict physical desk verification without data corruption.
+### 5.3 System Mechanics & Database Isolation
+1. **Dynamic Database Routing:** When `EARLY_LAUNCH_MODE` is active:
+   - `DATABASES['default']` points to `temp_early_access.sqlite3`.
+   - `DATABASES['permanent']` retains a read connection to the real permanent database (`db.sqlite3` or PostgreSQL).
+   - All early access user accounts, rides, messages, and sessions are written strictly to `temp_early_access.sqlite3`.
+   - The permanent database is never modified or polluted.
+2. **Untrusted Account Classification (`verified=False`):**
+   - Self-declared users are marked `verified=False` to indicate untrusted status.
+   - Profile badges, dashboard cards, and search listings display an explicit `Untrusted • Early Access` warning.
+   - `coordinate.policies.is_verified_student` grants temporary transit privileges solely while `EARLY_LAUNCH_MODE=True`, without certifying the identity as trustworthy.
+3. **Command Precedence & Auto-Migration:** `'accounts'` precedes `'daphne'` in `INSTALLED_APPS`, allowing `accounts.management.commands.runserver.Command` to auto-migrate `temp_early_access.sqlite3` and sync superuser credentials on startup.
+4. **StatReloader Environment Propagation:** The `--early-launch` handler sets `os.environ['CAMPUS_EARLY_LAUNCH_MODE'] = 'True'`, ensuring worker processes inherit the temporary database across reloads.
+5. **Zero Collision with Real Accounts:** Because databases are completely isolated, a student self-declaring with enrollment `2024BCSE001` in the temporary database can never overwrite, lock out, or collide with `2024BCSE001` in the permanent database.
+6. **Clean Purge (`purge_early_launch`):** When the transit rush concludes, administrators execute `python manage.py purge_early_launch --force` to delete the temporary database. Standard mode resumes with the pristine permanent database.
 
 ---
 

@@ -288,7 +288,7 @@ class EarlyLaunchDeclarationForm(forms.Form):
             email=email,
             gender=gender,
             password=make_password(password),
-            verified=True,
+            verified=False,  # Early access self-declarations are untrusted
             is_active=True,
         )
         return user

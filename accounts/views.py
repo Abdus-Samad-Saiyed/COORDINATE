@@ -789,9 +789,9 @@ def apply_account(request):
                     )
                 from django.contrib.auth import login
                 login(request, user, backend='accounts.backends.EnrollmentBackend')
-                messages.success(
+                messages.warning(
                     request,
-                    "🎉 Welcome to Campus Nexus! Your account is active under Early Launch Mode. You can now coordinate rides immediately."
+                    "Notice: Your account is self-declared and stored in the temporary transit database (untrusted). Physical verification is pending, but you can coordinate rides immediately."
                 )
                 return redirect('dashboard')
         else:
@@ -1092,8 +1092,11 @@ def user_search(request):
         return redirect('dashboard')
     query = request.GET.get('q', '').strip()
 
-    # Base queryset: verified active students excluding oneself and soft-deleted accounts
-    students_qs = User.objects.filter(verified=True, is_deleted=False, is_active=True).exclude(id=request.user.id)
+    # Base queryset: active students (in early launch mode, includes unverified self-declarations)
+    if getattr(settings, 'EARLY_LAUNCH_MODE', False):
+        students_qs = User.objects.filter(is_deleted=False, is_active=True).exclude(id=request.user.id)
+    else:
+        students_qs = User.objects.filter(verified=True, is_deleted=False, is_active=True).exclude(id=request.user.id)
     if not (request.user.is_staff or request.user.is_superuser):
         students_qs = students_qs.filter(hide_from_search=False)
 
