@@ -8,10 +8,19 @@ Optimized for fast, isolated, deterministic test suite execution.
 - DEBUG is False to verify production-like view branching
 """
 
+import tempfile
+import atexit
+import shutil
+
 from .base import *
 
 DEBUG = False
 TESTING = True
+
+# Direct uploaded test media to isolated temporary directory and purge at exit
+_TEST_MEDIA_DIR = tempfile.mkdtemp(prefix='campus_test_media_')
+MEDIA_ROOT = Path(_TEST_MEDIA_DIR)
+atexit.register(lambda: shutil.rmtree(_TEST_MEDIA_DIR, ignore_errors=True))
 
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',

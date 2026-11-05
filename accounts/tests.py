@@ -247,6 +247,37 @@ class AccountWorkflowTests(TestCase):
         self.user.delete()
         self.assertFalse(default_storage.exists(path2))
 
+    def test_cleanup_orphaned_media_command(self):
+        from django.core.management import call_command
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.core.files.storage import default_storage
+        from io import StringIO
+
+        # 1. Real user photo
+        file_real = SimpleUploadedFile('real_avatar.jpg', b'real_image_data', content_type='image/jpeg')
+        self.user.profile_photo = file_real
+        self.user.save()
+        real_path = self.user.profile_photo.name
+
+        # 2. Orphaned fake file manually placed in profiles storage
+        orphan_rel_path = 'profiles/fake_orphan.jpg'
+        default_storage.save(orphan_rel_path, SimpleUploadedFile('fake_orphan.jpg', b'fake_data'))
+        self.assertTrue(default_storage.exists(orphan_rel_path))
+
+        # 3. Dry run: does not delete
+        out = StringIO()
+        call_command('cleanup_orphaned_media', '--dry-run', stdout=out)
+        self.assertIn('[DRY-RUN] Would delete', out.getvalue())
+        self.assertTrue(default_storage.exists(orphan_rel_path))
+        self.assertTrue(default_storage.exists(real_path))
+
+        # 4. Actual run: purges orphan, preserves real user photo
+        out2 = StringIO()
+        call_command('cleanup_orphaned_media', stdout=out2)
+        self.assertIn('Successfully purged', out2.getvalue())
+        self.assertFalse(default_storage.exists(orphan_rel_path))
+        self.assertTrue(default_storage.exists(real_path))
+
     def test_send_friend_request_to_inactive_or_unverified_rejected(self):
         """Cannot send friend requests to inactive or unverified users."""
         unverified_target = User.objects.create_user(
