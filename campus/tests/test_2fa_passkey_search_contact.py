@@ -185,9 +185,9 @@ class AuthenticationAndSecurityPageTests(TestCase):
     def test_contact_page_renders_successfully(self):
         response = self.client.get(reverse("contact"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "admin@campusnexus.nit.ac.in")
-        self.assertContains(response, "proctorial@campusnexus.nit.ac.in")
-        self.assertContains(response, "verify@campusnexus.nit.ac.in")
+        self.assertContains(response, "asaiyed_2024bcse065@nitsri.ac.in")
+        self.assertContains(response, "No Physical Location Yet")
+        self.assertContains(response, "We do not have a physical location or campus office yet.")
 
     def test_feedback_page_routes_to_github_issues(self):
         response = self.client.get(reverse("feedback"))

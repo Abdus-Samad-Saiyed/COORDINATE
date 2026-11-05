@@ -195,5 +195,5 @@ def feedback_view(request: HttpRequest) -> HttpResponse:
 
 
 def contact_view(request: HttpRequest) -> HttpResponse:
-    """Contact Us Page: Dummy institutional contacts and escalation desks."""
+    """Contact Us Page: Student engineering contact directory and online communications desk."""
     return render(request, "nexus/contact.html")

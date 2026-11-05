@@ -12,7 +12,7 @@
         </span>
         <h1 class="hero-title mb-2">Contact <span class="green-accent">Campus Nexus</span></h1>
         <p class="hero-subtitle mx-auto text-secondary small">
-            Reach out to our student engineering leads, designated application administrators, or institutional proctorial desks.
+            Reach out to our student engineering lead, platform maintainers, or account verification team.
         </p>
     </div>
 
@@ -28,9 +28,9 @@
                     For platform bugs, code contributions, server uptime questions, or repository development.
                 </p>
                 <div class="p-3 rounded border border-secondary bg-black bg-opacity-30">
-                    <div class="text-secondary small text-uppercase fw-semibold mb-1">Email Address</div>
-                    <a href="mailto:admin@campusnexus.nit.ac.in" class="green-accent fw-bold font-monospace text-decoration-none">
-                        admin@campusnexus.nit.ac.in
+                    <div class="text-secondary small text-uppercase fw-semibold mb-1">Direct Contact</div>
+                    <a href="mailto:asaiyed_2024bcse065@nitsri.ac.in?subject=[Campus%20Nexus]%20Technical%20Inquiry" class="green-accent fw-bold font-monospace text-decoration-none">
+                        asaiyed_2024bcse065@nitsri.ac.in
                     </a>
                 </div>
             </div>
@@ -46,9 +46,9 @@
                     For verification delays, enrollment number discrepancies, or account access assistance.
                 </p>
                 <div class="p-3 rounded border border-secondary bg-black bg-opacity-30">
-                    <div class="text-secondary small text-uppercase fw-semibold mb-1">Email Address</div>
-                    <a href="mailto:verify@campusnexus.nit.ac.in" class="green-accent fw-bold font-monospace text-decoration-none">
-                        verify@campusnexus.nit.ac.in
+                    <div class="text-secondary small text-uppercase fw-semibold mb-1">Direct Contact</div>
+                    <a href="mailto:asaiyed_2024bcse065@nitsri.ac.in?subject=[Campus%20Nexus]%20Verification%20Inquiry" class="green-accent fw-bold font-monospace text-decoration-none">
+                        asaiyed_2024bcse065@nitsri.ac.in
                     </a>
                 </div>
             </div>
@@ -57,36 +57,44 @@
         <div class="col-md-6 col-lg-4">
             <div class="glass p-4 h-100 d-flex flex-column">
                 <div class="feature-icon mb-3" style="width: 50px; height: 50px; font-size: 1.4rem;">
-                    <i class="bi bi-shield-exclamation text-danger"></i>
+                    <i class="bi bi-shield-exclamation text-warning"></i>
                 </div>
-                <h3 class="fw-bold fs-5 mb-1">Proctorial Board &amp; Safety Escalation</h3>
+                <h3 class="fw-bold fs-5 mb-1">Safety &amp; Support Escalation</h3>
                 <p class="text-secondary small mb-3 flex-grow-1">
-                    For urgent student safety reports, harassment violations, or proctorial inquiries.
+                    For urgent student ride reports, passenger safety issues, or general platform inquiries.
                 </p>
                 <div class="p-3 rounded border border-secondary bg-black bg-opacity-30">
-                    <div class="text-secondary small text-uppercase fw-semibold mb-1">Official Desk</div>
-                    <a href="mailto:proctorial@campusnexus.nit.ac.in" class="text-danger fw-bold font-monospace text-decoration-none">
-                        proctorial@campusnexus.nit.ac.in
+                    <div class="text-secondary small text-uppercase fw-semibold mb-1">Direct Contact</div>
+                    <a href="mailto:asaiyed_2024bcse065@nitsri.ac.in?subject=[Campus%20Nexus]%20Safety%20Escalation" class="green-accent fw-bold font-monospace text-decoration-none">
+                        asaiyed_2024bcse065@nitsri.ac.in
                     </a>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Institutional Notice -->
+    <!-- Physical Location Notice -->
     <div class="row justify-content-center mt-5">
         <div class="col-lg-8">
-            <div class="glass p-4 text-center">
-                <h4 class="fw-bold fs-6 mb-2 text-white">Physical Location &amp; Campus Hours</h4>
-                <p class="text-secondary small mb-3">
-                    Campus Nexus Server Lab &bull; Computer Centre 2nd Floor &bull; National Institute of Technology<br>
-                    Operational Support: Monday to Friday, 09:00 AM &ndash; 05:30 PM IST
+            <div class="glass p-4 text-center border-secondary">
+                <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-warning-subtle text-warning mb-3" style="width: 48px; height: 48px; font-size: 1.3rem;">
+                    <i class="bi bi-geo-alt-fill"></i>
+                </div>
+                <h4 class="fw-bold fs-5 mb-2 text-white">No Physical Location Yet</h4>
+                <p class="text-secondary small mb-2">
+                    Campus Nexus currently operates as a fully digital, student-engineered campus utility. <strong>We do not have a physical location or campus office yet.</strong>
                 </p>
-                <div class="d-flex justify-content-center gap-3">
-                    <a href="{% url 'feedback' %}" class="btn btn-green btn-sm px-3">
+                <p class="text-secondary small mb-4">
+                    All correspondence, account verification escalations, technical inquiries, and feedback are handled online. Please direct all replies and inquiries to <a href="mailto:asaiyed_2024bcse065@nitsri.ac.in" class="green-accent fw-bold font-monospace text-decoration-none">asaiyed_2024bcse065@nitsri.ac.in</a>.
+                </p>
+                <div class="d-flex justify-content-center gap-3 flex-wrap">
+                    <a href="mailto:asaiyed_2024bcse065@nitsri.ac.in" class="btn btn-green btn-sm px-3">
+                        <i class="bi bi-envelope-fill me-1"></i> Send Email
+                    </a>
+                    <a href="{% url 'feedback' %}" class="btn btn-dark-custom btn-sm px-3">
                         <i class="bi bi-chat-dots-fill me-1"></i> Submit Feedback / Bug Report
                     </a>
-                    <a href="{% url 'about' %}" class="btn btn-dark-custom btn-sm px-3">
+                    <a href="{% url 'about' %}" class="btn btn-outline-green btn-sm px-3">
                         <i class="bi bi-info-circle me-1"></i> About Campus Nexus
                     </a>
                 </div>
