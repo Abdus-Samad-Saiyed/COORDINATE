@@ -7,7 +7,7 @@
 [![Redis](https://img.shields.io/badge/Cache%20%26%20Layers-Redis%207-red.svg)](https://redis.io/)
 [![WebAuthn Passkeys](https://img.shields.io/badge/Auth-WebAuthn%20%2F%20Passkeys-orange.svg)](https://webauthn.io/)
 [![Mobile API](https://img.shields.io/badge/Mobile-React%20Native%20Ready-purple.svg)](campus/api/)
-[![Tests](https://img.shields.io/badge/Tests-271%20Passed%20(100%25)-success.svg)](scripts/e2e/run_full_platform_e2e.py)
+[![Tests](https://img.shields.io/badge/Tests-275%20Passed%20(100%25)-success.svg)](scripts/e2e/run_full_platform_e2e.py)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Decentralized Student Ride Coordination & Verified Campus Public Utility Platform**  

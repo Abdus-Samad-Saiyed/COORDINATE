@@ -15,6 +15,7 @@ URL summary:
 """
 
 import json
+import logging
 import os
 import sys
 import uuid
@@ -31,7 +32,9 @@ from django.contrib.auth.password_validation import validate_password
 from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connections, transaction
+
+logger = logging.getLogger(__name__)
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -783,13 +786,27 @@ def forgot_password_view(request):
 @rate_limit(key_prefix='apply', limit=5, period_seconds=60)
 def apply_account(request):
     """Student account application or Early Launch self-declaration."""
-    if request.user.is_authenticated:
-        return redirect('dashboard')
-
     early_launch = getattr(settings, 'EARLY_LAUNCH_MODE', False)
 
-    if early_launch:
-        if request.method == 'POST':
+    mode = (
+        request.POST.get('registration_mode')
+        or request.GET.get('mode')
+        or ('early' if early_launch else 'permanent')
+    )
+    if not early_launch:
+        mode = 'permanent'
+
+    if request.user.is_authenticated:
+        # Verified students cannot re-apply
+        if request.user.verified:
+            return redirect('dashboard')
+        # Untrusted / early access users can apply for permanent verification
+        mode = 'permanent'
+
+    designated_admins = User.objects.filter(is_superuser=True, is_active=True).order_by('enrollment_number')
+
+    if request.method == 'POST':
+        if early_launch and mode == 'early':
             form = EarlyLaunchDeclarationForm(request.POST)
             if form.is_valid():
                 with transaction.atomic():
@@ -807,51 +824,92 @@ def apply_account(request):
                     "Notice: Your account is self-declared and stored in the temporary transit database (untrusted). Physical verification is pending, but you can coordinate rides immediately."
                 )
                 return redirect('dashboard')
+
+            return render(request, 'accounts/apply.html', {
+                'form': form,
+                'early_launch_mode': early_launch,
+                'active_tab': 'early',
+                'designated_admins': designated_admins,
+            })
+
         else:
-            form = EarlyLaunchDeclarationForm()
+            form = AccountApplicationForm(request.POST)
+            enrollment = request.POST.get('enrollment_number', '').strip().upper()
+            phone_otp = request.POST.get('phone_otp', '').strip()
+            phone_num = request.POST.get('phone_number', '').strip()
+            email_addr = request.POST.get('email', '').strip().lower()
 
-        return render(request, 'accounts/apply.html', {
-            'form': form,
-            'early_launch_mode': True,
-        })
+            is_debug = enrollment.startswith('20XX') and (getattr(settings, 'DEBUG', False) or 'test' in sys.argv)
+            phone_verified = False
 
-    if request.method == 'POST':
-        form = AccountApplicationForm(request.POST)
-        enrollment = request.POST.get('enrollment_number', '').strip().upper()
-        phone_otp = request.POST.get('phone_otp', '').strip()
-        phone_num = request.POST.get('phone_number', '').strip()
-        email_addr = request.POST.get('email', '').strip().lower()
-
-        is_debug = enrollment.startswith('20XX') and (getattr(settings, 'DEBUG', False) or 'test' in sys.argv)
-        phone_verified = False
-
-        if form.is_valid():
-            if is_debug:
-                phone_verified = True
-            else:
-                if not phone_otp:
-                    form.add_error(None, "Phone verification code is required. Please verify your phone number via OTP.")
+            if form.is_valid():
+                if is_debug:
+                    phone_verified = True
                 else:
-                    phone_verified, otp_err = verify_phone_otp(phone_number=phone_num, email=email_addr, submitted_code=phone_otp, purpose='SIGNUP')
-                    if not phone_verified:
-                        form.add_error(None, f"Phone verification failed: {otp_err}")
+                    if not phone_otp:
+                        form.add_error(None, "Phone verification code is required. Please verify your phone number via OTP.")
+                    else:
+                        phone_verified, otp_err = verify_phone_otp(phone_number=phone_num, email=email_addr, submitted_code=phone_otp, purpose='SIGNUP')
+                        if not phone_verified:
+                            form.add_error(None, f"Phone verification failed: {otp_err}")
 
-            if phone_verified:
-                with transaction.atomic():
-                    application = form.save(commit=False)
-                    application.application_number = uuid.uuid4().hex[:8].upper()
-                    application.password = make_password(form.cleaned_data['password'])
-                    application.phone_verified = True
-                    application.save()
-                return render(request, 'accounts/application_success.html', {
-                    'application': application,
-                })
+                if phone_verified:
+                    with transaction.atomic():
+                        application = form.save(commit=False)
+                        application.application_number = uuid.uuid4().hex[:8].upper()
+                        application.password = make_password(form.cleaned_data['password'])
+                        application.phone_verified = True
+                        application.save()
+
+                        # Mirror to permanent DB if running with isolated early launch temporary DB
+                        if 'permanent' in connections:
+                            try:
+                                AccountApplication.objects.using('permanent').update_or_create(
+                                    enrollment_number=application.enrollment_number,
+                                    defaults={
+                                        'full_name': application.full_name,
+                                        'email': application.email,
+                                        'phone_number': application.phone_number,
+                                        'gender': application.gender,
+                                        'password': application.password,
+                                        'application_number': application.application_number,
+                                        'phone_verified': True,
+                                        'approved': False,
+                                    }
+                                )
+                            except Exception as e:
+                                logger.warning("Could not mirror permanent application: %s", e)
+
+                    return render(request, 'accounts/application_success.html', {
+                        'application': application,
+                    })
+
+            return render(request, 'accounts/apply.html', {
+                'form': form,
+                'early_launch_mode': early_launch,
+                'active_tab': 'permanent',
+                'designated_admins': designated_admins,
+            })
+
+    # GET request
+    if early_launch and mode == 'early':
+        form = EarlyLaunchDeclarationForm()
     else:
-        form = AccountApplicationForm()
+        initial_data = {}
+        if request.user.is_authenticated:
+            initial_data = {
+                'enrollment_number': request.user.enrollment_number,
+                'full_name': request.user.get_full_name() or f"{request.user.first_name} {request.user.last_name}".strip(),
+                'email': request.user.email,
+                'phone_number': request.user.phone_number,
+                'gender': request.user.gender,
+            }
+        form = AccountApplicationForm(initial=initial_data)
 
-    designated_admins = User.objects.filter(is_superuser=True, is_active=True).order_by('enrollment_number')
     return render(request, 'accounts/apply.html', {
         'form': form,
+        'early_launch_mode': early_launch,
+        'active_tab': mode,
         'designated_admins': designated_admins,
     })
 
@@ -1342,30 +1400,76 @@ def approve_application(request, application_id):
     with transaction.atomic():
         application = get_object_or_404(AccountApplication, id=application_id, approved=False)
 
-        # If a user with that enrollment already exists, just clean up.
-        if User.objects.filter(enrollment_number=application.enrollment_number).exists():
-            application.delete()
-            messages.warning(request, 'A user with that enrollment number already exists.')
-            if request.htmx:
-                return HttpResponse('')
-            return redirect('application_list')
-
         parts = application.full_name.strip().split() if application.full_name else []
         first_name = parts[0][:150] if parts else ''
         last_name = ' '.join(parts[1:])[:150] if len(parts) > 1 else ''
 
-        user = User.objects.create(
-            enrollment_number=application.enrollment_number,
-            username=application.enrollment_number,
-            first_name=first_name,
-            last_name=last_name,
-            email=application.email,
-            phone_number=application.phone_number,
-            gender=application.gender,
-            password=application.password,   # already hashed
-            verified=True,
-        )
+        existing_user = User.objects.filter(enrollment_number=application.enrollment_number).first()
+        if existing_user:
+            if existing_user.verified:
+                application.delete()
+                if 'permanent' in connections:
+                    try:
+                        AccountApplication.objects.using('permanent').filter(enrollment_number=application.enrollment_number).delete()
+                    except Exception:
+                        pass
+                messages.warning(request, 'A verified user with that enrollment number already exists.')
+                if request.htmx:
+                    return HttpResponse('')
+                return redirect('application_list')
+            else:
+                # Upgrade untrusted early-launch user to verified!
+                existing_user.verified = True
+                if application.password:
+                    existing_user.password = application.password
+                if application.phone_number:
+                    existing_user.phone_number = application.phone_number
+                if application.email:
+                    existing_user.email = application.email
+                if first_name:
+                    existing_user.first_name = first_name
+                if last_name:
+                    existing_user.last_name = last_name
+                if application.gender:
+                    existing_user.gender = application.gender
+                existing_user.save()
+                user = existing_user
+        else:
+            user = User.objects.create(
+                enrollment_number=application.enrollment_number,
+                username=application.enrollment_number,
+                first_name=first_name,
+                last_name=last_name,
+                email=application.email,
+                phone_number=application.phone_number,
+                gender=application.gender,
+                password=application.password,   # already hashed
+                verified=True,
+            )
+
         application.delete()
+
+        # Mirror approved user to permanent DB if running with isolated early launch temporary DB
+        if 'permanent' in connections:
+            try:
+                User.objects.using('permanent').update_or_create(
+                    enrollment_number=user.enrollment_number,
+                    defaults={
+                        'username': user.enrollment_number,
+                        'first_name': user.first_name,
+                        'last_name': user.last_name,
+                        'email': user.email,
+                        'phone_number': user.phone_number,
+                        'gender': user.gender,
+                        'password': user.password,
+                        'verified': True,
+                        'is_active': True,
+                    }
+                )
+                AccountApplication.objects.using('permanent').filter(enrollment_number=user.enrollment_number).delete()
+            except Exception as e:
+                logger.warning("Could not sync approved user to permanent DB: %s", e)
+
         log_audit_event(
             event_type='APP_APPROVED',
             actor_enrollment=request.user.enrollment_number,
@@ -1420,6 +1524,11 @@ def reject_application(request, application_id):
         application = get_object_or_404(AccountApplication, id=application_id, approved=False)
         enrollment = application.enrollment_number
         application.delete()
+        if 'permanent' in connections:
+            try:
+                AccountApplication.objects.using('permanent').filter(enrollment_number=enrollment).delete()
+            except Exception:
+                pass
         log_audit_event(
             event_type='APP_REJECTED',
             actor_enrollment=request.user.enrollment_number,

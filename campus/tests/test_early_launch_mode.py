@@ -16,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command, load_command_class
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.forms import AccountApplicationForm, EarlyLaunchDeclarationForm
 from accounts.models import AccountApplication, AuditEvent
@@ -28,7 +29,7 @@ class EarlyLaunchFormTests(TestCase):
     """Test EarlyLaunchDeclarationForm validation, untrusted status, and persistence."""
 
     def test_valid_form_submission_creates_untrusted_user(self):
-        # Create a pre-existing pending application to verify it gets cleaned up
+        # Create a pre-existing pending application to verify it is safely preserved
         AccountApplication.objects.create(
             enrollment_number="2024BCSE901",
             full_name="Pending Student",
@@ -63,8 +64,8 @@ class EarlyLaunchFormTests(TestCase):
         self.assertTrue(user.is_active)
         self.assertTrue(user.check_password("SecurePassword123!"))
 
-        # Pending application must have been cleaned up
-        self.assertEqual(AccountApplication.objects.filter(enrollment_number="2024BCSE901").count(), 0)
+        # Pending permanent application is safely preserved (not wiped)
+        self.assertEqual(AccountApplication.objects.filter(enrollment_number="2024BCSE901").count(), 1)
 
     def test_default_institute_email_generated_when_omitted(self):
         form_data = {
@@ -185,19 +186,142 @@ class EarlyLaunchViewTests(TestCase):
         self.assertNotContains(response, "TEMPORARY EARLY ACCESS")
 
     @override_settings(EARLY_LAUNCH_MODE=True)
+    def test_apply_view_permanent_tab_in_early_launch_mode(self):
+        response = self.client.get(reverse("apply_account") + "?mode=permanent")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response.context["form"], AccountApplicationForm)
+        self.assertEqual(response.context.get("active_tab"), "permanent")
+        self.assertContains(response, "OFFICIAL STUDENT REGISTRATION")
+        self.assertContains(response, "Apply for Verification")
+        self.assertContains(response, "Designated Application Approvers")
+
+    @override_settings(EARLY_LAUNCH_MODE=True)
+    def test_apply_view_post_permanent_mode_in_early_launch(self):
+        from accounts.two_factor import create_phone_otp
+        _, raw_otp = create_phone_otp(phone_number="+919876543220", email="applicant920@nitsri.ac.in", purpose="SIGNUP")
+        post_data = {
+            "registration_mode": "permanent",
+            "enrollment_number": "2024BCSE920",
+            "full_name": "Permanent Applicant",
+            "gender": "M",
+            "phone_number": "+919876543220",
+            "email": "applicant920@nitsri.ac.in",
+            "phone_otp": raw_otp,
+            "password": "SecurePassword123!",
+            "confirm_password": "SecurePassword123!",
+        }
+        response = self.client.post(reverse("apply_account"), data=post_data)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/application_success.html")
+        app = AccountApplication.objects.filter(enrollment_number="2024BCSE920").first()
+        self.assertIsNotNone(app)
+        self.assertEqual(app.full_name, "Permanent Applicant")
+
+    @override_settings(EARLY_LAUNCH_MODE=True)
+    def test_untrusted_user_can_submit_permanent_application(self):
+        # Create unverified/untrusted early access user
+        untrusted = User.objects.create_user(
+            enrollment_number="2024BCSE921",
+            username="2024BCSE921",
+            password="InitialEarlyPassword1!",
+            verified=False,
+            is_active=True,
+        )
+        self.client.force_login(untrusted)
+
+        # GET /apply/ should render permanent application tab
+        response = self.client.get(reverse("apply_account"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context.get("active_tab"), "permanent")
+
+        # POST permanent application for this enrollment
+        from accounts.two_factor import create_phone_otp
+        _, raw_otp = create_phone_otp(phone_number="+919876543221", email="upgraded921@nitsri.ac.in", purpose="SIGNUP")
+        post_data = {
+            "registration_mode": "permanent",
+            "enrollment_number": "2024BCSE921",
+            "full_name": "Upgraded Student",
+            "gender": "F",
+            "phone_number": "+919876543221",
+            "email": "upgraded921@nitsri.ac.in",
+            "phone_otp": raw_otp,
+            "password": "NewPermanentPass123!",
+            "confirm_password": "NewPermanentPass123!",
+        }
+        post_response = self.client.post(reverse("apply_account"), data=post_data)
+        self.assertEqual(post_response.status_code, 200)
+        self.assertTemplateUsed(post_response, "accounts/application_success.html")
+        app = AccountApplication.objects.filter(enrollment_number="2024BCSE921").first()
+        self.assertIsNotNone(app)
+
+    @override_settings(EARLY_LAUNCH_MODE=True)
+    def test_admin_approval_upgrades_untrusted_user_to_verified(self):
+        # Create unverified user from early access
+        untrusted = User.objects.create_user(
+            enrollment_number="2024BCSE922",
+            username="2024BCSE922",
+            first_name="Temporary",
+            last_name="Student",
+            password="InitialPass123!",
+            verified=False,
+            is_active=True,
+        )
+        self.assertFalse(untrusted.verified)
+
+        # Create pending application
+        from django.contrib.auth.hashers import make_password
+        app = AccountApplication.objects.create(
+            enrollment_number="2024BCSE922",
+            full_name="Verified Tariq",
+            email="tariq922@nitsri.ac.in",
+            phone_number="+919876543222",
+            gender="M",
+            password=make_password("ApprovedPass123!"),
+            application_number="APP922",
+            phone_verified=True,
+            approved=False,
+        )
+
+        # Admin approves
+        admin_user = User.objects.create_superuser(
+            enrollment_number="2024BCSE000",
+            username="2024BCSE000",
+            password="AdminPassword123!",
+        )
+        self.client.force_login(admin_user)
+        session = self.client.session
+        session["auth_timestamp"] = timezone.now().timestamp()
+        session.save()
+
+        approve_url = reverse("approve_application", kwargs={"application_id": app.id})
+        response = self.client.post(approve_url, follow=True)
+        self.assertRedirects(response, reverse("application_list"))
+
+        # Verify existing user is upgraded to verified=True!
+        untrusted.refresh_from_db()
+        self.assertTrue(untrusted.verified)
+        self.assertEqual(untrusted.first_name, "Verified")
+        self.assertEqual(untrusted.last_name, "Tariq")
+        self.assertEqual(untrusted.email, "tariq922@nitsri.ac.in")
+        self.assertTrue(untrusted.check_password("ApprovedPass123!"))
+        # Application should be deleted
+        self.assertFalse(AccountApplication.objects.filter(enrollment_number="2024BCSE922").exists())
+
+    @override_settings(EARLY_LAUNCH_MODE=True)
     def test_landing_page_renders_early_launch_banners_and_cta(self):
         response = self.client.get(reverse("landing"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Early Launch Mode Active")
-        self.assertContains(response, "Instant Student Access")
-        self.assertContains(response, "End-of-Term Temporary Launch")
+        self.assertContains(response, "Fast-Track Early Access")
+        self.assertContains(response, "Apply for Permanent ID")
+        self.assertContains(response, "Transit Rush + Official Verification")
 
     @override_settings(EARLY_LAUNCH_MODE=False)
     def test_landing_page_renders_standard_banners_and_cta(self):
         response = self.client.get(reverse("landing"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Apply for Verification")
-        self.assertNotContains(response, "Instant Student Access")
+        self.assertNotContains(response, "Fast-Track Early Access")
 
     @override_settings(EARLY_LAUNCH_MODE=True)
     def test_dashboard_displays_untrusted_badge_for_early_access_user(self):

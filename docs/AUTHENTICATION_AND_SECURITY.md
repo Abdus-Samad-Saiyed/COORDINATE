@@ -144,17 +144,41 @@ Because self-declared credentials cannot be physically authenticated in real tim
 | Dimension | Standard Verification Mode | Early Launch Mode (`--early-launch`) |
 | :--- | :--- | :--- |
 | **Activation Trigger** | Default operational state (`EARLY_LAUNCH_MODE=False`). | Started via `manage.py runserver --early-launch` or `EARLY_LAUNCH_MODE=True`. |
-| **Database Target** | Permanent database (`db.sqlite3` / PostgreSQL). | Isolated temporary database (`temp_early_access.sqlite3`). |
-| **Registration Flow** | Student submits application + validates phone/email OTP -> Application queues in `AccountApplication` -> Admin verifies physical ID card. | Student submits self-declaration form with enrollment, name, gender, phone, and password -> Account is activated immediately in temp DB. |
-| **Account Trust Status** | `verified=True` once physically approved. | `verified=False` (untrusted self-declaration). Badged as `Untrusted • Early Access`. |
-| **Account Retention** | Permanent institutional record. | **Temporary:** Wiped via `purge_early_launch` post-transit rush. |
+| **Database Target** | Permanent database (`db.sqlite3` / PostgreSQL). | Isolated temporary database (`temp_early_access.sqlite3`), with `permanent` alias active. |
+| **Registration Pathways** | Single pathway: Official student registration requiring OTP & physical ID check. | **Dual Registration Pathways:**<br>1. *Fast-Track Early Access:* Immediate self-declaration in temp DB (untrusted).<br>2. *Official Permanent Application:* Full OTP & ID verification queued to both temp and permanent DBs. |
+| **Account Trust Status** | `verified=True` once physically approved. | Self-declared: `verified=False` (`Untrusted • Early Access`). Upgraded to `verified=True` upon admin approval. |
+| **Account Retention** | Permanent institutional record. | Fast-track accounts: temporary. Official permanent applications: mirrored to permanent DB and preserved. |
 | **Conflict Potential** | N/A (single source of truth). | **Zero Conflict:** Temp DB is completely isolated; permanent records are untouched. |
-| **Login Session** | Student must wait for approval before logging in. | Student is automatically logged in and redirected to `/dashboard/`. |
+| **Login Session** | Student must wait for approval before logging in. | Fast-track: student is logged in immediately. Official application: queued for desk review. |
 | **COORDINATE Access** | Requires `user.verified=True`. | Granted via `is_verified_student` policy waiver for the duration of early launch. |
-| **Audit Trail** | `APPLICATION_SUBMITTED`, `PHYSICAL_VERIFICATION_RESOLVED`. | `EARLY_LAUNCH_SELF_DECLARATION` logged to `AuditEvent`. |
+| **Audit Trail** | `APPLICATION_SUBMITTED`, `APP_APPROVED`, `APP_REJECTED`. | `EARLY_LAUNCH_SELF_DECLARATION`, `APP_APPROVED`, `APP_REJECTED` logged to `AuditEvent`. |
 
-### 7.2 Safety Guarantees Maintained During Early Launch
-Even though physical verification queues are waived during Early Launch, mutual security inside rides remains strictly intact:
+### 7.2 Dual Registration & In-Flight Upgrade Workflow
+
+During Early Launch, registration is not forced into a temporary-only silo. Students have complete autonomy to choose their onboarding flow:
+
+1. **Fast-Track Early Access (Transit Rush):**
+   - Available via `/apply/?mode=early` or the default early launch tab.
+   - Skips verification desk queues for rapid cab coordination.
+   - Stored in `temp_early_access.sqlite3` with `verified=False`.
+
+2. **Official Permanent Account Application:**
+   - Available via `/apply/?mode=permanent` at all times.
+   - Requires phone and email OTP verification and admin physical ID review.
+   - When submitted under `--early-launch`, the application is stored in the current running DB (`default`) so administrators can review it immediately in the admin queue, and **mirrored directly to `permanent`** (`db.sqlite3` / PostgreSQL) to ensure it survives database purges.
+
+3. **In-Flight Upgrade from Untrusted to Verified:**
+   - A student who initially created an untrusted early access account can log into their dashboard and click *"Apply for Permanent Verified ID"*, or visit `/apply/?mode=permanent`.
+   - Form fields are pre-filled with their active credentials.
+   - `AccountApplicationForm` allows unverified self-declared accounts to apply without duplicate key blocks.
+   - When an administrator reviews and approves the application via `approve_application`:
+     - The existing untrusted account is upgraded: `user.verified = True`.
+     - Credentials (password, name, contact) are updated from the verified application.
+     - The verified student record is synced to `permanent` (`db.sqlite3`).
+     - The pending application is cleared from both databases.
+
+### 7.3 Safety Guarantees Maintained During Early Launch
+Even though physical verification queues are waived for fast-track participants during Early Launch, mutual security inside rides remains strictly intact:
 1. **Enrollment Format Validation:** All enrollment numbers must match official NIT Srinagar regex (`^(?:\d{4}|20XX)[BMP][A-Z]{3}\d{3}$`).
 2. **Normalized Phone Numbers:** All contact numbers are validated and stored in E.164-compatible format, ensuring reachable WhatsApp and cellular connectivity.
 3. **Gender Preference Enforcement:** Gender selection is mandatory, preserving safety comfort settings for female-only rides.

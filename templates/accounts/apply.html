@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}{% if early_launch_mode %}Instant Student Access — Early Launch{% else %}Apply for Account — COORDINATE{% endif %}{% endblock %}
+{% block title %}{% if early_launch_mode and active_tab == 'early' %}Fast-Track Student Access — Early Launch{% else %}Apply for Permanent Verification — COORDINATE{% endif %}{% endblock %}
 
 {% block content %}
 <div class="container py-5">
@@ -9,6 +9,26 @@
         <div class="col-lg-7">
             <div class="glass p-4 p-md-5 h-100">
                 {% if early_launch_mode %}
+                    <!-- Mode Switcher Nav-Pills -->
+                    <ul class="nav nav-pills nav-fill mb-4 p-1 rounded-pill bg-black bg-opacity-40 border border-secondary">
+                        <li class="nav-item">
+                            <a class="nav-link rounded-pill py-2 fw-semibold {% if active_tab == 'early' %}active bg-warning text-dark{% else %}text-secondary{% endif %}"
+                               href="{% url 'apply_account' %}?mode=early">
+                                <i class="bi bi-lightning-charge-fill me-1"></i> Fast-Track Early Access
+                                <span class="badge bg-dark text-warning ms-1 small">Transit Rush</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link rounded-pill py-2 fw-semibold {% if active_tab == 'permanent' %}active btn-green text-dark{% else %}text-secondary{% endif %}"
+                               href="{% url 'apply_account' %}?mode=permanent">
+                                <i class="bi bi-shield-check me-1"></i> Official Permanent Account
+                                <span class="badge bg-secondary text-white ms-1 small">ID Verified</span>
+                            </a>
+                        </li>
+                    </ul>
+                {% endif %}
+
+                {% if early_launch_mode and active_tab == 'early' %}
                     <div class="mb-4">
                         <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-1 rounded-pill fw-semibold mb-2">
                             <i class="bi bi-exclamation-triangle-fill me-1"></i> TEMPORARY EARLY ACCESS (UNTRUSTED)
@@ -21,6 +41,7 @@
 
                     <form method="POST">
                         {% csrf_token %}
+                        <input type="hidden" name="registration_mode" value="early">
 
                         {% if form.non_field_errors %}
                             <div class="alert alert-danger py-2 small mb-3">
@@ -91,23 +112,29 @@
                             </div>
                         </div>
 
-                        <button type="submit" class="btn btn-green w-100 py-2 fs-6 fw-bold">
+                        <button type="submit" class="btn btn-warning text-dark w-100 py-2 fs-6 fw-bold">
                             <i class="bi bi-rocket-takeoff-fill me-1"></i> Register & Enter Campus Nexus
                         </button>
+
+                        <div class="text-center mt-3 small">
+                            <span class="text-secondary">Looking for official permanent student ID verification?</span>
+                            <a href="{% url 'apply_account' %}?mode=permanent" class="green-accent fw-semibold ms-1">Switch to Official Permanent Account &rarr;</a>
+                        </div>
                     </form>
                 {% else %}
                     <div class="mb-4">
                         <span class="badge bg-success-subtle text-success px-3 py-1 rounded-pill fw-semibold mb-2">
-                            STUDENT REGISTRATION
+                            <i class="bi bi-shield-check me-1"></i> OFFICIAL STUDENT REGISTRATION
                         </span>
                         <h2 class="fw-bold mb-1">Apply for Verification</h2>
                         <p class="text-secondary small">
-                            Please provide accurate college credentials. Accounts undergo admin verification against institute registration records.
+                            Please provide accurate college credentials. Accounts undergo physical admin verification against institute registration records and are permanently stored.
                         </p>
                     </div>
 
                     <form method="POST">
                         {% csrf_token %}
+                        <input type="hidden" name="registration_mode" value="permanent">
 
                         {% if form.non_field_errors %}
                             <div class="alert alert-danger py-2 small mb-3">
@@ -195,6 +222,13 @@
                         <button type="submit" class="btn btn-green w-100 py-2 fs-6 fw-bold">
                             <i class="bi bi-file-earmark-check me-1"></i> Submit Verification Application
                         </button>
+
+                        {% if early_launch_mode %}
+                        <div class="text-center mt-3 small">
+                            <span class="text-secondary">Need immediate cab sharing before ID verification?</span>
+                            <a href="{% url 'apply_account' %}?mode=early" class="text-warning fw-semibold ms-1">Use Fast-Track Early Access &rarr;</a>
+                        </div>
+                        {% endif %}
                     </form>
                 {% endif %}
 
@@ -210,14 +244,14 @@
         <!-- Information / Approvers Column -->
         <div class="col-lg-5">
             <div class="glass p-4 p-md-5 h-100 d-flex flex-column">
-                {% if early_launch_mode %}
+                {% if early_launch_mode and active_tab == 'early' %}
                     <div class="mb-3">
                         <div class="feature-icon mb-3" style="width: 48px; height: 48px; font-size: 1.25rem; background: rgba(245, 158, 11, 0.15); color: #f59e0b;">
                             <i class="bi bi-airplane-engines-fill"></i>
                         </div>
                         <h3 class="fw-bold fs-5 mb-1">End-of-Term Transit Priority</h3>
                         <p class="text-secondary small">
-                            With semester exams ending and high transit demand to Srinagar Airport and railway stations, in-person verification queues have been waived.
+                            With semester exams ending and high transit demand to Srinagar Airport and railway stations, in-person verification queues have been waived for temporary access.
                         </p>
                     </div>
 
@@ -248,18 +282,18 @@
                                 <strong class="text-white">Zero Conflict with Real Accounts</strong>
                             </div>
                             <div class="text-secondary small">
-                                When standard semester operations resume, students complete official physical ID verification without any conflicts or duplicate locks.
+                                You can submit an official permanent application at any time. When approved, your account upgrades cleanly with zero database conflicts.
                             </div>
                         </div>
                     </div>
 
-                    <div class="p-3 rounded border border-secondary bg-black bg-opacity-40 small text-secondary">
+                    <div class="p-3 rounded border border-success-subtle bg-black bg-opacity-40 small text-secondary">
                         <div class="d-flex align-items-center gap-2 mb-1">
-                            <i class="bi bi-info-circle-fill text-warning"></i>
-                            <strong class="text-white">Need Assistance?</strong>
+                            <i class="bi bi-shield-check text-success"></i>
+                            <strong class="text-white">Prefer Official Verification?</strong>
                         </div>
                         <p class="mb-0 text-white-50 small">
-                            If you encounter any issues during early launch, reach out to our team at the <a href="{% url 'contact' %}" class="green-accent">Contact Desk</a>.
+                            If you want a permanently verified student profile for the upcoming academic year, switch to the <a href="{% url 'apply_account' %}?mode=permanent" class="green-accent fw-semibold">Official Permanent Account</a> tab.
                         </p>
                     </div>
                 {% else %}
@@ -269,7 +303,7 @@
                         </div>
                         <h3 class="fw-bold fs-5 mb-1">Designated Application Approvers</h3>
                         <p class="text-secondary small">
-                            To maintain campus safety and authentic student verification, your application is reviewed and vetted by the following designated institute administrators:
+                            To maintain campus safety and authentic student verification, your permanent application is reviewed and vetted by the following designated institute administrators:
                         </p>
                     </div>
 
@@ -315,7 +349,7 @@
     </div>
 </div>
 
-{% if not early_launch_mode %}
+{% if not early_launch_mode or active_tab == 'permanent' %}
 <script>
 async function requestSignupOtp() {
     const feedback = document.getElementById('signupOtpFeedback');

@@ -129,8 +129,10 @@ EARLY_LAUNCH_MODE=True python manage.py runserver 0.0.0.0:8000
 
 ### 7.3 Administrator Oversight During Early Launch
 1. **Audit Inspection:** Every self-declaration creates an `AuditEvent` with `event_type='EARLY_LAUNCH_SELF_DECLARATION'`, viewable in the operational audit feed.
-2. **User Exports:** Use `/operations/export/users/` to download CSV records of all self-declared students with phone numbers and enrollment codes.
-3. **Emergency Disciplinary Actions:** Administrators can immediately deactivate or delete problematic accounts from `/operations/` with the standard soft-deletion safeguards.
+2. **Reviewing Applications:** Official permanent applications submitted via `/apply/?mode=permanent` appear directly in `/admin/applications/`. Administrators can verify physical IDs and approve or reject them in real time.
+3. **Approving Upgrades:** Approving an application for a student who previously registered on Early Access automatically upgrades their account (`verified=True`) and mirrors their permanent record into `permanent` (`db.sqlite3`).
+4. **User Exports:** Use `/operations/export/users/` to download CSV records of all self-declared students with phone numbers and enrollment codes.
+5. **Emergency Disciplinary Actions:** Administrators can immediately deactivate or delete problematic accounts from `/operations/` with the standard soft-deletion safeguards.
 
 ### 7.4 Purging Early Launch Data & Transitioning Back to Standard Mode
 When the transit rush has concluded and physical verification resumes:
@@ -138,6 +140,14 @@ When the transit rush has concluded and physical verification resumes:
    ```bash
    python manage.py purge_early_launch
    # Or without prompt in automated scripts:
+   python manage.py purge_early_launch --force
+   ```
+   *Note:* The purge command inspects `temp_early_access.sqlite3` for active rides (`OPEN` or `FULL`). If active rides exist, it warns the administrator and displays remaining participant counts before proceeding.
+   All approved and pending permanent applications mirrored to `permanent` (`db.sqlite3`) remain completely intact!
+2. **Restart in Standard Mode:** Simply omit `--early-launch`:
+   ```bash
+   python manage.py runserver 0.0.0.0:8000
+   ```
    python manage.py purge_early_launch --force
    ```
 2. **Restart Without Flag:** Restart the server without the `--early-launch` flag:

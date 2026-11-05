@@ -124,7 +124,8 @@
                     {% if user.verified %}
                         Your profile is completely verified and in good standing.
                     {% elif early_launch_mode %}
-                        <span class="text-warning fw-semibold">Temporary Account:</span> Self-declared under Early Launch. Stored in temporary database; physical desk verification pending.
+                        <span class="text-warning fw-semibold">Temporary Account:</span> Self-declared under Early Launch (untrusted).
+                        <a href="{% url 'apply_account' %}?mode=permanent" class="green-accent fw-semibold ms-1">Apply for Permanent Verified ID &rarr;</a>
                     {% else %}
                         Your account verification is pending physical desk approval.
                     {% endif %}

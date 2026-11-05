@@ -176,3 +176,20 @@ To visually reflect user personalization in browser tabs:
 - **Font Rendering:** Removed blocking `@import` web fonts from `static/css/main.css` in favor of high-performance system typography and preloaded assets.
 - **60fps Gear Animation:** Cached DOM element queries in `static/js/watermark.js` to eliminate DOM query thrashing during `requestAnimationFrame`.
 - **Traffic Telemetry:** Kept `TrafficTelemetryMiddleware` synchronous with non-blocking cache lock acquisition (`_LOCK.acquire(blocking=False)`), preventing ASGI awaitable wrapper exceptions.
+
+---
+
+## 8. Early Launch Multi-Database Routing & Dual Registration Architecture
+
+### 8.1 Multi-Database Topology
+When `--early-launch` is supplied to `manage.py runserver` or `EARLY_LAUNCH_MODE=True` is set in the environment:
+1. `DATABASES['default']` points to `temp_early_access.sqlite3`.
+2. `DATABASES['permanent']` points to the primary institutional database (`db.sqlite3` or PostgreSQL).
+3. Superuser accounts from `permanent` are automatically synchronized to `default` on startup so administrators can log in without password resets.
+4. Auto-migration runs against `default` on startup, ensuring full schema compliance without manual operator intervention.
+
+### 8.2 Dual Registration Pathways
+Visitors on `/apply/` have access to two parallel tracks:
+- **Fast-Track Early Access (`?mode=early`):** Unverified student self-declaration in `default` (`verified=False`). Enables emergency cab coordination without waiting.
+- **Official Permanent Application (`?mode=permanent`):** Full registration with 6-digit phone and email OTP verification. Queued into `default` and mirrored to `permanent` (`update_or_create`).
+- **In-Flight Upgrade Engine:** When administrators approve an official application, any matching untrusted user is promoted to `verified=True` and synchronized into `permanent`. Purging `temp_early_access.sqlite3` leaves official verified records completely intact.

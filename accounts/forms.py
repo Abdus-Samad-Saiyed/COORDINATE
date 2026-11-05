@@ -96,12 +96,25 @@ class AccountApplicationForm(forms.ModelForm):
                 'Synthetic debug enrollments (20XX...) are disabled in production.'
             )
 
-        if User.objects.filter(enrollment_number=enrollment).exists():
+        from django.db import connections
+        perm_db = 'permanent' if 'permanent' in connections else 'default'
+
+        # Only block if an already verified user exists
+        if User.objects.filter(enrollment_number=enrollment, verified=True).exists():
             raise forms.ValidationError(
-                'An account with this enrollment number is already registered.'
+                'An account with this enrollment number is already registered and verified.'
+            )
+        if perm_db != 'default' and User.objects.using(perm_db).filter(enrollment_number=enrollment, verified=True).exists():
+            raise forms.ValidationError(
+                'An account with this enrollment number is already registered and verified.'
             )
 
-        if AccountApplication.objects.filter(enrollment_number=enrollment).exists():
+        # Block if an application is already pending
+        if AccountApplication.objects.filter(enrollment_number=enrollment, approved=False).exists():
+            raise forms.ValidationError(
+                'An application for this enrollment number is already pending verification.'
+            )
+        if perm_db != 'default' and AccountApplication.objects.using(perm_db).filter(enrollment_number=enrollment, approved=False).exists():
             raise forms.ValidationError(
                 'An application for this enrollment number is already pending verification.'
             )
@@ -112,10 +125,20 @@ class AccountApplicationForm(forms.ModelForm):
         email = self.cleaned_data.get('email', '').strip().lower()
         if not email:
             raise forms.ValidationError('Email address is required.')
-        if User.objects.filter(email=email).exists():
+
+        from django.db import connections
+        perm_db = 'permanent' if 'permanent' in connections else 'default'
+
+        if User.objects.filter(email=email, verified=True).exists():
             raise forms.ValidationError('An account with this email address already exists.')
-        if AccountApplication.objects.filter(email=email).exists():
+        if perm_db != 'default' and User.objects.using(perm_db).filter(email=email, verified=True).exists():
+            raise forms.ValidationError('An account with this email address already exists.')
+
+        if AccountApplication.objects.filter(email=email, approved=False).exists():
             raise forms.ValidationError('An application with this email address is already pending verification.')
+        if perm_db != 'default' and AccountApplication.objects.using(perm_db).filter(email=email, approved=False).exists():
+            raise forms.ValidationError('An application with this email address is already pending verification.')
+
         return email
 
     def clean(self):
@@ -275,9 +298,6 @@ class EarlyLaunchDeclarationForm(forms.Form):
         parts = full_name.split() if full_name else []
         first_name = parts[0][:150] if parts else ''
         last_name = ' '.join(parts[1:])[:150] if len(parts) > 1 else ''
-
-        # Clean up any pending applications for this enrollment
-        AccountApplication.objects.filter(enrollment_number=enrollment).delete()
 
         user = User.objects.create(
             username=enrollment,
