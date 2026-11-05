@@ -136,7 +136,7 @@ def enforce_single_session_login(request, user: User):
     for s in Session.objects.filter(expire_date__gt=timezone.now()):
         try:
             data = s.get_decoded()
-            if str(data.get('_auth_user_id')) == str(user.id) and s.session_key != current_key:
+            if str(data.get('_auth_user_id')) == str(user.pk) and s.session_key != current_key:
                 s.delete()
                 prior_terminated = True
                 log_audit_event(
@@ -152,7 +152,7 @@ def enforce_single_session_login(request, user: User):
 
     if prior_terminated:
         from accounts.utils import broadcast_user_session_revocation
-        transaction.on_commit(lambda: broadcast_user_session_revocation(user.id, "Prior session invalidated on concurrent login."))
+        transaction.on_commit(lambda: broadcast_user_session_revocation(user.pk, "Prior session invalidated on concurrent login."))
 
 
 def _safe_redirect_url(request, redirect_to, fallback='dashboard'):
@@ -195,7 +195,7 @@ def custom_login_view(request, extra_context=None):
 
             # Real accounts: Staff, Superusers, or users with 2FA enabled require 2FA OTP verification
             if user.two_factor_enabled or user.is_staff or user.is_superuser:
-                request.session['pre_2fa_user_id'] = user.id
+                request.session['pre_2fa_user_id'] = user.pk
                 request.session['pre_2fa_redirect'] = redirect_to
                 request.session['pre_2fa_time'] = timezone.now().timestamp()
                 can_resend, _ = can_resend_otp(user, purpose='2FA')
@@ -340,7 +340,7 @@ def _get_webauthn_rp_id(request):
 @rate_limit(key_prefix='passkey_auth_chal', limit=10, period_seconds=60)
 def passkey_auth_challenge(request):
     """Generate WebAuthn challenge for bypassing 2FA with biometric / Windows Hello passkey."""
-    user_id = request.session.get('pre_2fa_user_id') or (request.user.id if request.user.is_authenticated else None)
+    user_id = request.session.get('pre_2fa_user_id') or (request.user.pk if request.user.is_authenticated else None)
     if not user_id:
         return JsonResponse({'error': 'No authentication session in progress.'}, status=401)
 
@@ -453,7 +453,7 @@ def passkey_reg_challenge(request):
     request.session['passkey_reg_challenge_time'] = timezone.now().timestamp()
     return JsonResponse({
         'challenge': challenge,
-        'user_id': str(request.user.id),
+        'user_id': str(request.user.pk),
         'user_name': request.user.enrollment_number,
         'display_name': request.user.display_name,
         'rp_id': _get_webauthn_rp_id(request),
@@ -672,7 +672,7 @@ def forgot_password_view(request):
                 can_resend, wait_sec = can_resend_otp(user, purpose='PASSWORD_RESET')
                 if can_resend:
                     create_phone_otp(user, purpose='PASSWORD_RESET')
-                request.session['reset_user_id'] = user.id
+                request.session['reset_user_id'] = user.pk
                 request.session['reset_requested_at'] = timezone.now().timestamp()
             
             messages.info(
@@ -725,7 +725,7 @@ def forgot_password_view(request):
                 for s in Session.objects.filter(expire_date__gt=timezone.now()):
                     try:
                         data = s.get_decoded()
-                        if str(data.get('_auth_user_id')) == str(user.id):
+                        if str(data.get('_auth_user_id')) == str(user.pk):
                             s.delete()
                     except Exception:
                         pass
@@ -734,7 +734,7 @@ def forgot_password_view(request):
                 request.session.pop('reset_user_id', None)
                 request.session.pop('reset_requested_at', None)
                 from accounts.utils import broadcast_user_session_revocation
-                transaction.on_commit(lambda: broadcast_user_session_revocation(user.id, "Password reset via verification code."))
+                transaction.on_commit(lambda: broadcast_user_session_revocation(user.pk, "Password reset via verification code."))
                 log_audit_event(
                     event_type='SECURITY_SETTINGS_UPDATED',
                     actor_enrollment=user.enrollment_number,
@@ -991,7 +991,7 @@ def profile_view(request, enrollment_number):
                 return redirect('profile', enrollment_number=profile_user.enrollment_number)
 
         if email_changed:
-            if User.objects.filter(email=new_email, is_deleted=False).exclude(id=profile_user.id).exists():
+            if User.objects.filter(email=new_email, is_deleted=False).exclude(pk=profile_user.pk).exists():
                 messages.error(request, "This email address is already registered to another active account.")
                 return redirect('profile', enrollment_number=profile_user.enrollment_number)
 
@@ -1079,7 +1079,7 @@ def profile_view(request, enrollment_number):
                 try:
                     if s.session_key != current_key:
                         data = s.get_decoded()
-                        if str(data.get('_auth_user_id')) == str(profile_user.id):
+                        if str(data.get('_auth_user_id')) == str(profile_user.pk):
                             s.delete()
                 except Exception:
                     pass
@@ -1165,9 +1165,9 @@ def user_search(request):
 
     # Base queryset: active students (in early launch mode, includes unverified self-declarations)
     if getattr(settings, 'EARLY_LAUNCH_MODE', False):
-        students_qs = User.objects.filter(is_deleted=False, is_active=True).exclude(id=request.user.id)
+        students_qs = User.objects.filter(is_deleted=False, is_active=True).exclude(pk=request.user.pk)
     else:
-        students_qs = User.objects.filter(verified=True, is_deleted=False, is_active=True).exclude(id=request.user.id)
+        students_qs = User.objects.filter(verified=True, is_deleted=False, is_active=True).exclude(pk=request.user.pk)
     if not (request.user.is_staff or request.user.is_superuser):
         students_qs = students_qs.filter(hide_from_search=False)
 
@@ -1186,7 +1186,7 @@ def user_search(request):
         Friendship.objects.filter(Q(user1=request.user) | Q(user2=request.user))
         .values_list('user1_id', 'user2_id')
     )
-    friend_ids = {u2 if u1 == request.user.id else u1 for u1, u2 in user_friends}
+    friend_ids = {u2 if u1 == request.user.pk else u1 for u1, u2 in user_friends}
 
     sent_request_ids = set(
         FriendRequest.objects.filter(sender=request.user).values_list('receiver_id', flat=True)
@@ -1229,7 +1229,7 @@ def unfriend_user(request, enrollment_number):
                     from asgiref.sync import async_to_sync
                     channel_layer = get_channel_layer()
                     if channel_layer:
-                        u1_id, u2_id = sorted([request.user.id, target_user.id])
+                        u1_id, u2_id = sorted([request.user.pk, target_user.pk])
                         async_to_sync(channel_layer.group_send)(
                             f'direct_chat_{u1_id}_{u2_id}',
                             {
