@@ -21,6 +21,7 @@ from .views import (
     send_signup_otp,
     unfriend_user,
     user_search,
+    verify_security_otp,
     verify_security_step_up,
 )
 
@@ -35,6 +36,7 @@ urlpatterns = [
     path('forgot-password/',                            forgot_password_view,   name='forgot_password'),
     path('otp/send-signup/',                            send_signup_otp,        name='send_signup_otp'),
     path('otp/send-security/',                          send_security_otp,      name='send_security_otp'),
+    path('otp/verify-security/',                        verify_security_otp,    name='verify_security_otp'),
     path('security/verify-step-up/',                    verify_security_step_up,name='verify_security_step_up'),
     path('applications/',                               application_list,       name='application_list'),
     path('applications/<int:application_id>/approve/',  approve_application,    name='approve_application'),

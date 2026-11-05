@@ -376,29 +376,33 @@
                     </div>
 
                     {% if not profile_user.is_debug_account %}
-                    <div class="p-3 rounded border {% if grace_active %}border-success-subtle bg-success bg-opacity-10{% else %}border-warning-subtle bg-warning bg-opacity-10{% endif %} mb-3">
+                    <div class="p-3 rounded border mb-3" id="securityVerificationBox"
+                         style="background: rgba({% if grace_active %}8, 183, 79, 0.08{% else %}245, 158, 11, 0.08{% endif %}) !important; border-color: rgba({% if grace_active %}8, 183, 79, 0.35{% else %}245, 158, 11, 0.35{% endif %}) !important;">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <strong class="small {% if grace_active %}text-success{% else %}text-warning{% endif %}">
+                            <strong class="small {% if grace_active %}text-success{% else %}text-warning{% endif %}" id="securityVerificationTitle">
                                 <i class="bi bi-shield-lock-fill me-1"></i> Security Verification
                             </strong>
                             {% if grace_active %}
-                                <span class="badge bg-success-subtle text-success border border-success-subtle small">
+                                <span class="badge border border-success border-opacity-50 text-success small" style="background: rgba(8, 183, 79, 0.15);" id="securityGraceBadge">
                                     <i class="bi bi-check-circle me-1"></i> 10m Grace Active
                                 </span>
                             {% endif %}
                         </div>
                         {% if grace_active %}
-                            <div class="small text-white-50">
+                            <div class="small text-light" id="securityGraceMessage" style="opacity: 0.9;">
                                 Your session is actively authenticated. You can modify password, phone number, and 2FA settings directly without re-entering an OTP.
                             </div>
                         {% else %}
-                            <div class="small text-secondary mb-2">
-                                Modifying sensitive security settings (phone, password, or 2FA) requires a 6-digit OTP dispatched to your registered phone.
+                            <div class="small text-secondary mb-2" id="securityOtpPrompt">
+                                Modifying sensitive security settings (phone, password, or 2FA) or registering a passkey requires a 6-digit OTP dispatched to your registered contact.
                             </div>
-                            <div class="input-group input-group-sm">
+                            <div class="input-group input-group-sm mb-1" id="securityOtpInputGroup">
                                 <input type="text" name="security_otp_code" id="securityOtpInput" class="form-control font-monospace text-center" maxlength="6" placeholder="Enter 6-digit OTP">
                                 <button type="button" class="btn btn-outline-warning" id="sendSecurityOtpBtn" onclick="requestSecurityOtp()">
                                     <i class="bi bi-send me-1"></i> Send OTP
+                                </button>
+                                <button type="button" class="btn btn-outline-success" id="verifySecurityOtpBtn" onclick="verifySecurityOtpInline()">
+                                    <i class="bi bi-check2-circle me-1"></i> Verify OTP
                                 </button>
                             </div>
                             <div id="securityOtpFeedback" class="small mt-1 font-monospace" style="display: none;"></div>
@@ -531,6 +535,80 @@ async function registerWebAuthnPasskey() {
     }
 }
 
+async function verifySecurityOtpInline() {
+    const otpInput = document.getElementById('securityOtpInput');
+    const feedback = document.getElementById('securityOtpFeedback');
+    const verifyBtn = document.getElementById('verifySecurityOtpBtn');
+    if (!otpInput) return;
+
+    const code = otpInput.value.trim();
+    if (!code) {
+        if (feedback) {
+            feedback.style.display = 'block';
+            feedback.className = 'small mt-1 text-warning font-monospace';
+            feedback.textContent = 'Please enter the 6-digit verification code first.';
+        }
+        otpInput.focus();
+        return;
+    }
+
+    if (verifyBtn) {
+        verifyBtn.disabled = true;
+        verifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Verifying...';
+    }
+
+    try {
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+        const res = await fetch("{% url 'verify_security_otp' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ otp_code: code })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            const box = document.getElementById('securityVerificationBox');
+            if (box) {
+                box.style.background = 'rgba(8, 183, 79, 0.08)';
+                box.style.borderColor = 'rgba(8, 183, 79, 0.35)';
+                box.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong class="small text-success">
+                            <i class="bi bi-shield-lock-fill me-1"></i> Security Verification
+                        </strong>
+                        <span class="badge border border-success border-opacity-50 text-success small" style="background: rgba(8, 183, 79, 0.15);">
+                            <i class="bi bi-check-circle me-1"></i> 10m Grace Active
+                        </span>
+                    </div>
+                    <div class="small text-light" style="opacity: 0.9;">
+                        Your session is actively authenticated. You can modify password, phone number, and 2FA settings directly without re-entering an OTP.
+                    </div>
+                `;
+            }
+            const passkeyStatus = document.getElementById('passkeyRegStatus');
+            if (passkeyStatus) {
+                passkeyStatus.style.display = 'block';
+                passkeyStatus.className = 'small mt-2 text-success font-monospace';
+                passkeyStatus.textContent = 'Identity verified! You can now click "Register Passkey" above.';
+            }
+        } else {
+            throw new Error(data.error || 'Invalid OTP code.');
+        }
+    } catch (err) {
+        if (verifyBtn) {
+            verifyBtn.disabled = false;
+            verifyBtn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Verify OTP';
+        }
+        if (feedback) {
+            feedback.style.display = 'block';
+            feedback.className = 'small mt-1 text-danger font-monospace';
+            feedback.textContent = err.message || 'Verification failed. Please try again.';
+        }
+    }
+}
+
 async function requestSecurityOtp() {
     const feedback = document.getElementById('securityOtpFeedback');
     const btn = document.getElementById('sendSecurityOtpBtn');
@@ -589,6 +667,15 @@ async function requestSecurityOtp() {
 
 // Ensure security OTP is entered before form submission if security settings changed
 document.addEventListener('DOMContentLoaded', function () {
+    const secOtpInputEl = document.getElementById('securityOtpInput');
+    if (secOtpInputEl) {
+        secOtpInputEl.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                verifySecurityOtpInline();
+            }
+        });
+    }
     const editForm = document.querySelector('#editProfileModal form');
     if (editForm) {
         editForm.addEventListener('submit', function (e) {

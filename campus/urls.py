@@ -17,6 +17,7 @@ from accounts.views import (
     passkey_reg_challenge,
     passkey_reg_verify,
     passkey_delete,
+    verify_security_otp,
     verify_security_step_up,
     service_catalogue,
     two_factor_verify,
@@ -165,6 +166,7 @@ urlpatterns = [
         name='password_change',
     ),
     path('auth/passkey/step-up/', verify_security_step_up, name='passkey_step_up'),
+    path('otp/verify-security/', verify_security_otp, name='verify_security_otp'),
     path(
         'password_change/done/',
         auth_views.PasswordChangeDoneView.as_view(

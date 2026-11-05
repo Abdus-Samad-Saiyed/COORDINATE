@@ -9,6 +9,7 @@ Automated regression tests for:
 7. Admin Identity Desk: phone update, physical verification resolution, soft deletion preserving trip history
 """
 
+import json
 import os
 from datetime import timedelta
 from django.contrib.auth import authenticate
@@ -146,6 +147,58 @@ class IdentitySecurityArchitectureTests(TestCase):
         self.student.refresh_from_db()
         self.assertEqual(self.student.phone_number, "+918888877777")
         self.assertTrue(self.student.check_password("NewSecretPass@123"))
+
+    def test_verify_security_otp_inline_activates_grace(self):
+        """Inline security OTP verification activates 10m grace window without page reload."""
+        from accounts.two_factor import create_phone_otp
+        self.client.force_login(self.student)
+        _, raw_code = create_phone_otp(self.student, purpose="SECURITY_CHANGE")
+
+        # Empty OTP code returns 400
+        res_empty = self.client.post(reverse("verify_security_otp"), data=json.dumps({"otp_code": ""}), content_type="application/json")
+        self.assertEqual(res_empty.status_code, 400)
+
+        # Invalid OTP returns 400
+        res_bad = self.client.post(reverse("verify_security_otp"), data=json.dumps({"otp_code": "000000"}), content_type="application/json")
+        self.assertEqual(res_bad.status_code, 400)
+
+        # Valid OTP returns 200 and activates grace
+        res_ok = self.client.post(reverse("verify_security_otp"), data=json.dumps({"otp_code": raw_code}), content_type="application/json")
+        self.assertEqual(res_ok.status_code, 200)
+        self.assertTrue(res_ok.json().get("success"))
+        self.assertIn("security_otp_verified_until", self.client.session)
+
+    def test_phone_change_with_otp_does_not_require_password(self):
+        """Updating phone or 2FA with valid OTP succeeds without demanding current password."""
+        from accounts.two_factor import create_phone_otp
+        self.client.force_login(self.student)
+        _, raw_code = create_phone_otp(self.student, purpose="SECURITY_CHANGE")
+
+        res = self.client.post(reverse("profile", args=[self.student.enrollment_number]), {
+            "phone_number": "+917777766666",
+            "security_otp_code": raw_code,
+        }, follow=True)
+
+        self.assertContains(res, "Profile and security settings updated successfully.")
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.phone_number, "+917777766666")
+
+    def test_password_change_still_requires_current_password(self):
+        """Changing password still strictly enforces verification of current password."""
+        self.client.force_login(self.student)
+        session = self.client.session
+        session["security_otp_verified_until"] = (timezone.now() + timedelta(minutes=10)).isoformat()
+        session.save()
+
+        res = self.client.post(reverse("profile", args=[self.student.enrollment_number]), {
+            "new_password": "NewSecretPass@123",
+            "confirm_password": "NewSecretPass@123",
+            "current_password": "",
+        }, follow=True)
+
+        self.assertContains(res, "Current password is required")
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.check_password("NewSecretPass@123"))
 
     def test_security_change_requires_otp_when_grace_expired(self):
         """Security settings change with expired grace window must be blocked without valid OTP."""

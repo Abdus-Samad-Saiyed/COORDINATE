@@ -206,6 +206,7 @@ MESSAGE_TAGS = {
 
 TRUST_X_FORWARDED_FOR = env.bool('DJANGO_TRUST_X_FORWARDED_FOR', default=False)
 TRUSTED_PROXY_IPS = env.list('DJANGO_TRUSTED_PROXY_IPS', default=['127.0.0.1'])
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # --- WebAuthn / Passkeys -----------------------------------------------------

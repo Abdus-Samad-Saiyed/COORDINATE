@@ -365,6 +365,45 @@ class Stage1WebAuthnEndpointTests(TestCase):
             ).exists()
         )
 
+    def test_passkey_registration_with_dynamic_tunnel_origin(self):
+        """Passkey registration succeeds through reverse proxy or Cloudflare tunnel origins."""
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["security_otp_verified_until"] = (timezone.now() + timedelta(minutes=10)).isoformat()
+        session.save()
+
+        tunnel_host = "tunnel-demo.trycloudflare.com"
+        tunnel_origin = f"https://{tunnel_host}"
+
+        chal_res = self.client.get(
+            reverse("passkey_reg_challenge"),
+            HTTP_HOST=tunnel_host,
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(chal_res.status_code, 200)
+        challenge = chal_res.json()["challenge"]
+        self.assertEqual(chal_res.json()["rp_id"], tunnel_host)
+
+        reg_payload, _, _ = make_registration_response(
+            challenge_b64=challenge,
+            credential_id=b"carol_tunnel_cred",
+            origin=tunnel_origin,
+            rp_id=tunnel_host,
+            private_key=self.private_key,
+        )
+        reg_payload["name"] = "Carol Cloudflare Tunnel Key"
+
+        verify_res = self.client.post(
+            reverse("passkey_reg_verify"),
+            data=json.dumps(reg_payload),
+            content_type="application/json",
+            HTTP_HOST=tunnel_host,
+            HTTP_ORIGIN=tunnel_origin,
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(verify_res.status_code, 200)
+        self.assertTrue(verify_res.json().get("success"))
+
     def test_passkey_deletion_requires_step_up(self):
         """Deleting a passkey requires active reauthentication."""
         self.client.force_login(self.user)

@@ -394,10 +394,18 @@ def verify_passkey_registration(
         expected_challenge_bytes = webauthn.helpers.base64url_to_bytes(session_challenge)
 
         allowed_origins = list(getattr(settings, 'WEBAUTHN_ALLOWED_ORIGINS', []))
-        if expected_origin and expected_origin in allowed_origins:
-            verify_origins = [expected_origin]
-        else:
-            verify_origins = allowed_origins
+        verify_origins = list(allowed_origins)
+        if expected_origin:
+            if expected_origin not in verify_origins:
+                verify_origins.append(expected_origin)
+            if expected_origin.startswith('http://'):
+                https_variant = 'https://' + expected_origin[7:]
+                if https_variant not in verify_origins:
+                    verify_origins.append(https_variant)
+            elif expected_origin.startswith('https://'):
+                http_variant = 'http://' + expected_origin[8:]
+                if http_variant not in verify_origins:
+                    verify_origins.append(http_variant)
 
         rp_id = expected_rp_id or getattr(settings, 'WEBAUTHN_RP_ID', 'localhost')
 
@@ -478,10 +486,18 @@ def verify_passkey_assertion(
         pubkey_bytes = webauthn.helpers.base64url_to_bytes(credential.public_key)
 
         allowed_origins = list(getattr(settings, 'WEBAUTHN_ALLOWED_ORIGINS', []))
-        if expected_origin and expected_origin in allowed_origins:
-            verify_origins = [expected_origin]
-        else:
-            verify_origins = allowed_origins
+        verify_origins = list(allowed_origins)
+        if expected_origin:
+            if expected_origin not in verify_origins:
+                verify_origins.append(expected_origin)
+            if expected_origin.startswith('http://'):
+                https_variant = 'https://' + expected_origin[7:]
+                if https_variant not in verify_origins:
+                    verify_origins.append(https_variant)
+            elif expected_origin.startswith('https://'):
+                http_variant = 'http://' + expected_origin[8:]
+                if http_variant not in verify_origins:
+                    verify_origins.append(http_variant)
 
         rp_id = expected_rp_id or getattr(settings, 'WEBAUTHN_RP_ID', 'localhost')
 

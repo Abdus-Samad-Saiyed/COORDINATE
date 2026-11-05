@@ -306,7 +306,7 @@ i.green-accent {
 }
 
 .bg-success {
-  background-color: var(--green) !important;
+  background-color: rgba(8, 183, 79, var(--bs-bg-opacity, 1)) !important;
 }
 
 .bg-success-subtle {
