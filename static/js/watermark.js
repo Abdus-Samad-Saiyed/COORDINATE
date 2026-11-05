@@ -395,63 +395,95 @@
   function updateNexusDynamicFavicon(hexCode) {
     if (!hexCode) return;
     try {
+      var metaTheme = document.getElementById('nexus-theme-color-meta');
+      if (metaTheme) metaTheme.setAttribute('content', hexCode);
+
+      if (typeof window.HTMLCanvasElement === 'undefined') return;
+
+      var canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 32;
+      var ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
       var c = hexCode.replace('#', '');
       var full = (c.length === 3) ? c.split('').map(function(x) { return x + x; }).join('') : c;
       var r = parseInt(full.slice(0, 2), 16) || 8;
       var g = parseInt(full.slice(2, 4), 16) || 183;
       var b = parseInt(full.slice(4, 6), 16) || 79;
-      var rB = Math.min(255, Math.round(r * 0.55 + 255 * 0.45));
-      var gB = Math.min(255, Math.round(g * 0.55 + 255 * 0.45));
-      var bB = Math.min(255, Math.round(b * 0.55 + 255 * 0.45));
-      var bright = 'rgb(' + rB + ',' + gB + ',' + bB + ')';
-      var bg1 = 'rgb(' + Math.round(r * 0.08 + 8) + ',' + Math.round(g * 0.08 + 8) + ',' + Math.round(b * 0.08 + 8) + ')';
-      var bg2 = 'rgb(' + Math.round(r * 0.03 + 4) + ',' + Math.round(g * 0.03 + 4) + ',' + Math.round(b * 0.03 + 4) + ')';
+      var bright = 'rgb(' + Math.min(255, Math.round(r * 0.6 + 102)) + ',' + Math.min(255, Math.round(g * 0.6 + 102)) + ',' + Math.min(255, Math.round(b * 0.6 + 102)) + ')';
 
-      var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">' +
-        '<defs>' +
-        '<linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="' + bg1 + '"/><stop offset="100%" stop-color="' + bg2 + '"/></linearGradient>' +
-        '<linearGradient id="accGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="' + bright + '"/><stop offset="60%" stop-color="' + hexCode + '"/><stop offset="100%" stop-color="' + hexCode + '"/></linearGradient>' +
-        '<linearGradient id="bmGrad" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="' + hexCode + '"/><stop offset="50%" stop-color="' + bright + '"/><stop offset="100%" stop-color="#FFFFFF"/></linearGradient>' +
-        '<radialGradient id="ambG" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="' + hexCode + '" stop-opacity="0.45"/><stop offset="60%" stop-color="' + hexCode + '" stop-opacity="0.12"/><stop offset="100%" stop-color="' + bg2 + '" stop-opacity="0"/></radialGradient>' +
-        '</defs>' +
-        '<rect x="2.5" y="2.5" width="59" height="59" rx="15" fill="url(#bgGrad)" stroke="' + hexCode + '" stroke-width="2.5" stroke-opacity="0.95"/>' +
-        '<circle cx="32" cy="32" r="24" fill="url(#ambG)"/>' +
-        '<circle cx="32" cy="32" r="23" fill="none" stroke="' + bright + '" stroke-width="1" stroke-opacity="0.22" stroke-dasharray="3,4"/>' +
-        '<circle cx="32" cy="32" r="15" fill="none" stroke="' + hexCode + '" stroke-width="0.8" stroke-opacity="0.28"/>' +
-        '<path d="M16 46 L16 18 C16 16.5 17.5 15.5 19 16.5 L24 20 C24.8 20.6 25.5 21.6 25.5 22.8 L25.5 44 C25.5 45.5 24 46.5 22.5 45.8 L17.5 46.5 C16.5 46.8 16 46.5 16 46 Z" fill="url(#accGrad)"/>' +
-        '<path d="M19 17.5 L45 46.5 C46.2 47.8 48 47 48 45 L48 39 C48 37.8 47.2 36.8 46.2 35.6 L26 14.5 C24.5 13 22 14.2 22 16.2 L22 17.5 Z" fill="url(#bmGrad)"/>' +
-        '<path d="M38.5 20 C38.5 18.5 40 17.5 41.5 18.2 L46.5 20.5 C47.5 21 48 22 48 23.2 L48 46 C48 47.5 46.5 48.5 45 47.8 L40 44.5 C39 43.8 38.5 42.8 38.5 41.6 Z" fill="url(#accGrad)"/>' +
-        '<circle cx="20.5" cy="18.5" r="3.2" fill="#FFFFFF"/>' +
-        '<circle cx="43.5" cy="45.5" r="3.2" fill="#FFFFFF"/>' +
-        '<circle cx="43.5" cy="22" r="2.5" fill="' + bright + '"/>' +
-        '<circle cx="20.5" cy="42" r="2.5" fill="' + bright + '"/>' +
-        '<circle cx="32" cy="32" r="2.8" fill="#FFFFFF"/>' +
-        '</svg>';
-
-      var uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-      var svgLink = document.getElementById('nexus-svg-favicon');
-      if (svgLink) svgLink.href = uri;
-
-      var metaTheme = document.getElementById('nexus-theme-color-meta');
-      if (metaTheme) metaTheme.setAttribute('content', hexCode);
-
-      // Sync raster icon canvas for browser contexts that prefer PNG
-      if (typeof window.HTMLCanvasElement !== 'undefined') {
-        var img = new Image();
-        img.onload = function () {
-          try {
-            var canvas = document.createElement('canvas');
-            canvas.width = 32;
-            canvas.height = 32;
-            var ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, 32, 32);
-            var pngUri = canvas.toDataURL('image/png');
-            var pngFavicon = document.getElementById('nexus-png-favicon');
-            if (pngFavicon) pngFavicon.href = pngUri;
-          } catch (e) {}
-        };
-        img.src = uri;
+      function roundRect(ctx, x, y, w, h, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.arcTo(x + w, y, x + w, y + h, radius);
+        ctx.arcTo(x + w, y + h, x, y + h, radius);
+        ctx.arcTo(x, y + h, x, y, radius);
+        ctx.arcTo(x, y, x + w, y, radius);
+        ctx.closePath();
       }
+
+      ctx.clearRect(0, 0, 32, 32);
+
+      // Squircle background
+      roundRect(ctx, 1.5, 1.5, 29, 29, 7);
+      var bgGrad = ctx.createLinearGradient(0, 0, 32, 32);
+      bgGrad.addColorStop(0, '#0E1712');
+      bgGrad.addColorStop(1, '#050A07');
+      ctx.fillStyle = bgGrad;
+      ctx.fill();
+
+      // Border with user's selected accent
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = hexCode;
+      ctx.stroke();
+
+      // Ambient glow circle
+      ctx.beginPath();
+      ctx.arc(16, 16, 11, 0, Math.PI * 2);
+      ctx.fillStyle = hexCode + '28';
+      ctx.fill();
+
+      // Campus Nexus 'N' Monogram
+      var pGrad = ctx.createLinearGradient(0, 8, 0, 24);
+      pGrad.addColorStop(0, bright);
+      pGrad.addColorStop(1, hexCode);
+      ctx.fillStyle = pGrad;
+      roundRect(ctx, 8, 8, 3.8, 16, 1.8);
+      ctx.fill();
+      roundRect(ctx, 20.2, 8, 3.8, 16, 1.8);
+      ctx.fill();
+
+      // Vector beam
+      ctx.beginPath();
+      ctx.moveTo(8.5, 8.5);
+      ctx.lineTo(12.5, 8.5);
+      ctx.lineTo(23.5, 23.5);
+      ctx.lineTo(19.5, 23.5);
+      ctx.closePath();
+      var beamGrad = ctx.createLinearGradient(8, 8, 24, 24);
+      beamGrad.addColorStop(0, bright);
+      beamGrad.addColorStop(0.5, '#FFFFFF');
+      beamGrad.addColorStop(1, hexCode);
+      ctx.fillStyle = beamGrad;
+      ctx.fill();
+
+      // Node hubs
+      ctx.beginPath();
+      ctx.arc(10.2, 9.8, 1.6, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(21.8, 22.2, 1.6, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+
+      var pngUri = canvas.toDataURL('image/png');
+      var f32 = document.getElementById('nexus-favicon-32');
+      if (f32) f32.href = pngUri;
+      var f16 = document.getElementById('nexus-favicon-16');
+      if (f16) f16.href = pngUri;
     } catch (e) {}
   }
   window.updateNexusDynamicFavicon = updateNexusDynamicFavicon;

@@ -41,7 +41,21 @@ else:
     EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
 
 # Allow access across local subnets, hotspots, and dev tunnels in dev mode
-ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['*'])
+_configured_hosts = env.list('DJANGO_ALLOWED_HOSTS', default=['*'])
+if '*' in _configured_hosts:
+    ALLOWED_HOSTS = ['*']
+else:
+    # Always ensure wildcard and common dev tunnels are permitted in dev mode
+    ALLOWED_HOSTS = list(dict.fromkeys(
+        list(_configured_hosts) + [
+            '*',
+            'localhost',
+            '127.0.0.1',
+            '.trycloudflare.com',
+            '.ngrok-free.app',
+            '.pinggy.link',
+        ]
+    ))
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
     'http://localhost:8000',
     'http://127.0.0.1:8000',
@@ -65,6 +79,9 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
     'http://172.31.*',
     'http://192.168.*',
     'https://*.trycloudflare.com',
+    'http://*.trycloudflare.com',
     'https://*.ngrok-free.app',
+    'http://*.ngrok-free.app',
     'https://*.pinggy.link',
+    'http://*.pinggy.link',
 ])

@@ -105,6 +105,15 @@ def serve_protected_media(request, path):
 
     return FileResponse(open(full_path, 'rb'))
 
+
+def favicon_view(request):
+    """Directly serve favicon.ico with image/x-icon content type and HTTP 200."""
+    favicon_path = os.path.join(settings.BASE_DIR, 'static', 'favicon.ico')
+    if os.path.exists(favicon_path):
+        return FileResponse(open(favicon_path, 'rb'), content_type='image/x-icon')
+    return RedirectView.as_view(url=settings.STATIC_URL + 'favicon.ico', permanent=False)(request)
+
+
 urlpatterns = [
     # Django admin & Operational Dashboard
     path('admin/', admin.site.urls),
@@ -117,8 +126,8 @@ urlpatterns = [
     path('operations/export/users/', export_users_csv, name='export_users_csv'),
     path('operations/export/applications/', export_applications_csv, name='export_applications_csv'),
 
-    # System Health Check
-    path('favicon.ico', RedirectView.as_view(url=settings.STATIC_URL + 'favicon.ico', permanent=True)),
+    # System Health Check & Root Favicon
+    path('favicon.ico', favicon_view, name='favicon'),
     path('health/', health_check, name='health_check'),
     path('healthz/', health_check, name='healthz'),
 
