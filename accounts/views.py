@@ -212,11 +212,24 @@ def custom_login_view(request, extra_context=None):
             )
             return redirect(redirect_to or 'dashboard')
         else:
+            login_username = request.POST.get('username', '').strip().upper()
             log_audit_event(
                 event_type='LOGIN_FAILURE',
-                actor_enrollment=request.POST.get('username', '')[:20],
+                actor_enrollment=login_username[:20],
                 description='Failed login attempt',
             )
+            if not getattr(settings, 'EARLY_LAUNCH_MODE', False):
+                try:
+                    from django.db import connections
+                    if 'temp_early_access' in connections:
+                        from accounts.models import User as UserModel
+                        if UserModel.objects.using('temp_early_access').filter(enrollment_number=login_username).exists():
+                            messages.info(
+                                request,
+                                "Notice: This account was registered during the temporary Early Launch period. Early Launch Mode is currently closed. To access Campus Nexus for regular semester services, please submit a verified student application."
+                            )
+                except Exception:
+                    pass
     else:
         form = EnrollmentAuthenticationForm(request)
 
