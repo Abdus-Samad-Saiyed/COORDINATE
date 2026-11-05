@@ -41,7 +41,7 @@ from django.views.decorators.http import require_POST
 
 from coordinate.models import RideParticipant, RideRequest
 
-from .forms import AccountApplicationForm, EnrollmentAuthenticationForm
+from .forms import AccountApplicationForm, EarlyLaunchDeclarationForm, EnrollmentAuthenticationForm
 from .models import (
     AccountApplication,
     AuditEvent,
@@ -769,9 +769,38 @@ def forgot_password_view(request):
 
 @rate_limit(key_prefix='apply', limit=5, period_seconds=60)
 def apply_account(request):
-    """Student account application with mandatory phone OTP verification."""
+    """Student account application or Early Launch self-declaration."""
     if request.user.is_authenticated:
         return redirect('dashboard')
+
+    early_launch = getattr(settings, 'EARLY_LAUNCH_MODE', False)
+
+    if early_launch:
+        if request.method == 'POST':
+            form = EarlyLaunchDeclarationForm(request.POST)
+            if form.is_valid():
+                with transaction.atomic():
+                    user = form.save()
+                    log_audit_event(
+                        event_type='EARLY_LAUNCH_SELF_DECLARATION',
+                        actor_enrollment=user.enrollment_number,
+                        description=f'Self-declaration under Early Launch Mode for {user.enrollment_number}',
+                        target_id=user.enrollment_number,
+                    )
+                from django.contrib.auth import login
+                login(request, user, backend='accounts.backends.EnrollmentBackend')
+                messages.success(
+                    request,
+                    "🎉 Welcome to Campus Nexus! Your account is active under Early Launch Mode. You can now coordinate rides immediately."
+                )
+                return redirect('dashboard')
+        else:
+            form = EarlyLaunchDeclarationForm()
+
+        return render(request, 'accounts/apply.html', {
+            'form': form,
+            'early_launch_mode': True,
+        })
 
     if request.method == 'POST':
         form = AccountApplicationForm(request.POST)

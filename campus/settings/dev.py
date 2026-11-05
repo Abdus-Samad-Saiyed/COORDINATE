@@ -85,3 +85,7 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
     'https://*.pinggy.link',
     'http://*.pinggy.link',
 ])
+
+# Early Launch Mode override from environment flag
+if os.environ.get('CAMPUS_EARLY_LAUNCH_MODE', '').lower() in ('true', '1', 'yes') or env.bool('EARLY_LAUNCH_MODE', default=False):
+    EARLY_LAUNCH_MODE = True

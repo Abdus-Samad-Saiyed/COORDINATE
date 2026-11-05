@@ -139,3 +139,156 @@ class AccountApplicationForm(forms.ModelForm):
             self.add_error('confirm_password', 'Passwords do not match.')
 
         return cleaned
+
+
+
+class EarlyLaunchDeclarationForm(forms.Form):
+    """Early launch self-declaration form requiring enrollment, phone, name, gender, password.
+
+    Skips the physical admin verification queue and grants immediate active student access.
+    """
+
+    enrollment_number = forms.CharField(
+        max_length=11,
+        label='Enrollment Number',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control font-monospace',
+            'placeholder': 'e.g. 2024BCSE001',
+            'autocomplete': 'username',
+        }),
+    )
+    full_name = forms.CharField(
+        max_length=150,
+        label='Full Name',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Your Full Name',
+            'autocomplete': 'name',
+        }),
+    )
+    gender = forms.ChoiceField(
+        choices=User.GENDER_CHOICES,
+        label='Gender',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    phone_number = forms.CharField(
+        max_length=15,
+        label='Phone Number (WhatsApp)',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '+91 XXXXX XXXXX',
+            'autocomplete': 'tel',
+        }),
+    )
+    email = forms.EmailField(
+        required=False,
+        label='Institute / Personal Email (Optional)',
+        widget=forms.EmailInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Defaults to enrollment@nitsri.ac.in',
+            'autocomplete': 'email',
+        }),
+    )
+    password = forms.CharField(
+        label='Password',
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Choose a secure password',
+            'autocomplete': 'new-password',
+        }),
+    )
+    confirm_password = forms.CharField(
+        label='Confirm Password',
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Confirm your password',
+            'autocomplete': 'new-password',
+        }),
+    )
+
+    def clean_enrollment_number(self):
+        from django.conf import settings
+        enrollment = self.cleaned_data.get('enrollment_number', '').strip().upper()
+
+        if not ENROLLMENT_VALIDATOR.regex.match(enrollment):
+            raise forms.ValidationError(
+                'Invalid enrollment number format. Expected format: 2024BCSE001'
+            )
+
+        if not getattr(settings, 'DEBUG', False) and enrollment.startswith('20XX'):
+            raise forms.ValidationError(
+                'Synthetic debug enrollments (20XX...) are disabled in production.'
+            )
+
+        if User.objects.filter(enrollment_number=enrollment).exists():
+            raise forms.ValidationError(
+                'An account with this enrollment number is already registered. Please log in.'
+            )
+
+        return enrollment
+
+    def clean_phone_number(self):
+        from .two_factor import normalize_phone_number
+        phone = self.cleaned_data.get('phone_number', '').strip()
+        normalized = normalize_phone_number(phone)
+        if not normalized or len(normalized) < 10:
+            raise forms.ValidationError('Please enter a valid 10-digit phone number.')
+        return normalized
+
+    def clean_email(self):
+        email = self.cleaned_data.get('email', '').strip().lower()
+        if email and User.objects.filter(email=email).exists():
+            raise forms.ValidationError('An account with this email address already exists.')
+        return email
+
+    def clean(self):
+        cleaned = super().clean()
+        pw = cleaned.get('password')
+        cpw = cleaned.get('confirm_password')
+
+        if pw:
+            if len(pw) < 8:
+                self.add_error('password', 'Password must contain at least 8 characters.')
+            else:
+                from django.contrib.auth.password_validation import validate_password
+                try:
+                    validate_password(pw)
+                except forms.ValidationError as e:
+                    self.add_error('password', e)
+
+        if not cpw:
+            self.add_error('confirm_password', 'This field is required.')
+        elif pw and pw != cpw:
+            self.add_error('confirm_password', 'Passwords do not match.')
+
+        return cleaned
+
+    def save(self):
+        from django.contrib.auth.hashers import make_password
+        enrollment = self.cleaned_data['enrollment_number']
+        phone = self.cleaned_data['phone_number']
+        full_name = self.cleaned_data.get('full_name', '').strip()
+        gender = self.cleaned_data.get('gender', '')
+        password = self.cleaned_data['password']
+        email = self.cleaned_data.get('email') or f"{enrollment.lower()}@nitsri.ac.in"
+
+        parts = full_name.split() if full_name else []
+        first_name = parts[0][:150] if parts else ''
+        last_name = ' '.join(parts[1:])[:150] if len(parts) > 1 else ''
+
+        # Clean up any pending applications for this enrollment
+        AccountApplication.objects.filter(enrollment_number=enrollment).delete()
+
+        user = User.objects.create(
+            username=enrollment,
+            enrollment_number=enrollment,
+            first_name=first_name,
+            last_name=last_name,
+            phone_number=phone,
+            email=email,
+            gender=gender,
+            password=make_password(password),
+            verified=True,
+            is_active=True,
+        )
+        return user

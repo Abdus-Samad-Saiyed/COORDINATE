@@ -129,3 +129,31 @@ To eliminate OTP verification fatigue when a student is updating multiple profil
 | **Session Hijacking** | `SingleSessionMiddleware` locks account to single active session; `django.middleware.csrf.CsrfViewMiddleware` enforces Anti-CSRF tokens on all mutating HTTP POST/DELETE requests. |
 | **SIM Swapping / Lost Phone** | Dual-channel email OTP fallback; physical operations desk verification requiring government/institute photo ID card. |
 | **Data Scraping / Enumeration** | `hide_from_search` privacy switch; pagination limits; phone numbers masked to non-friends (`***-***-1234`). |
+
+
+---
+
+## 7. Early Launch Mode: Accelerated Self-Declaration vs Physical Desk
+
+To accommodate high-stakes, time-sensitive campus situations (such as end-of-term transit rushes where thousands of students need to arrange shared transport before semester closing), Campus Nexus supports an **Early Launch Mode**.
+
+### 7.1 Comparison of Operational Modes
+
+| Dimension | Standard Verification Mode | Early Launch Mode (`--early-launch`) |
+| :--- | :--- | :--- |
+| **Activation Trigger** | Default operational state (`EARLY_LAUNCH_MODE=False`). | Started via `manage.py runserver --early-launch` or `EARLY_LAUNCH_MODE=True`. |
+| **Registration Flow** | Student submits application + validates phone/email OTP -> Application queues in `AccountApplication` -> Admin verifies physical ID card. | Student submits self-declaration form with enrollment, name, gender, phone, and password -> Account is activated immediately. |
+| **Initial Account Status** | `verified=False`, `is_active=False` until physical desk sign-off. | `verified=True`, `is_active=True` upon form submission. |
+| **Login Session** | Student must wait for approval before logging in. | Student is automatically logged in and redirected to `/dashboard/`. |
+| **Pending Applications** | Queued in `AccountApplication` table awaiting review. | Any pre-existing pending applications for that enrollment are purged automatically. |
+| **COORDINATE Access** | Requires `user.verified=True`. | Granted via `user.verified=True` and `is_verified_student` policy waiver. |
+| **Audit Trail** | `APPLICATION_SUBMITTED`, `PHYSICAL_VERIFICATION_RESOLVED`. | `EARLY_LAUNCH_SELF_DECLARATION` logged to `AuditEvent`. |
+
+### 7.2 Safety Guarantees Maintained During Early Launch
+Even though physical verification queues are waived during Early Launch, mutual security inside rides remains strictly intact:
+1. **Enrollment Format Validation:** All enrollment numbers must match official NIT Srinagar regex (`^(?:\d{4}|20XX)[BMP][A-Z]{3}\d{3}$`).
+2. **Normalized Phone Numbers:** All contact numbers are validated and stored in E.164-compatible format, ensuring reachable WhatsApp and cellular connectivity.
+3. **Gender Preference Enforcement:** Gender selection is mandatory, preserving safety comfort settings for female-only rides.
+4. **Zero Anonymity Inside Cabs:** Co-passengers and ride hosts mutually inspect each other's full name, enrollment number, and phone number upon joining a ride.
+5. **Rate Limiting:** Registration endpoint is throttled to 5 requests per 60 seconds to protect against automated account generation.
+6. **Post-Exam Physical Protocol:** A physical audit is conducted by the Proctorial Board at the start of the subsequent academic term.

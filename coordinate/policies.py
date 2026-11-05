@@ -24,7 +24,9 @@ def is_verified_student(user: Optional[User]) -> bool:
     """Return True if user is an active, verified student in good standing."""
     if not user or not user.is_authenticated:
         return False
-    return bool(user.is_active and user.verified and not getattr(user, 'is_deleted', False))
+    from django.conf import settings
+    is_verified = user.verified or getattr(settings, 'EARLY_LAUNCH_MODE', False)
+    return bool(user.is_active and is_verified and not getattr(user, 'is_deleted', False))
 
 
 def can_view_student_directory(user: Optional[User]) -> bool:

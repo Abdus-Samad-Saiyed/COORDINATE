@@ -2,6 +2,7 @@
 Django base settings for COORDINATE.
 """
 
+import os
 import environ
 from pathlib import Path
 
@@ -25,6 +26,7 @@ ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['localhost', '127.0.0.
 # --- Apps --------------------------------------------------------------------
 
 INSTALLED_APPS = [
+    'accounts',
     'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -40,7 +42,6 @@ INSTALLED_APPS = [
     'django_htmx',
 
     # Local
-    'accounts',
     'coordinate',
 ]
 
@@ -84,6 +85,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'accounts.context_processors.early_launch_context',
             ],
         },
     },
@@ -107,6 +109,17 @@ CHANNEL_LAYERS = {
         },
     },
 }
+
+
+# --- Early Launch Mode -------------------------------------------------------
+# When enabled, in-person physical verification is waived and students can immediately
+# self-declare with their enrollment number & phone number.
+# Can be toggled via CLI: python manage.py runserver --early-launch
+# Or via environment variable: EARLY_LAUNCH_MODE=True
+EARLY_LAUNCH_MODE = env.bool(
+    'EARLY_LAUNCH_MODE',
+    default=os.environ.get('CAMPUS_EARLY_LAUNCH_MODE', 'False').lower() in ('true', '1', 'yes')
+)
 
 
 # --- Auth / Users ------------------------------------------------------------

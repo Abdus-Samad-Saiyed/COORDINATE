@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Apply for Account — COORDINATE{% endblock %}
+{% block title %}{% if early_launch_mode %}Instant Student Access — Early Launch{% else %}Apply for Account — COORDINATE{% endif %}{% endblock %}
 
 {% block content %}
 <div class="container py-5">
@@ -8,170 +8,314 @@
         <!-- Application Form Column -->
         <div class="col-lg-7">
             <div class="glass p-4 p-md-5 h-100">
-                <div class="mb-4">
-                    <span class="badge bg-success-subtle text-success px-3 py-1 rounded-pill fw-semibold mb-2">
-                        STUDENT REGISTRATION
-                    </span>
-                    <h2 class="fw-bold mb-1">Apply for Verification</h2>
-                    <p class="text-secondary small">
-                        Please provide accurate college credentials. Accounts undergo admin verification against institute registration records.
-                    </p>
-                </div>
-
-                <form method="POST">
-                    {% csrf_token %}
-
-                    {% if form.non_field_errors %}
-                        <div class="alert alert-danger py-2 small mb-3">
-                            {% for error in form.non_field_errors %}
-                                <div>{{ error }}</div>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-
-                    <div class="mb-3">
-                        <label for="{{ form.enrollment_number.id_for_label }}" class="form-label">Enrollment Number</label>
-                        {{ form.enrollment_number }}
-                        <div class="form-text text-secondary small">Example: 2024BCSE001 (Must match your NIT ID card)</div>
-                        {% if form.enrollment_number.errors %}
-                            <div class="text-danger small mt-1">{{ form.enrollment_number.errors.0 }}</div>
-                        {% endif %}
+                {% if early_launch_mode %}
+                    <div class="mb-4">
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-1 rounded-pill fw-semibold mb-2">
+                            <i class="bi bi-rocket-takeoff-fill me-1"></i> EARLY LAUNCH ACCESS
+                        </span>
+                        <h2 class="fw-bold mb-1">Instant Student Registration</h2>
+                        <p class="text-secondary small">
+                            End-of-term travel rush access active. Instant account creation with enrollment and phone number. Physical verification desk waived.
+                        </p>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="{{ form.full_name.id_for_label }}" class="form-label">Full Name</label>
-                        {{ form.full_name }}
-                        {% if form.full_name.errors %}
-                            <div class="text-danger small mt-1">{{ form.full_name.errors.0 }}</div>
-                        {% endif %}
-                    </div>
+                    <form method="POST">
+                        {% csrf_token %}
 
-                    <div class="mb-3">
-                        <label for="{{ form.gender.id_for_label }}" class="form-label">Gender</label>
-                        {{ form.gender }}
-                        {% if form.gender.errors %}
-                            <div class="text-danger small mt-1">{{ form.gender.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="{{ form.email.id_for_label }}" class="form-label">Institute / Personal Email *</label>
-                        {{ form.email }}
-                        <div class="form-text text-secondary small">Mandatory for confirmed in-person ride coordination and emergency contact between co-passengers. Direct SMS verification is planned for an upcoming release; your verification code will be sent to your email.</div>
-                        {% if form.email.errors %}
-                            <div class="text-danger small mt-1">{{ form.email.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-7">
-                            <label for="{{ form.phone_number.id_for_label }}" class="form-label">WhatsApp / Phone Number *</label>
-                            <div class="input-group">
-                                {{ form.phone_number }}
-                                <button type="button" class="btn btn-outline-success" id="sendSignupOtpBtn" onclick="requestSignupOtp()">
-                                    <i class="bi bi-send me-1"></i> Send OTP
-                                </button>
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger py-2 small mb-3">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
                             </div>
-                            <div id="signupOtpFeedback" class="small mt-1 font-monospace" style="display: none;"></div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label for="{{ form.enrollment_number.id_for_label }}" class="form-label">Enrollment Number</label>
+                            {{ form.enrollment_number }}
+                            <div class="form-text text-secondary small">Example: 2024BCSE001 (Official NIT Srinagar Enrollment)</div>
+                            {% if form.enrollment_number.errors %}
+                                <div class="text-danger small mt-1">{{ form.enrollment_number.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.full_name.id_for_label }}" class="form-label">Full Name</label>
+                            {{ form.full_name }}
+                            {% if form.full_name.errors %}
+                                <div class="text-danger small mt-1">{{ form.full_name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.gender.id_for_label }}" class="form-label">Gender</label>
+                            {{ form.gender }}
+                            <div class="form-text text-secondary small">Required for gender-preference ride matching (e.g. female-only rides).</div>
+                            {% if form.gender.errors %}
+                                <div class="text-danger small mt-1">{{ form.gender.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.phone_number.id_for_label }}" class="form-label">WhatsApp / Phone Number</label>
+                            {{ form.phone_number }}
+                            <div class="form-text text-secondary small">Your active contact number for co-passenger coordination and cab groups.</div>
                             {% if form.phone_number.errors %}
                                 <div class="text-danger small mt-1">{{ form.phone_number.errors.0 }}</div>
                             {% endif %}
                         </div>
-                        <div class="col-md-5">
-                            <label class="form-label">6-Digit Verification Code *</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-shield-check"></i></span>
-                                <input type="text" name="phone_otp" id="phoneOtpInput" class="form-control font-monospace text-center" maxlength="6" placeholder="000000" required>
+
+                        <div class="mb-3">
+                            <label for="{{ form.email.id_for_label }}" class="form-label">Email (Optional)</label>
+                            {{ form.email }}
+                            <div class="form-text text-secondary small">Defaults to your institute email (e.g. 2024bcse001@nitsri.ac.in).</div>
+                            {% if form.email.errors %}
+                                <div class="text-danger small mt-1">{{ form.email.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
+                                {{ form.password }}
+                                {% if form.password.errors %}
+                                    <div class="text-danger small mt-1">{{ form.password.errors.0 }}</div>
+                                {% endif %}
                             </div>
-                            <div class="form-text text-secondary small">Enter OTP received on email or SMS.</div>
+                            <div class="col-md-6">
+                                <label for="{{ form.confirm_password.id_for_label }}" class="form-label">Confirm Password</label>
+                                {{ form.confirm_password }}
+                                {% if form.confirm_password.errors %}
+                                    <div class="text-danger small mt-1">{{ form.confirm_password.errors.0 }}</div>
+                                {% endif %}
+                            </div>
                         </div>
+
+                        <button type="submit" class="btn btn-green w-100 py-2 fs-6 fw-bold">
+                            <i class="bi bi-rocket-takeoff-fill me-1"></i> Register & Enter Campus Nexus
+                        </button>
+                    </form>
+                {% else %}
+                    <div class="mb-4">
+                        <span class="badge bg-success-subtle text-success px-3 py-1 rounded-pill fw-semibold mb-2">
+                            STUDENT REGISTRATION
+                        </span>
+                        <h2 class="fw-bold mb-1">Apply for Verification</h2>
+                        <p class="text-secondary small">
+                            Please provide accurate college credentials. Accounts undergo admin verification against institute registration records.
+                        </p>
                     </div>
 
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
-                            {{ form.password }}
-                            {% if form.password.errors %}
-                                <div class="text-danger small mt-1">{{ form.password.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="col-md-6">
-                            <label for="{{ form.confirm_password.id_for_label }}" class="form-label">Confirm Password</label>
-                            {{ form.confirm_password }}
-                            {% if form.confirm_password.errors %}
-                                <div class="text-danger small mt-1">{{ form.confirm_password.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                    </div>
+                    <form method="POST">
+                        {% csrf_token %}
 
-                    <button type="submit" class="btn btn-green w-100 py-2 fs-6 fw-bold">
-                        <i class="bi bi-file-earmark-check me-1"></i> Submit Verification Application
-                    </button>
-                </form>
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger py-2 small mb-3">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label for="{{ form.enrollment_number.id_for_label }}" class="form-label">Enrollment Number</label>
+                            {{ form.enrollment_number }}
+                            <div class="form-text text-secondary small">Example: 2024BCSE001 (Must match your NIT ID card)</div>
+                            {% if form.enrollment_number.errors %}
+                                <div class="text-danger small mt-1">{{ form.enrollment_number.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.full_name.id_for_label }}" class="form-label">Full Name</label>
+                            {{ form.full_name }}
+                            {% if form.full_name.errors %}
+                                <div class="text-danger small mt-1">{{ form.full_name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.gender.id_for_label }}" class="form-label">Gender</label>
+                            {{ form.gender }}
+                            {% if form.gender.errors %}
+                                <div class="text-danger small mt-1">{{ form.gender.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.email.id_for_label }}" class="form-label">Institute / Personal Email *</label>
+                            {{ form.email }}
+                            <div class="form-text text-secondary small">Mandatory for confirmed in-person ride coordination and emergency contact between co-passengers. Direct SMS verification is planned for an upcoming release; your verification code will be sent to your email.</div>
+                            {% if form.email.errors %}
+                                <div class="text-danger small mt-1">{{ form.email.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-7">
+                                <label for="{{ form.phone_number.id_for_label }}" class="form-label">WhatsApp / Phone Number *</label>
+                                <div class="input-group">
+                                    {{ form.phone_number }}
+                                    <button type="button" class="btn btn-outline-success" id="sendSignupOtpBtn" onclick="requestSignupOtp()">
+                                        <i class="bi bi-send me-1"></i> Send OTP
+                                    </button>
+                                </div>
+                                <div id="signupOtpFeedback" class="small mt-1 font-monospace" style="display: none;"></div>
+                                {% if form.phone_number.errors %}
+                                    <div class="text-danger small mt-1">{{ form.phone_number.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label">6-Digit Verification Code *</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-shield-check"></i></span>
+                                    <input type="text" name="phone_otp" id="phoneOtpInput" class="form-control font-monospace text-center" maxlength="6" placeholder="000000" required>
+                                </div>
+                                <div class="form-text text-secondary small">Enter OTP received on email or SMS.</div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
+                                {{ form.password }}
+                                {% if form.password.errors %}
+                                    <div class="text-danger small mt-1">{{ form.password.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.confirm_password.id_for_label }}" class="form-label">Confirm Password</label>
+                                {{ form.confirm_password }}
+                                {% if form.confirm_password.errors %}
+                                    <div class="text-danger small mt-1">{{ form.confirm_password.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-green w-100 py-2 fs-6 fw-bold">
+                            <i class="bi bi-file-earmark-check me-1"></i> Submit Verification Application
+                        </button>
+                    </form>
+                {% endif %}
 
                 <hr class="my-4">
 
                 <div class="text-center small">
-                    <p class="text-secondary mb-1">Already verified?</p>
+                    <p class="text-secondary mb-1">Already registered?</p>
                     <a href="{% url 'login' %}" class="green-accent fw-semibold">Sign in with your enrollment number &rarr;</a>
                 </div>
             </div>
         </div>
 
-        <!-- Designated Application Approvers Column -->
+        <!-- Information / Approvers Column -->
         <div class="col-lg-5">
             <div class="glass p-4 p-md-5 h-100 d-flex flex-column">
-                <div class="mb-3">
-                    <div class="feature-icon mb-3" style="width: 48px; height: 48px; font-size: 1.25rem;">
-                        <i class="bi bi-person-check-fill"></i>
+                {% if early_launch_mode %}
+                    <div class="mb-3">
+                        <div class="feature-icon mb-3" style="width: 48px; height: 48px; font-size: 1.25rem; background: rgba(245, 158, 11, 0.15); color: #f59e0b;">
+                            <i class="bi bi-airplane-engines-fill"></i>
+                        </div>
+                        <h3 class="fw-bold fs-5 mb-1">End-of-Term Transit Priority</h3>
+                        <p class="text-secondary small">
+                            With semester exams ending and high transit demand to Srinagar Airport and railway stations, in-person verification queues have been waived.
+                        </p>
                     </div>
-                    <h3 class="fw-bold fs-5 mb-1">Designated Application Approvers</h3>
-                    <p class="text-secondary small">
-                        To maintain campus safety and authentic student verification, your application is reviewed and vetted by the following designated institute administrators:
-                    </p>
-                </div>
 
-                <div class="d-flex flex-column gap-3 mb-4 flex-grow-1">
-                    {% for admin in designated_admins %}
-                        <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 d-flex align-items-center gap-3">
-                            <div class="rounded-circle bg-success-subtle text-success d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px; font-size: 1.2rem;">
-                                {% if admin.profile_photo %}
-                                    <img src="{{ admin.profile_photo.url }}" alt="{{ admin.display_name }}" class="rounded-circle" style="width: 44px; height: 44px; object-fit: cover;" onerror="this.onerror=null; this.src=''; this.parentElement.innerHTML='<i class=\'bi bi-shield-lock-fill\'></i>';">
-                                {% else %}
-                                    <i class="bi bi-shield-lock-fill"></i>
-                                {% endif %}
+                    <div class="d-flex flex-column gap-3 mb-4 flex-grow-1">
+                        <div class="p-3 rounded border border-warning-subtle bg-black bg-opacity-30">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-lightning-charge-fill text-warning"></i>
+                                <strong class="text-white">Instant Account Activation</strong>
                             </div>
-                            <div class="flex-grow-1 min-w-0">
-                                <div class="d-flex align-items-center justify-content-between">
-                                    <strong class="text-white text-truncate">{{ admin.display_name }}</strong>
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle small py-0 px-2">Superuser</span>
-                                </div>
-                                <div class="text-secondary small font-monospace">
-                                    {{ admin.enrollment_number }} &bull; {{ admin.branch|default:'CSE' }} ({{ admin.degree|default:'Bachelors' }})
-                                </div>
+                            <div class="text-secondary small">
+                                Your account is activated instantly with full ride hosting, booking, and campus directory privileges.
                             </div>
                         </div>
-                    {% empty %}
-                        <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 text-secondary small">
-                            <i class="bi bi-info-circle me-1"></i> Institute administrators are registered on the central system.
-                        </div>
-                    {% endfor %}
-                </div>
 
-                <div class="p-3 rounded border border-secondary bg-black bg-opacity-40 small text-secondary">
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <i class="bi bi-patch-check-fill text-success"></i>
-                        <strong class="text-white">Verification Protocol</strong>
+                        <div class="p-3 rounded border border-secondary bg-black bg-opacity-30">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-shield-lock-fill text-info"></i>
+                                <strong class="text-white">Enrollment Accountability</strong>
+                            </div>
+                            <div class="text-secondary small">
+                                Every ride host and passenger is bound to their verified enrollment number and phone number for mutual student safety.
+                            </div>
+                        </div>
+
+                        <div class="p-3 rounded border border-secondary bg-black bg-opacity-30">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-calendar-check-fill text-success"></i>
+                                <strong class="text-white">Post-Exam Physical Protocol</strong>
+                            </div>
+                            <div class="text-secondary small">
+                                In-person physical ID audits will take place when the new semester commences at the Proctorial Board desk.
+                            </div>
+                        </div>
                     </div>
-                    <p class="mb-0 text-white-50 small">
-                        Applications are cross-checked against departmental roll lists. If your verification is pending for over 24 hours, contact the designated administrators or visit the Proctorial Board desk.
-                    </p>
-                </div>
+
+                    <div class="p-3 rounded border border-secondary bg-black bg-opacity-40 small text-secondary">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <i class="bi bi-info-circle-fill text-warning"></i>
+                            <strong class="text-white">Need Assistance?</strong>
+                        </div>
+                        <p class="mb-0 text-white-50 small">
+                            If you encounter any issues during early launch, reach out to our team at the <a href="{% url 'contact' %}" class="green-accent">Contact Desk</a>.
+                        </p>
+                    </div>
+                {% else %}
+                    <div class="mb-3">
+                        <div class="feature-icon mb-3" style="width: 48px; height: 48px; font-size: 1.25rem;">
+                            <i class="bi bi-person-check-fill"></i>
+                        </div>
+                        <h3 class="fw-bold fs-5 mb-1">Designated Application Approvers</h3>
+                        <p class="text-secondary small">
+                            To maintain campus safety and authentic student verification, your application is reviewed and vetted by the following designated institute administrators:
+                        </p>
+                    </div>
+
+                    <div class="d-flex flex-column gap-3 mb-4 flex-grow-1">
+                        {% for admin in designated_admins %}
+                            <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 d-flex align-items-center gap-3">
+                                <div class="rounded-circle bg-success-subtle text-success d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px; font-size: 1.2rem;">
+                                    {% if admin.profile_photo %}
+                                        <img src="{{ admin.profile_photo.url }}" alt="{{ admin.display_name }}" class="rounded-circle" style="width: 44px; height: 44px; object-fit: cover;" onerror="this.onerror=null; this.src=''; this.parentElement.innerHTML='<i class=\'bi bi-shield-lock-fill\'></i>';">
+                                    {% else %}
+                                        <i class="bi bi-shield-lock-fill"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <strong class="text-white text-truncate">{{ admin.display_name }}</strong>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle small py-0 px-2">Superuser</span>
+                                    </div>
+                                    <div class="text-secondary small font-monospace">
+                                        {{ admin.enrollment_number }} &bull; {{ admin.branch|default:'CSE' }} ({{ admin.degree|default:'Bachelors' }})
+                                    </div>
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="p-3 rounded border border-secondary bg-black bg-opacity-30 text-secondary small">
+                                <i class="bi bi-info-circle me-1"></i> Institute administrators are registered on the central system.
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="p-3 rounded border border-secondary bg-black bg-opacity-40 small text-secondary">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <i class="bi bi-patch-check-fill text-success"></i>
+                            <strong class="text-white">Verification Protocol</strong>
+                        </div>
+                        <p class="mb-0 text-white-50 small">
+                            Applications are cross-checked against departmental roll lists. If your verification is pending for over 24 hours, contact the designated administrators or visit the Proctorial Board desk.
+                        </p>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
+{% if not early_launch_mode %}
 <script>
 async function requestSignupOtp() {
     const feedback = document.getElementById('signupOtpFeedback');
@@ -245,4 +389,5 @@ async function requestSignupOtp() {
     }
 }
 </script>
+{% endif %}
 {% endblock %}

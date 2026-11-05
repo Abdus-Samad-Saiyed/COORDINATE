@@ -7,7 +7,7 @@
 [![Redis](https://img.shields.io/badge/Cache%20%26%20Layers-Redis%207-red.svg)](https://redis.io/)
 [![WebAuthn Passkeys](https://img.shields.io/badge/Auth-WebAuthn%20%2F%20Passkeys-orange.svg)](https://webauthn.io/)
 [![Mobile API](https://img.shields.io/badge/Mobile-React%20Native%20Ready-purple.svg)](campus/api/)
-[![Tests](https://img.shields.io/badge/Tests-237%20Passed%20(100%25)-success.svg)](scripts/e2e/run_full_platform_e2e.py)
+[![Tests](https://img.shields.io/badge/Tests-268%20Passed%20(100%25)-success.svg)](scripts/e2e/run_full_platform_e2e.py)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Decentralized Student Ride Coordination & Verified Campus Public Utility Platform**  
@@ -21,7 +21,7 @@
 At university campuses, commuter students and hostel residents frequently need to coordinate shared cabs, airport shuttles, and inter-city travel (e.g. Srinagar &harr; Jammu / Airport / Railway Station). Traditionally, these requests were posted across dozens of cluttered, ephemeral WhatsApp groups where ride requests were quickly buried, timings were missed, and safety accountability was virtually non-existent.
 
 **COORDINATE** solves this as a dedicated, real-time public digital utility:
-1. **Physical Root of Trust:** Zero unverified internet trolls or duplicate accounts. Accounts are verified in person against physical institute student ID cards.
+1. **Physical Root of Trust & Early Launch Agility:** Accounts are verified in person against physical student ID cards, with a built-in `--early-launch` toggle for instant self-declaration during high-demand end-of-term departure rushes.
 2. **Mutual Physical Accountability:** Anonymity is strictly prohibited inside moving vehicles. Confirmed co-passengers mutually share verified identities and pickup phone numbers.
 3. **Real-Time Coordination:** ASGI WebSockets deliver instant ride chat, waitlist promotions, occupancy density curves, and departure synchronization.
 4. **Institutional Security:** Cryptographic HMAC-SHA256 dual-channel OTPs, FIDO2/WebAuthn biometric passkeys, rate-limited reputation anti-farming, and single active session controls.
@@ -72,24 +72,37 @@ flowchart TD
 * Students apply with their official enrollment number (`YYYY[BMP][BRANCH][ROLL]`) and phone number, verify inbox ownership via a 6-digit email OTP, and present their physical Institute ID card at the campus verification desk.
 * Authorized student administrators review and approve accounts directly via the `/operations/` console.
 
-### 2. Interactive Database Setup & Management Script
+### 2. Early Launch Mode (`--early-launch`) for Transit Rushes
+* During end-of-term transit surges when in-person desk verification creates an onboarding bottleneck, the system can be started with the `--early-launch` CLI flag or `EARLY_LAUNCH_MODE=True`.
+* Students self-declare with enrollment number, WhatsApp phone number, gender, and password for immediate active verified account creation and instant ride coordination.
+* Cleanly reversible: omitting `--early-launch` restores strict physical desk requirements without affecting underlying database records or verification queues.
+
+### 3. Dynamic Ride Capacity Modification & Surplus Ejection
+* Hosts can adjust total vehicle capacity post-creation (`1 <= total_spots <= 6`).
+* When decreasing capacity below current passenger count, hosts must explicitly select which surplus passenger(s) to remove, preventing arbitrary or unhandled drops while automatically recalibrating waitlists.
+
+### 4. Theme-Synchronized Canvas Favicon Engine
+* Tab favicons dynamically re-render on an HTML5 `<canvas>` in real-time, matching the active user colorway (Emerald, Cyan, Indigo, Amber, Rose, etc.) or custom hex values.
+* Fallback 32x32 PNG endpoint served at `/favicon.ico` with HTTP 200 OK.
+
+### 5. Interactive Database Setup & Management Script
 * Built-in interactive setup utility: `python setup.py` (or `python manage.py setup_db`).
 * Interactive migration runner that prompts before applying schema updates.
 * Full menu-driven database inspector: browse tables, execute DQL (`SELECT`), execute transactional DML/DDL (`INSERT`/`UPDATE`/`DELETE`), and view real-time diagnostics.
 * Abstracted User Provisioning: create Superuser Admins, Staff, or Standard Students directly in PostgreSQL or SQLite with automatic enrollment parsing and password hashing.
 
-### 3. Physical Ride Accountability & Audience Comfort
+### 6. Physical Ride Accountability & Audience Comfort
 * **No Anonymous Riders IRL:** Inside a shared motor vehicle, passengers and host mutually view each other's verified student name, enrollment, and contact number with one-click call and WhatsApp integration.
 * **Spectator Privacy:** Browsing students outside the ride see aggregate occupancy counts without access to passenger rosters or private phone numbers.
 * **Audience Comfort Settings:** Ride hosts can specify comfort preferences: `MIXED`, `BOYS`, `GIRLS`, or `FRIENDS`-only.
 * **Non-Destructive Soft Cancellation:** When all participants leave an active ride, the platform sets `status = 'CANCELLED'` rather than deleting database rows, permanently preserving safety incident reports, grievance histories, and audit evidence.
 
-### 4. Anti-Farming Reliability Reputation Engine
+### 7. Anti-Farming Reliability Reputation Engine
 * Every completed group commute increments a student's `rides_completed` counter.
 * To prevent collusion and reputation score farming on a public utility, on-time reliability score boosts (`on_time_count`) are mathematically capped at **3 boosts per 15-day rolling window** per user.
 * Enforced by database check constraint: `1 <= total_spots <= 6`.
 
-### 5. FIDO2 / WebAuthn Biometric Passkeys & Mobile Token Parity
+### 8. FIDO2 / WebAuthn Biometric Passkeys & Mobile Token Parity
 * WebAuthn standard implementation allowing students to register and sign in with hardware security keys, Touch ID, Apple Face ID, or Windows Hello biometrics.
 * React Native Android clients authenticate using Bearer session tokens with full WebSocket parity.
 
@@ -100,7 +113,7 @@ flowchart TD
 Campus Nexus maintains a 100% green test suite across four distinct testing tiers:
 
 ```bash
-# 1. Django Full Unit Test Suite (237 tests in ~2.5 seconds)
+# 1. Django Full Unit & Integration Test Suite (268 tests in ~3.5 seconds)
 python manage.py test campus.tests accounts coordinate --settings=campus.settings.test
 
 # 2. Automated Platform Route Crawler (49 endpoints checked)
@@ -114,7 +127,7 @@ python scripts/package_release.py
 ```
 
 ### Verified Test Results:
-* **Django Test Suite:** `237 passed, 0 failures, 0 errors` (Coverage: WebAuthn, Single-Session, Audience Filters, Concurrency Locks, Anti-Farming Capping, Protected Media Containment, Setup DB, React Native Mobile API, Dual Production DB).
+* **Django Test Suite:** `268 passed, 0 failures, 0 errors` (Coverage: Early Launch Mode, Dynamic Capacity Modification, WebAuthn, Single-Session, Audience Filters, Concurrency Locks, Anti-Farming Capping, Protected Media Containment, Setup DB, React Native Mobile API, Dual Production DB).
 * **Platform Crawler:** `49 passed, 0 failed` across anonymous, authenticated, administrative, and REST API v1 routes.
 * **Full E2E Verification:** `64 passed, 0 failed` across end-to-end user journeys (Application &rarr; OTP Verification &rarr; Admin Physical Desk Approval &rarr; Ride Creation &rarr; Waitlist &rarr; Ride Teardown).
 * **Release Packager:** Zero secrets, zero bytecode, zero SQLite databases in git tracking (`0.37 MB` clean package).
@@ -123,9 +136,11 @@ python scripts/package_release.py
 
 ## 📖 In-Depth Project Documentation
 
-* **[MANIFESTO.md](MANIFESTO.md):** The Campus Nexus Manifesto, Design & Development Philosophy, and Data Governance/Access Control Charter.
-* **[DEPLOYMENT.md](DEPLOYMENT.md):** Full production operations guide (Ubuntu 24.04, Docker Compose, PostgreSQL 16 / SQLite3, Redis 7, Systemd service unit, NGINX SSL/WSS, Certbot, automated backups, and zero-downtime updates).
-* **[PROJECT_MAP.md](PROJECT_MAP.md):** Exhaustive architectural file-by-file specification and code reference.
+* **[ARCHITECTURE.md](docs/ARCHITECTURE.md):** Complete architectural topologies, service registries, WebSockets protocol routers, and performance optimizations.
+* **[AUTHENTICATION_AND_SECURITY.md](docs/AUTHENTICATION_AND_SECURITY.md):** Identity models, dual-channel OTPs, WebAuthn passkeys, single-session concurrency, and Early Launch security.
+* **[OPERATIONS_AND_ADMINISTRATION.md](docs/OPERATIONS_AND_ADMINISTRATION.md):** Administrator console, physical verification desk manual, CSV exports, and Early Launch operations.
+* **[MECHANICAL_ZEN_AND_THEMES.md](docs/MECHANICAL_ZEN_AND_THEMES.md):** Clockwork watermark engine, Zen mode mechanics, theme accent system, and dynamic canvas favicons.
+* **[DEPLOYMENT_AND_PRODUCTION.md](docs/DEPLOYMENT_AND_PRODUCTION.md):** NGINX, Daphne, SSL, and systemd deployment manuals.
 
 ---
 
@@ -154,10 +169,14 @@ python setup.py
 # (Or apply migrations directly: python manage.py migrate --settings=campus.settings.dev)
 
 # 6. Run automated test suite
-python manage.py test --settings=campus.settings.test
+python manage.py test campus.tests accounts coordinate --settings=campus.settings.test
 
 # 7. Start development server
-python manage.py runserver --settings=campus.settings.dev
+# Standard Mode (with Physical Verification Desk):
+python manage.py runserver 0.0.0.0:8000 --settings=campus.settings.dev
+
+# Or Early Launch Mode (Instant Self-Declaration for Transit Rush):
+python manage.py runserver --early-launch 0.0.0.0:8000 --settings=campus.settings.dev
 ```
 
 Access the development portal at `http://127.0.0.1:8000/`.
@@ -170,8 +189,8 @@ Access the development portal at `http://127.0.0.1:8000/`.
 *Enrollment:* `2024BCSE065`  
 *Department:* Computer Science & Engineering  
 *Institution:* National Institute of Technology Srinagar (NIT Srinagar)  
-*GitHub:* [@Abdus-Samad-Saiyed](https://github.com/Abdus-Samad-Saiyed)
-*LinkedIn:* [abdussamadsaiyed](https://www.linkedin.com/in/abdussamadsaiyed)
+*GitHub:* [@Abdus-Samad-Saiyed](https://github.com/Abdus-Samad-Saiyed)  
+*LinkedIn:* [abdussamadsaiyed](https://www.linkedin.com/in/abdussamadsaiyed)  
 
 ---
 

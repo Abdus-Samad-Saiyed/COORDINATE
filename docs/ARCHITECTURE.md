@@ -110,3 +110,65 @@ application = ProtocolTypeRouter({
    - In **Ride Chat**: Sockets confirm the user is a confirmed `RideParticipant` before accepting connection.
    - In **Direct Chat**: Sockets confirm a bidirectional `Friendship` exists between `request.user` and the target user. Strangers cannot open socket channels.
 3. **Payload Sanitization:** Inbound messages are stripped of HTML tags and truncated to 2,000 characters before broadcasting to the channel group.
+
+
+---
+
+## 5. Early Launch Mode Architecture
+
+### 5.1 Motivation & Context
+During end-of-term academic periods, student transit volume surges dramatically as thousands book cabs to Srinagar Airport and railway stations. Requiring physical in-person identity verification at the Proctorial Board desk before students can coordinate rides would create severe operational bottlenecks. Early Launch Mode enables instant student onboarding while preserving system integrity and accountability.
+
+### 5.2 Control Surface & CLI Invocation
+Early Launch Mode is toggled via command-line flag or environment configuration:
+```bash
+# Option 1: CLI invocation (extends Daphne runserver)
+python manage.py runserver --early-launch 0.0.0.0:8000
+
+# Option 2: Environment variable
+EARLY_LAUNCH_MODE=True python manage.py runserver
+```
+
+### 5.3 System Mechanics
+1. **Command Precedence:** `'accounts'` is positioned before `'daphne'` in `INSTALLED_APPS`, allowing `accounts.management.commands.runserver.Command` to intercept execution.
+2. **StatReloader Environment Propagation:** The `--early-launch` handler exports `os.environ['CAMPUS_EARLY_LAUNCH_MODE'] = 'True'`, guaranteeing that worker processes spawned during code reloading inherit early launch state.
+3. **Atomic Self-Declaration (`EarlyLaunchDeclarationForm`):**
+   - Collects `enrollment_number`, `full_name`, `gender`, `phone_number`, optional `email`, and `password`.
+   - Cleans up any prior `AccountApplication` entries for that enrollment.
+   - Creates the `User` with `verified=True` and `is_active=True`.
+   - Logs an immutable `EARLY_LAUNCH_SELF_DECLARATION` event to `AuditEvent`.
+   - Directly authenticates the user into the active session and redirects to the dashboard.
+4. **Policy Decoupling (`coordinate.policies.is_verified_student`):**
+   - Returns `True` if `user.verified or settings.EARLY_LAUNCH_MODE`.
+   - Inactive or deleted accounts remain barred under all modes.
+5. **Reversibility:** When `--early-launch` is omitted and the environment variable is false, the system immediately reverts to strict physical desk verification without data corruption.
+
+---
+
+## 6. Dynamic Ride Capacity Modification & Ejection Engine
+
+### 6.1 Host Capacity Alterations
+Ride hosts can alter the total capacity of an active ride post-creation (`1 <= total_spots <= 6`):
+- **Capacity Expansion:** If the new capacity exceeds confirmed participants, ride status dynamically reverts from `FULL` to `OPEN`.
+- **Capacity Reduction with Surplus Ejection:**
+  - If the new capacity is less than the current count of confirmed passengers, the host cannot silently shrink the ride.
+  - The host must explicitly pass `kick_passenger_ids` matching the exact number of surplus passengers to be removed.
+  - Hosts cannot kick themselves.
+  - Ejected passengers are notified, `RideParticipant` records are removed, and status recalculation occurs within an atomic database transaction.
+
+---
+
+## 7. Dynamic Favicon & Performance Optimization Architecture
+
+### 7.1 Real-Time Canvas Favicon Engine
+To visually reflect user personalization in browser tabs:
+1. `templates/base.html` and `static/js/watermark.js` generate a 32x32 rounded-corner icon via HTML5 Canvas on the fly.
+2. The dynamic icon uses OLED-black gradients, dark green background meshes, and borders/inner glyphs colored with the active theme accent (Emerald, Cyan, Indigo, Amber, Rose, etc.).
+3. When custom hex accents are chosen, the canvas recalculates dynamically and updates `<link rel="icon">` via data URLs.
+4. A static PNG fallback is served directly from `/favicon.ico` via a dedicated lightweight view in `campus.urls`.
+
+### 7.2 High-Throughput Performance Optimizations
+- **Instant Transitions:** Disabled the 880ms artificial Zen page transition delay by default (`nexus_zen_transitions: 'false'`), achieving instantaneous page changes while keeping transitions opt-in.
+- **Font Rendering:** Removed blocking `@import` web fonts from `static/css/main.css` in favor of high-performance system typography and preloaded assets.
+- **60fps Gear Animation:** Cached DOM element queries in `static/js/watermark.js` to eliminate DOM query thrashing during `requestAnimationFrame`.
+- **Traffic Telemetry:** Kept `TrafficTelemetryMiddleware` synchronous with non-blocking cache lock acquisition (`_LOCK.acquire(blocking=False)`), preventing ASGI awaitable wrapper exceptions.

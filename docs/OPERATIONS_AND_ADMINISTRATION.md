@@ -94,3 +94,44 @@ Administrators can download sanitized CSV datasets for institutional reporting:
 - **Export Students (`/operations/export/users/`):** Enrollment ID, branch, degree, joining year, verification status, completed rides, and punctuality rate.
 - **Export Applications (`/operations/export/applications/`):** Application number, applicant enrollment, submission date, phone verification status, and decision outcome.
 - Every export action logs an `EXPORT_GENERATED` audit event.
+
+
+---
+
+## 7. Operating in Early Launch Mode
+
+### 7.1 When to Activate Early Launch
+Activate Early Launch Mode when sudden, high-volume campus transit requirements (such as end-of-semester departure surges, emergency campus vacations, or transit strikes) prevent proctors and administrators from conducting physical ID verification for hundreds of students in real-time.
+
+### 7.2 Starting the Server
+Run Daphne via the custom management command with the `--early-launch` flag:
+```bash
+python manage.py runserver --early-launch 0.0.0.0:8000
+```
+
+Upon launch, Daphne outputs an operational confirmation banner:
+```text
+======================================================================
+CAMPUS NEXUS — EARLY LAUNCH MODE ACTIVE
+  * Physical verification desk requirements bypassed.
+  * Student self-declaration active (Enrollment + Phone Number).
+  * Instant account activation & full COORDINATE access enabled.
+======================================================================
+```
+
+Alternatively, set the environment variable in containerized or background environments:
+```bash
+EARLY_LAUNCH_MODE=True python manage.py runserver 0.0.0.0:8000
+```
+
+### 7.3 Administrator Oversight During Early Launch
+1. **Audit Inspection:** Every self-declaration creates an `AuditEvent` with `event_type='EARLY_LAUNCH_SELF_DECLARATION'`, viewable in the operational audit feed.
+2. **User Exports:** Use `/operations/export/users/` to download CSV records of all self-declared students with phone numbers and enrollment codes.
+3. **Emergency Disciplinary Actions:** Administrators can immediately deactivate or delete problematic accounts from `/operations/` with the standard soft-deletion safeguards.
+
+### 7.4 Transitioning Back to Standard Mode
+To revert to strict physical verification desk operations:
+1. Restart the server without the `--early-launch` flag.
+2. Ensure `EARLY_LAUNCH_MODE` is unset or set to `False` in environment variables.
+3. The platform immediately restores the physical verification desk flow on `/accounts/apply/` and the application review queue on `/operations/`.
+4. Accounts created during Early Launch remain active and can be audited against official departmental roll sheets during routine proctorial checks.

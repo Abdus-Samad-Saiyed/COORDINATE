@@ -107,3 +107,20 @@ When enabled in visual settings, navigation between platform pages preserves spa
    - All cards are pre-positioned off-screen with `transition: none` to prevent visual flashes.
    - The page holds in clean Zen Mode for **180ms**.
    - Cards cascade inward into their exact grid positions.
+
+
+---
+
+## 6. Dynamic Theme-Synchronized Canvas Favicon & Performance Tuning
+
+### 6.1 Real-Time Canvas Favicon
+Browser tab favicons dynamically reflect the student's chosen theme accent:
+- **Client-Side Generation:** In `templates/base.html` and `static/js/watermark.js`, a 32x32 rounded-corner icon is drawn in memory on an HTML5 `<canvas>`.
+- **Accent Harmonization:** The icon features an OLED-black background gradient, an outer rounded boundary bordered by the active theme accent, and a dual-tone inner glyph.
+- **Instant Tab Refresh:** Whenever the student switches colorways (Emerald, Cyan, Indigo, Amber, Rose, etc.) or picks a custom hex value, the canvas generates a new data URL (`data:image/png;base64,...`) and assigns it directly to `<link rel="icon">`.
+- **Static Fallback:** A pre-rendered 32x32 PNG is served at `/favicon.ico` via a dedicated Django endpoint with HTTP 200 OK for search engines and legacy bookmarks.
+
+### 6.2 High-Throughput Performance Tuning
+1. **Instant Default Navigation:** The 880ms artificial Zen page transition delay is disabled by default (`nexus_zen_transitions: 'false'`). Page navigation is snappy and instantaneous while preserving the ability for students to opt into full animated Zen transitions.
+2. **System Font Optimization:** Removed blocking remote `@import` web fonts from `static/css/main.css`, prioritizing fast system typography stacks and asynchronous stylesheet loading.
+3. **60fps Gear Query Caching:** Cached DOM element queries in `static/js/watermark.js` so that `requestAnimationFrame` does not perform repeated selector queries on every frame.
