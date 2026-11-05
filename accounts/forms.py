@@ -49,6 +49,7 @@ class AccountApplicationForm(forms.ModelForm):
     )
     password = forms.CharField(
         label='Password',
+        required=False,
         widget=forms.PasswordInput(attrs={
             'class': 'form-control',
             'placeholder': 'Choose a password',
@@ -56,7 +57,7 @@ class AccountApplicationForm(forms.ModelForm):
     )
     confirm_password = forms.CharField(
         label='Confirm Password',
-        required=True,
+        required=False,
         widget=forms.PasswordInput(attrs={
             'class': 'form-control',
             'placeholder': 'Repeat your password',
@@ -82,9 +83,21 @@ class AccountApplicationForm(forms.ModelForm):
             'gender': forms.Select(attrs={'class': 'form-select'}),
         }
 
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+        if self.user and self.user.is_authenticated:
+            self.fields['password'].widget.attrs['placeholder'] = 'Leave blank to retain current password'
+            self.fields['confirm_password'].widget.attrs['placeholder'] = 'Leave blank to retain current password'
+            self.fields['enrollment_number'].widget.attrs['readonly'] = 'readonly'
+            self.fields['enrollment_number'].initial = self.user.enrollment_number
+
     def clean_enrollment_number(self):
         from django.conf import settings
-        enrollment = self.cleaned_data.get('enrollment_number', '').strip().upper()
+        if self.user and self.user.is_authenticated:
+            enrollment = self.user.enrollment_number.strip().upper()
+        else:
+            enrollment = self.cleaned_data.get('enrollment_number', '').strip().upper()
 
         if not ENROLLMENT_VALIDATOR.regex.match(enrollment):
             raise forms.ValidationError(
@@ -146,6 +159,12 @@ class AccountApplicationForm(forms.ModelForm):
         pw = cleaned.get('password')
         cpw = cleaned.get('confirm_password')
 
+        if not self.user or not self.user.is_authenticated:
+            if not pw:
+                self.add_error('password', 'Password is required.')
+            if not cpw:
+                self.add_error('confirm_password', 'Password confirmation is required.')
+
         if pw:
             if len(pw) < 8:
                 self.add_error('password', 'Password must contain at least 8 characters.')
@@ -156,10 +175,10 @@ class AccountApplicationForm(forms.ModelForm):
                 except forms.ValidationError as e:
                     self.add_error('password', e)
 
-        if not cpw:
-            self.add_error('confirm_password', 'This field is required.')
-        elif pw and pw != cpw:
-            self.add_error('confirm_password', 'Passwords do not match.')
+            if not cpw:
+                self.add_error('confirm_password', 'Password confirmation is required.')
+            elif pw != cpw:
+                self.add_error('confirm_password', 'Passwords do not match.')
 
         return cleaned
 

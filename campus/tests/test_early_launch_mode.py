@@ -414,3 +414,116 @@ class EarlyLaunchManagementCommandTests(TestCase):
         with override_settings(EARLY_LAUNCH_DB_PATH=mock_path):
             call_command("purge_early_launch", force=True)
             self.assertFalse(os.path.exists(mock_path))
+
+
+class TemporaryUserPermanentApplicationTests(TestCase):
+    """Test authenticated temporary users applying for permanent verified ID and elevation."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            username="2020BCSE001",
+            enrollment_number="2020BCSE001",
+            email="admin@nitsri.ac.in",
+            password="AdminPassword123!",
+            verified=True,
+            is_active=True,
+            phone_number="+919876543200",
+        )
+        self.temp_user = User.objects.create_user(
+            username="2024BCSE777",
+            enrollment_number="2024BCSE777",
+            email="temp777@nitsri.ac.in",
+            password="OriginalPassword123!",
+            verified=False,
+            is_active=True,
+            phone_number="+919876543210",
+            first_name="Tariq",
+            last_name="Mir",
+            gender="M",
+        )
+
+    def test_authenticated_temp_user_applies_with_blank_password(self):
+        """Authenticated temporary user can submit permanent application leaving password blank to reuse existing password."""
+        self.client.force_login(self.temp_user)
+        with override_settings(EARLY_LAUNCH_MODE=True):
+            res = self.client.post(
+                reverse("apply_account"),
+                data={
+                    "registration_mode": "permanent",
+                    "enrollment_number": self.temp_user.enrollment_number,
+                    "full_name": "Tariq Mir",
+                    "gender": "M",
+                    "email": "temp777@nitsri.ac.in",
+                    "phone_number": "+919876543210",
+                    "password": "",
+                    "confirm_password": "",
+                },
+            )
+            self.assertEqual(res.status_code, 200)
+            self.assertTemplateUsed(res, "accounts/application_success.html")
+
+            # Check application was created
+            app = AccountApplication.objects.filter(enrollment_number="2024BCSE777").first()
+            self.assertIsNotNone(app)
+            self.assertFalse(app.approved)
+            self.assertEqual(app.password, self.temp_user.password)
+
+            # Re-visiting /apply/ while pending renders application_status.html
+            get_res = self.client.get(reverse("apply_account"))
+            self.assertEqual(get_res.status_code, 200)
+            self.assertTemplateUsed(get_res, "accounts/application_status.html")
+            self.assertContains(get_res, app.application_number)
+
+    def test_temp_user_coordinates_rides_while_permanent_application_pending(self):
+        """User remains authenticated and can coordinate rides while permanent application is pending."""
+        self.client.force_login(self.temp_user)
+        AccountApplication.objects.create(
+            enrollment_number=self.temp_user.enrollment_number,
+            full_name="Tariq Mir",
+            gender="M",
+            phone_number=self.temp_user.phone_number,
+            email=self.temp_user.email,
+            password=self.temp_user.password,
+            approved=False,
+        )
+
+        with override_settings(EARLY_LAUNCH_MODE=True):
+            dash_res = self.client.get(reverse("dashboard"))
+            self.assertEqual(dash_res.status_code, 200)
+            self.assertContains(dash_res, "Permanent ID Application Pending")
+
+            rides_res = self.client.get(reverse("ride_list"))
+            self.assertEqual(rides_res.status_code, 200)
+
+    def test_admin_approves_temp_user_application_elevates_to_verified(self):
+        """Admin approving permanent application elevates existing temporary user to verified=True."""
+        app = AccountApplication.objects.create(
+            enrollment_number=self.temp_user.enrollment_number,
+            full_name="Tariq Mir",
+            gender="M",
+            phone_number=self.temp_user.phone_number,
+            email=self.temp_user.email,
+            password=self.temp_user.password,
+            approved=False,
+        )
+
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session["auth_timestamp"] = timezone.now().timestamp()
+        session.save()
+        with override_settings(EARLY_LAUNCH_MODE=True):
+            # Check application list shows elevation badge
+            list_res = self.client.get(reverse("application_list"))
+            self.assertEqual(list_res.status_code, 200)
+            self.assertContains(list_res, "Elevate Temp User")
+
+            # Approve application
+            approve_res = self.client.post(reverse("approve_application", args=[app.id]))
+            self.assertIn(approve_res.status_code, [200, 302])
+
+            # Verify temp_user has been elevated
+            self.temp_user.refresh_from_db()
+            self.assertTrue(self.temp_user.verified)
+
+            # Pending application is consumed/purged upon approval
+            self.assertFalse(AccountApplication.objects.filter(id=app.id).exists())

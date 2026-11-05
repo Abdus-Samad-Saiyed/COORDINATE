@@ -412,6 +412,19 @@
     <!-- Early Launch Mode Operational Banner -->
     <div class="early-launch-banner text-center py-1 px-3 small font-monospace" style="background: rgba(245, 158, 11, 0.15); border-bottom: 1px solid rgba(245, 158, 11, 0.35); color: #FCD34D; position: relative; z-index: 1050;">
         <i class="bi bi-database-fill-exclamation me-1"></i> <strong>EARLY LAUNCH ACCESS (TEMPORARY DATABASE):</strong> Untrusted student self-declarations active for transit rush. Accounts are temporary and will not conflict with permanent records.
+        {% if user.is_authenticated and not user.verified %}
+            <span class="ms-2 d-inline-block">
+                {% if pending_permanent_application %}
+                    <span class="badge border border-info border-opacity-50 text-info py-1 px-2" style="background: rgba(14, 165, 233, 0.15); font-size: 0.75rem;">
+                        <i class="bi bi-clock-history me-1"></i> Permanent ID Application Pending (#{{ pending_permanent_application.application_number }})
+                    </span>
+                {% else %}
+                    <a href="{% url 'apply_account' %}?mode=permanent" class="btn btn-warning btn-sm text-dark py-0 px-2 rounded-pill fw-bold ms-1" style="font-size: 0.75rem;">
+                        <i class="bi bi-shield-check me-1"></i> Apply for Permanent ID
+                    </a>
+                {% endif %}
+            </span>
+        {% endif %}
     </div>
     {% endif %}
 

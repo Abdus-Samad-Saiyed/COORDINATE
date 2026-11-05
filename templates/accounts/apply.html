@@ -97,14 +97,17 @@
 
                         <div class="row g-3 mb-4">
                             <div class="col-md-6">
-                                <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
+                                <label for="{{ form.password.id_for_label }}" class="form-label">Password {% if user.is_authenticated %}(Optional){% endif %}</label>
                                 {{ form.password }}
+                                {% if user.is_authenticated %}
+                                    <div class="form-text text-secondary small">Leave blank to keep your current password.</div>
+                                {% endif %}
                                 {% if form.password.errors %}
                                     <div class="text-danger small mt-1">{{ form.password.errors.0 }}</div>
                                 {% endif %}
                             </div>
                             <div class="col-md-6">
-                                <label for="{{ form.confirm_password.id_for_label }}" class="form-label">Confirm Password</label>
+                                <label for="{{ form.confirm_password.id_for_label }}" class="form-label">Confirm Password {% if user.is_authenticated %}(Optional){% endif %}</label>
                                 {{ form.confirm_password }}
                                 {% if form.confirm_password.errors %}
                                     <div class="text-danger small mt-1">{{ form.confirm_password.errors.0 }}</div>
@@ -146,8 +149,14 @@
 
                         <div class="mb-3">
                             <label for="{{ form.enrollment_number.id_for_label }}" class="form-label">Enrollment Number</label>
-                            {{ form.enrollment_number }}
-                            <div class="form-text text-secondary small">Example: 2024BCSE001 (Must match your NIT ID card)</div>
+                            {% if user.is_authenticated %}
+                                <input type="text" class="form-control" value="{{ user.enrollment_number }}" readonly disabled style="opacity: 0.85; background: rgba(0,0,0,0.4);">
+                                <input type="hidden" name="enrollment_number" value="{{ user.enrollment_number }}">
+                                <div class="form-text text-info small"><i class="bi bi-info-circle me-1"></i> Bound to your active temporary account ({{ user.enrollment_number }}).</div>
+                            {% else %}
+                                {{ form.enrollment_number }}
+                                <div class="form-text text-secondary small">Example: 2024BCSE001 (Must match your NIT ID card)</div>
+                            {% endif %}
                             {% if form.enrollment_number.errors %}
                                 <div class="text-danger small mt-1">{{ form.enrollment_number.errors.0 }}</div>
                             {% endif %}

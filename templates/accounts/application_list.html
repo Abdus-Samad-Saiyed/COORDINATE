@@ -33,7 +33,14 @@
                         {% for app in applications %}
                             <tr id="app-row-{{ app.id }}">
                                 <td><code>{{ app.application_number }}</code></td>
-                                <td><strong>{{ app.enrollment_number }}</strong></td>
+                                <td>
+                                    <strong>{{ app.enrollment_number }}</strong>
+                                    {% if app.is_temp_upgrade %}
+                                        <span class="badge bg-warning text-dark small ms-1" title="Active temporary user applying for permanent verified ID">
+                                            <i class="bi bi-arrow-up-circle-fill me-1"></i>Elevate Temp User
+                                        </span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ app.full_name }}</td>
                                 <td>{{ app.phone_number }}</td>
                                 <td><span class="badge bg-secondary">{{ app.get_gender_display }}</span></td>
@@ -47,8 +54,9 @@
                                               hx-swap="outerHTML"
                                               class="d-inline m-0">
                                             {% csrf_token %}
-                                            <button type="submit" class="btn btn-green btn-sm px-3" title="Approve and create user">
-                                                <i class="bi bi-check-lg me-1"></i> Approve
+                                            <button type="submit" class="btn btn-green btn-sm px-3" title="{% if app.is_temp_upgrade %}Elevate existing temporary account to permanent verified status{% else %}Approve and create user{% endif %}">
+                                                <i class="bi bi-{% if app.is_temp_upgrade %}arrow-up-circle-fill{% else %}check-lg{% endif %} me-1"></i>
+                                                {% if app.is_temp_upgrade %}Approve &amp; Elevate{% else %}Approve{% endif %}
                                             </button>
                                         </form>
 

@@ -42,6 +42,20 @@
                     {% endif %}
                 </div>
 
+                {% if is_self and not profile_user.verified %}
+                    <div class="mb-3">
+                        {% if pending_permanent_application %}
+                            <div class="p-2 rounded border border-info border-opacity-40 text-info text-start small" style="background: rgba(14, 165, 233, 0.08);">
+                                <i class="bi bi-clock-history me-1"></i> <strong>Permanent ID Application Pending:</strong> Application #{{ pending_permanent_application.application_number }} is under admin review. You can continue coordinating rides uninterrupted.
+                            </div>
+                        {% else %}
+                            <a href="{% url 'apply_account' %}?mode=permanent" class="btn btn-warning btn-sm text-dark px-3 py-1 rounded-pill fw-semibold w-100">
+                                <i class="bi bi-shield-check me-1"></i> Apply for Permanent Verified ID
+                            </a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+
                 {% if profile_user.bio %}
                     <div class="p-3 mb-3 rounded bg-black bg-opacity-30 border border-secondary text-start small text-light" style="word-break: break-word;">
                         <i class="bi bi-chat-square-quote text-success me-1"></i> {{ profile_user.bio|linebreaksbr }}
@@ -377,19 +391,19 @@
 
                     {% if not profile_user.is_debug_account %}
                     <div class="p-3 rounded border mb-3" id="securityVerificationBox"
-                         style="background: rgba({% if grace_active %}8, 183, 79, 0.08{% else %}245, 158, 11, 0.08{% endif %}) !important; border-color: rgba({% if grace_active %}8, 183, 79, 0.35{% else %}245, 158, 11, 0.35{% endif %}) !important;">
+                         style="background: rgba({% if grace_active %}8, 183, 79, 0.06{% else %}245, 158, 11, 0.06{% endif %}) !important; border: 1px solid rgba({% if grace_active %}8, 183, 79, 0.3{% else %}245, 158, 11, 0.3{% endif %}) !important;">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <strong class="small {% if grace_active %}text-success{% else %}text-warning{% endif %}" id="securityVerificationTitle">
                                 <i class="bi bi-shield-lock-fill me-1"></i> Security Verification
                             </strong>
                             {% if grace_active %}
-                                <span class="badge border border-success border-opacity-50 text-success small" style="background: rgba(8, 183, 79, 0.15);" id="securityGraceBadge">
+                                <span class="badge rounded-pill border border-success border-opacity-50 text-success small" style="background: rgba(8, 183, 79, 0.15);" id="securityGraceBadge">
                                     <i class="bi bi-check-circle me-1"></i> 10m Grace Active
                                 </span>
                             {% endif %}
                         </div>
                         {% if grace_active %}
-                            <div class="small text-light" id="securityGraceMessage" style="opacity: 0.9;">
+                            <div class="small text-light text-opacity-75" id="securityGraceMessage" style="font-size: 0.85rem; line-height: 1.4;">
                                 Your session is actively authenticated. You can modify password, phone number, and 2FA settings directly without re-entering an OTP.
                             </div>
                         {% else %}
@@ -473,10 +487,12 @@ async function registerWebAuthnPasskey() {
                 pubKeyCredParams: [
                     { type: 'public-key', alg: -7 },   // ES256
                     { type: 'public-key', alg: -257 },  // RS256
+                    { type: 'public-key', alg: -8 },    // Ed25519
                 ],
                 authenticatorSelection: {
                     userVerification: 'preferred',
                 },
+                attestation: 'none',
                 timeout: 60000,
             }
         });
@@ -571,18 +587,19 @@ async function verifySecurityOtpInline() {
         if (res.ok && data.success) {
             const box = document.getElementById('securityVerificationBox');
             if (box) {
-                box.style.background = 'rgba(8, 183, 79, 0.08)';
-                box.style.borderColor = 'rgba(8, 183, 79, 0.35)';
+                box.style.setProperty('background', 'rgba(8, 183, 79, 0.06)', 'important');
+                box.style.setProperty('border-color', 'rgba(8, 183, 79, 0.3)', 'important');
+                box.classList.remove('bg-success', 'bg-warning', 'border-warning');
                 box.innerHTML = `
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <strong class="small text-success">
                             <i class="bi bi-shield-lock-fill me-1"></i> Security Verification
                         </strong>
-                        <span class="badge border border-success border-opacity-50 text-success small" style="background: rgba(8, 183, 79, 0.15);">
+                        <span class="badge rounded-pill border border-success border-opacity-50 text-success small" style="background: rgba(8, 183, 79, 0.15);">
                             <i class="bi bi-check-circle me-1"></i> 10m Grace Active
                         </span>
                     </div>
-                    <div class="small text-light" style="opacity: 0.9;">
+                    <div class="small text-light text-opacity-75" style="font-size: 0.85rem; line-height: 1.4;">
                         Your session is actively authenticated. You can modify password, phone number, and 2FA settings directly without re-entering an OTP.
                     </div>
                 `;
@@ -676,9 +693,42 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+    // Auto-reopen edit modal if messages contain errors/validation notices
+    const editModalEl = document.getElementById('editProfileModal');
+    {% if messages %}
+        if (editModalEl && window.bootstrap && window.bootstrap.Modal) {
+            {% for message in messages %}
+                {% if "password" in message.message|lower or "security" in message.message|lower or "verification" in message.message|lower or "otp" in message.message|lower or "phone" in message.message|lower or "email" in message.message|lower %}
+                    try {
+                        const m = new bootstrap.Modal(editModalEl);
+                        m.show();
+                    } catch(e) {}
+                {% endif %}
+            {% endfor %}
+        }
+    {% endif %}
+
     const editForm = document.querySelector('#editProfileModal form');
     if (editForm) {
         editForm.addEventListener('submit', function (e) {
+            const pwdInput = editForm.querySelector('input[name="new_password"]');
+            const curPwdInput = editForm.querySelector('input[name="current_password"]');
+            if (pwdInput && pwdInput.value.trim().length > 0) {
+                if (!curPwdInput || !curPwdInput.value.trim()) {
+                    e.preventDefault();
+                    const feedback = document.getElementById('securityOtpFeedback');
+                    if (feedback) {
+                        feedback.style.display = 'block';
+                        feedback.className = 'small mt-1 text-danger font-monospace';
+                        feedback.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Current Password is required to change your password.';
+                    } else {
+                        alert('Current Password is required to change your password.');
+                    }
+                    if (curPwdInput) curPwdInput.focus();
+                    return;
+                }
+            }
+
             const otpInput = document.getElementById('securityOtpInput');
             if (otpInput && !otpInput.value.trim()) {
                 const pwdInput = editForm.querySelector('input[name="new_password"]');

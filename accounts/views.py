@@ -326,15 +326,48 @@ def two_factor_verify(request):
     })
 
 
+def _get_webauthn_origin_and_rp_id(request):
+    """
+    Extract the effective WebAuthn origin, server expected rp_id, and client rp_id from request.
+    Handles Cloudflare Tunnels (trycloudflare.com), ngrok, custom domains,
+    and local development (localhost / 127.0.0.1).
+    """
+    origin_header = request.headers.get('origin') or request.META.get('HTTP_ORIGIN')
+    forwarded_host = request.META.get('HTTP_X_FORWARDED_HOST')
+    forwarded_proto = request.META.get('HTTP_X_FORWARDED_PROTO')
+
+    # 1. Determine origin
+    if origin_header:
+        effective_origin = origin_header.rstrip('/')
+    elif forwarded_host:
+        proto = forwarded_proto or ('https' if request.is_secure() else 'http')
+        effective_origin = f"{proto}://{forwarded_host}"
+    else:
+        proto = 'https' if request.is_secure() else 'http'
+        effective_origin = f"{proto}://{request.get_host()}"
+
+    # 2. Extract domain/host without port
+    from urllib.parse import urlparse
+    parsed = urlparse(effective_origin) if effective_origin else None
+    host_candidate = parsed.hostname if (parsed and parsed.hostname) else (forwarded_host or request.get_host()).split(':')[0]
+
+    # WebAuthn rp.id cannot be an IP address (RFC 6265 / WebAuthn Level 2)
+    import ipaddress
+    try:
+        ipaddress.ip_address(host_candidate)
+        client_rp_id = None
+        server_rp_id = host_candidate
+    except ValueError:
+        client_rp_id = host_candidate
+        server_rp_id = host_candidate
+
+    return effective_origin, server_rp_id, client_rp_id
+
+
 def _get_webauthn_rp_id(request):
     """Return a valid domain string for WebAuthn rp.id or None if host is an IP address."""
-    host = request.get_host().split(':')[0]
-    try:
-        import ipaddress
-        ipaddress.ip_address(host)
-        return None
-    except ValueError:
-        return host
+    _, _, client_rp_id = _get_webauthn_origin_and_rp_id(request)
+    return client_rp_id
 
 
 @rate_limit(key_prefix='passkey_auth_chal', limit=10, period_seconds=60)
@@ -393,12 +426,7 @@ def passkey_auth_verify(request):
         data = json.loads(request.body.decode('utf-8'))
         credential_id = data.get('credential_id') or data.get('id', '')
         client_data_json = data.get('client_data_json') or data.get('response', {}).get('clientDataJSON', '')
-        rp_id = _get_webauthn_rp_id(request) or request.get_host().split(':')[0]
-        origin_header = request.headers.get('origin') or request.META.get('HTTP_ORIGIN')
-        if origin_header and (request.get_host().split(':')[0] in origin_header):
-            expected_origin = origin_header.rstrip('/')
-        else:
-            expected_origin = f"{'https' if request.is_secure() else 'http'}://{request.get_host()}"
+        effective_origin, server_rp_id, _ = _get_webauthn_origin_and_rp_id(request)
 
         full_cred = data if ('response' in data and 'authenticatorData' in data['response']) else None
 
@@ -408,8 +436,8 @@ def passkey_auth_verify(request):
             client_data_json_b64=client_data_json,
             session_challenge=challenge,
             full_credential=full_cred,
-            expected_rp_id=rp_id,
-            expected_origin=expected_origin,
+            expected_rp_id=server_rp_id,
+            expected_origin=effective_origin,
         )
         if success:
             request.session.pop('pre_2fa_user_id', None)
@@ -494,18 +522,13 @@ def passkey_reg_verify(request):
     try:
         data = json.loads(request.body.decode('utf-8'))
         key_name = data.get('name', '').strip() or 'Windows Hello / Biometric Key'
-        rp_id = _get_webauthn_rp_id(request) or request.get_host().split(':')[0]
-        origin_header = request.headers.get('origin') or request.META.get('HTTP_ORIGIN')
-        if origin_header and (request.get_host().split(':')[0] in origin_header):
-            expected_origin = origin_header.rstrip('/')
-        else:
-            expected_origin = f"{'https' if request.is_secure() else 'http'}://{request.get_host()}"
+        effective_origin, server_rp_id, _ = _get_webauthn_origin_and_rp_id(request)
 
         success, msg, cred_info = verify_passkey_registration(
             data=data,
             session_challenge=challenge,
-            expected_rp_id=rp_id,
-            expected_origin=expected_origin,
+            expected_rp_id=server_rp_id,
+            expected_origin=effective_origin,
         )
 
         if not success:
@@ -836,9 +859,21 @@ def apply_account(request):
     if request.user.is_authenticated:
         # Verified students cannot re-apply
         if request.user.verified:
+            messages.info(request, "Your account is already permanently verified.")
             return redirect('dashboard')
         # Untrusted / early access users can apply for permanent verification
         mode = 'permanent'
+
+        # Check if an application is already pending review
+        pending_app = AccountApplication.objects.filter(
+            enrollment_number=request.user.enrollment_number,
+            approved=False,
+        ).first()
+        if pending_app and request.method == 'GET':
+            return render(request, 'accounts/application_status.html', {
+                'application': pending_app,
+                'early_launch_mode': early_launch,
+            })
 
     designated_admins = User.objects.filter(is_superuser=True, is_active=True).order_by('enrollment_number')
 
@@ -870,8 +905,8 @@ def apply_account(request):
             })
 
         else:
-            form = AccountApplicationForm(request.POST)
-            enrollment = request.POST.get('enrollment_number', '').strip().upper()
+            form = AccountApplicationForm(request.POST, user=request.user if request.user.is_authenticated else None)
+            enrollment = request.user.enrollment_number if request.user.is_authenticated else request.POST.get('enrollment_number', '').strip().upper()
             phone_otp = request.POST.get('phone_otp', '').strip()
             phone_num = request.POST.get('phone_number', '').strip()
             email_addr = request.POST.get('email', '').strip().lower()
@@ -881,6 +916,8 @@ def apply_account(request):
 
             if form.is_valid():
                 if is_debug:
+                    phone_verified = True
+                elif request.user.is_authenticated and not phone_otp and phone_num == request.user.phone_number:
                     phone_verified = True
                 else:
                     if not phone_otp:
@@ -893,8 +930,12 @@ def apply_account(request):
                 if phone_verified:
                     with transaction.atomic():
                         application = form.save(commit=False)
+                        application.enrollment_number = enrollment
                         application.application_number = uuid.uuid4().hex[:8].upper()
-                        application.password = make_password(form.cleaned_data['password'])
+                        if form.cleaned_data.get('password'):
+                            application.password = make_password(form.cleaned_data['password'])
+                        elif request.user.is_authenticated:
+                            application.password = request.user.password
                         application.phone_verified = True
                         application.save()
 
@@ -941,7 +982,9 @@ def apply_account(request):
                 'phone_number': request.user.phone_number,
                 'gender': request.user.gender,
             }
-        form = AccountApplicationForm(initial=initial_data)
+            form = AccountApplicationForm(initial=initial_data, user=request.user)
+        else:
+            form = AccountApplicationForm(initial=initial_data)
 
     return render(request, 'accounts/apply.html', {
         'form': form,
@@ -968,9 +1011,17 @@ def dashboard(request):
         .select_related('ride', 'ride__creator')
         .first()
     )
+    pending_application = None
+    if not request.user.verified:
+        pending_application = AccountApplication.objects.filter(
+            enrollment_number=request.user.enrollment_number,
+            approved=False,
+        ).first()
+
     return render(request, 'accounts/dashboard.html', {
         'active_participation': active_participation,
         'services': get_all_services(),
+        'pending_application': pending_application,
     })
 
 
@@ -1416,8 +1467,17 @@ def messages_inbox(request):
 @login_required
 @user_passes_test(_is_superuser)
 def application_list(request):
-    """List all pending (unapproved) applications."""
-    applications = AccountApplication.objects.filter(approved=False)
+    """List all pending (unapproved) applications with temporary user upgrade indicators."""
+    applications = list(AccountApplication.objects.filter(approved=False))
+    unverified_enrollments = set(
+        User.objects.filter(
+            enrollment_number__in=[a.enrollment_number for a in applications],
+            verified=False,
+        ).values_list('enrollment_number', flat=True)
+    )
+    for app in applications:
+        app.is_temp_upgrade = app.enrollment_number in unverified_enrollments
+
     return render(request, 'accounts/application_list.html', {
         'applications': applications,
     })
@@ -1506,6 +1566,8 @@ def approve_application(request, application_id):
                         'phone_number': user.phone_number,
                         'gender': user.gender,
                         'password': user.password,
+                        'bio': getattr(user, 'bio', ''),
+                        'profile_photo': user.profile_photo.name if getattr(user, 'profile_photo', None) else '',
                         'verified': True,
                         'is_active': True,
                     }
@@ -1514,22 +1576,34 @@ def approve_application(request, application_id):
             except Exception as e:
                 logger.warning("Could not sync approved user to permanent DB: %s", e)
 
+        # Also sync to temp_early_access if running with permanent as default DB
+        if 'temp_early_access' in connections:
+            try:
+                temp_u = User.objects.using('temp_early_access').filter(enrollment_number=user.enrollment_number).first()
+                if temp_u:
+                    temp_u.verified = True
+                    temp_u.save(update_fields=['verified'])
+                AccountApplication.objects.using('temp_early_access').filter(enrollment_number=user.enrollment_number).delete()
+            except Exception as e:
+                logger.warning("Could not sync approved user to temp DB: %s", e)
+
         log_audit_event(
             event_type='APP_APPROVED',
             actor_enrollment=request.user.enrollment_number,
-            description=f'Application approved for {user.enrollment_number}',
+            description=f'Application approved and elevated to verified status for {user.enrollment_number}',
             target_id=user.enrollment_number,
         )
 
     # Send approval email (fire-and-forget; console backend in dev, SMTP in prod)
     try:
         send_mail(
-            subject='Campus Nexus — Your Account Has Been Approved',
+            subject='Campus Nexus — Your Account Has Been Approved & Verified',
             message=(
                 f'Hi {user.first_name},\n\n'
-                f'Your account for enrollment number {user.enrollment_number} '
-                f'has been verified and approved by campus administrators.\n\n'
-                f'You can now log in at https://campusnexus.nitsri.ac.in/login/ (or your local environment)\n\n'
+                f'Your application for permanent student ID verification ({user.enrollment_number}) '
+                f'has been approved by campus administrators.\n\n'
+                f'Your profile has been elevated to permanent, verified status with full student privileges.\n\n'
+                f'You can continue using Campus Nexus at https://campusnexus.nitsri.ac.in/ (or your local environment)\n\n'
                 f'— The Campus Nexus Team, NIT Srinagar'
             ),
             from_email=None,   # uses DEFAULT_FROM_EMAIL
@@ -1542,7 +1616,7 @@ def approve_application(request, application_id):
     if request.htmx:
         return HttpResponse('')
 
-    messages.success(request, f'Account approved for {user.enrollment_number}.')
+    messages.success(request, f'Account approved and elevated to verified status for {user.enrollment_number}.')
     return redirect('application_list')
 
 

@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block title %}Application Status — Campus Nexus{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center align-items-center" style="min-height: 60vh;">
+        <div class="col-md-8 col-lg-6 text-center">
+            <div class="glass p-5">
+                <div class="feature-icon mx-auto mb-3" style="width: 64px; height: 64px; font-size: 2rem; background: rgba(14, 165, 233, 0.15); color: #38bdf8;">
+                    <i class="bi bi-clock-history"></i>
+                </div>
+                <span class="badge border border-info border-opacity-50 text-info px-3 py-1 rounded-pill fw-semibold mb-2" style="background: rgba(14, 165, 233, 0.15);">
+                    APPLICATION IN PROGRESS
+                </span>
+                <h2 class="fw-bold mb-2">Permanent Verification Pending</h2>
+                <p class="text-secondary mb-4">
+                    Your verification application <strong>#{{ application.application_number }}</strong> for enrollment <code>{{ application.enrollment_number }}</code> submitted on {{ application.created_at|date:"M j, Y" }} is queued for administrator review.
+                </p>
+
+                <div class="glass p-3 mb-4 text-start small border-secondary">
+                    <div class="d-flex align-items-center gap-2 text-warning mb-1">
+                        <i class="bi bi-check-circle-fill text-success"></i>
+                        <span class="fw-bold text-white">Continued Platform Access</span>
+                    </div>
+                    <p class="text-secondary mb-0">
+                        Your temporary account remains active! You can continue coordinating rides, joining pools, and chatting with peers. Once an administrator approves your institute credentials, your account will automatically upgrade to permanent, verified status.
+                    </p>
+                </div>
+
+                <div class="d-flex gap-2 justify-content-center">
+                    <a href="{% url 'dashboard' %}" class="btn btn-green px-4">
+                        <i class="bi bi-speedometer2 me-1"></i> Continue to Dashboard
+                    </a>
+                    {% if user.is_authenticated %}
+                    <a href="{% url 'profile' user.enrollment_number %}" class="btn btn-dark-custom">
+                        <i class="bi bi-person me-1"></i> View Profile
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

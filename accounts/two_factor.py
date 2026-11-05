@@ -422,8 +422,8 @@ def verify_passkey_registration(
             'sign_count': verified_reg.sign_count,
         }
     except Exception as exc:
-        logger.warning("Passkey registration cryptographic verification failed: %s", type(exc).__name__)
-        return False, "Passkey registration verification failed.", {}
+        logger.warning("Passkey registration cryptographic verification failed: %s (%s)", type(exc).__name__, exc)
+        return False, f"Passkey registration verification failed: {exc}", {}
 
 
 def verify_passkey_assertion(
@@ -515,5 +515,5 @@ def verify_passkey_assertion(
         credential.save(update_fields=['sign_count', 'last_used_at'])
         return True, "Biometric / Windows Hello passkey authenticated successfully."
     except Exception as exc:
-        logger.warning("Cryptographic passkey assertion verification failed: %s", type(exc).__name__)
-        return False, "Passkey assertion verification failed."
+        logger.warning("Cryptographic passkey assertion verification failed: %s (%s)", type(exc).__name__, exc)
+        return False, f"Passkey assertion verification failed: {exc}"

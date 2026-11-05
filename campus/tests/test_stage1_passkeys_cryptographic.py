@@ -404,6 +404,44 @@ class Stage1WebAuthnEndpointTests(TestCase):
         self.assertEqual(verify_res.status_code, 200)
         self.assertTrue(verify_res.json().get("success"))
 
+    def test_passkey_registration_behind_reverse_proxy_with_local_host_header(self):
+        """Passkey registration succeeds even when reverse proxy forwards request with local Host: 127.0.0.1:8000."""
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["security_otp_verified_until"] = (timezone.now() + timedelta(minutes=10)).isoformat()
+        session.save()
+
+        tunnel_host = "increasingly-dock-document.demonstrate.trycloudflare.com"
+        tunnel_origin = f"https://{tunnel_host}"
+
+        chal_res = self.client.get(
+            reverse("passkey_reg_challenge"),
+            HTTP_HOST="127.0.0.1:8000",
+            HTTP_ORIGIN=tunnel_origin,
+        )
+        self.assertEqual(chal_res.status_code, 200)
+        challenge = chal_res.json()["challenge"]
+        self.assertEqual(chal_res.json()["rp_id"], tunnel_host)
+
+        reg_payload, _, _ = make_registration_response(
+            challenge_b64=challenge,
+            credential_id=b"carol_proxy_cred",
+            origin=tunnel_origin,
+            rp_id=tunnel_host,
+            private_key=self.private_key,
+        )
+        reg_payload["name"] = "Carol Proxy Key"
+
+        verify_res = self.client.post(
+            reverse("passkey_reg_verify"),
+            data=json.dumps(reg_payload),
+            content_type="application/json",
+            HTTP_HOST="127.0.0.1:8000",
+            HTTP_ORIGIN=tunnel_origin,
+        )
+        self.assertEqual(verify_res.status_code, 200)
+        self.assertTrue(verify_res.json().get("success"))
+
     def test_passkey_deletion_requires_step_up(self):
         """Deleting a passkey requires active reauthentication."""
         self.client.force_login(self.user)
