@@ -1,5 +1,6 @@
 """Middleware for single active concurrent session enforcement and request client identity logging."""
 
+import time
 from django.contrib import messages
 from django.contrib.auth import logout
 from django.http import JsonResponse
@@ -43,8 +44,8 @@ class SingleSessionMiddleware:
 
 
 class ClientIdentityLoggingMiddleware:
-    """Extract authenticated client identity (enrollment, name, real IP) and
-    record it for ASGI / Daphne console completion logging.
+    """Extract authenticated client identity (enrollment, name, real IP, receival timestamp)
+    and record it for ASGI / Daphne console completion logging.
     """
 
     def __init__(self, get_response):
@@ -52,13 +53,14 @@ class ClientIdentityLoggingMiddleware:
 
     def __call__(self, request):
         initial_user = getattr(request, 'user', None)
+        received_at = time.time()
         try:
             response = self.get_response(request)
             return response
         finally:
-            self._record_client_identity(request, initial_user)
+            self._record_client_identity(request, initial_user, received_at)
 
-    def _record_client_identity(self, request, initial_user=None):
+    def _record_client_identity(self, request, initial_user=None, received_at=None):
         try:
             # 1. Determine client connection key matching Daphne's details['client']
             client_key = None
@@ -101,7 +103,13 @@ class ClientIdentityLoggingMiddleware:
 
             from accounts.client_logger import update_or_record_client_request, resolve_client_display
             real_client = resolve_client_display(client_key, real_ip)
-            update_or_record_client_request(client_key, enrollment=enrollment, name=name, real_client=real_client)
+            update_or_record_client_request(
+                client_key,
+                enrollment=enrollment,
+                name=name,
+                real_client=real_client,
+                received_at=received_at,
+            )
         except Exception:
             pass
 

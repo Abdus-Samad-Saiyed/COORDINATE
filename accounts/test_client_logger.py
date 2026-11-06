@@ -1,11 +1,17 @@
-"""Tests for client request identity console logging (enrollment number, name, and IP address)."""
+"""Tests for client request identity console logging (receival timestamp, enrollment number, name, and IP address)
+and protected profile media authorization.
+"""
 
-import logging
+import os
+import re
+import tempfile
 from unittest.mock import MagicMock, patch
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.backends.db import SessionStore
-from django.test import RequestFactory, TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import RequestFactory, TestCase, override_settings
 
 from accounts.client_logger import (
     ClientLoggingASGIWrapper,
@@ -16,6 +22,7 @@ from accounts.client_logger import (
 )
 from accounts.management.commands.runserver import Command
 from accounts.middleware import ClientIdentityLoggingMiddleware
+from campus.urls import serve_protected_media
 
 User = get_user_model()
 
@@ -46,6 +53,7 @@ class ClientLoggerRegistryTests(TestCase):
         self.assertEqual(item["enrollment"], "N.A.")
         self.assertEqual(item["name"], "N.A.")
         self.assertEqual(item["real_client"], client_key)
+        self.assertIn("received_at", item)
 
     def test_update_client_request(self):
         """Updating seeded request sets authenticated user metadata."""
@@ -68,6 +76,7 @@ class ClientLoggerRegistryTests(TestCase):
         self.assertEqual(item["enrollment"], "N.A.")
         self.assertEqual(item["name"], "N.A.")
         self.assertEqual(item["real_client"], "10.0.0.99:9999")
+        self.assertIn("received_at", item)
 
 
 class ClientIdentityLoggingMiddlewareTests(TestCase):
@@ -153,13 +162,13 @@ class ClientIdentityLoggingMiddlewareTests(TestCase):
 
 
 class RunserverCommandLogActionTests(TestCase):
-    """Test Command.log_action formatting of HTTP request output lines."""
+    """Test Command.log_action formatting of HTTP request output lines with timestamps."""
 
     def setUp(self):
         self.cmd = Command()
 
-    def test_log_action_unauthenticated_format(self):
-        """Unauthenticated request logs with N.A. for enrollment and name."""
+    def test_log_action_unauthenticated_format_with_timestamp(self):
+        """Unauthenticated request logs with server receival timestamp prefix and N.A. user."""
         details = {
             "method": "GET",
             "path": "/",
@@ -169,13 +178,12 @@ class RunserverCommandLogActionTests(TestCase):
         }
         with self.assertLogs("django.channels.server", level="INFO") as cm:
             self.cmd.log_action("http", "complete", details)
-            self.assertTrue(any(
-                "HTTP GET / 200 [0.00, 127.0.0.1:23986, N.A., N.A.]" in msg
-                for msg in cm.output
-            ))
+            logged = cm.output[0]
+            # Match timestamp prefix: [DD/Mon/YYYY HH:MM:SS]
+            self.assertRegex(logged, r"\[\d{2}/[A-Za-z]{3}/\d{4} \d{2}:\d{2}:\d{2}\] HTTP GET / 200 \[0.00, 127.0.0.1:23986, N.A., N.A.\]")
 
-    def test_log_action_authenticated_format(self):
-        """Authenticated request logs with enrollment number and name."""
+    def test_log_action_authenticated_format_with_timestamp(self):
+        """Authenticated request logs with receival timestamp, enrollment number, and name."""
         client_key = "127.0.0.1:37548"
         update_or_record_client_request(
             client_key,
@@ -192,13 +200,11 @@ class RunserverCommandLogActionTests(TestCase):
         }
         with self.assertLogs("django.channels.server", level="INFO") as cm:
             self.cmd.log_action("http", "complete", details)
-            self.assertTrue(any(
-                "HTTP POST /profile/2024BCSE065/ 302 [0.02, 127.0.0.1:37548, 2024BCSE065, Abdus Samad Saiyed]" in msg
-                for msg in cm.output
-            ))
+            logged = cm.output[0]
+            self.assertRegex(logged, r"\[\d{2}/[A-Za-z]{3}/\d{4} \d{2}:\d{2}:\d{2}\] HTTP POST /profile/2024BCSE065/ 302 \[0.02, 127.0.0.1:37548, 2024BCSE065, Abdus Samad Saiyed\]")
 
     def test_log_action_bad_request_warning(self):
-        """400 Bad Request logs via warning level with formatted client details."""
+        """400 Bad Request logs via warning level with formatted client details and timestamp."""
         client_key = "127.0.0.1:37548"
         update_or_record_client_request(
             client_key,
@@ -215,13 +221,11 @@ class RunserverCommandLogActionTests(TestCase):
         }
         with self.assertLogs("django.channels.server", level="WARNING") as cm:
             self.cmd.log_action("http", "complete", details)
-            self.assertTrue(any(
-                "HTTP POST /auth/passkey/register/verify/ 400 [0.01, 127.0.0.1:37548, 2024BCSE065, Abdus Samad Saiyed]" in msg
-                for msg in cm.output
-            ))
+            logged = cm.output[0]
+            self.assertIn("HTTP POST /auth/passkey/register/verify/ 400 [0.01, 127.0.0.1:37548, 2024BCSE065, Abdus Samad Saiyed]", logged)
 
     def test_websocket_log_action(self):
-        """WebSocket connection logs formatted with client, enrollment, and name."""
+        """WebSocket connection logs formatted with timestamp, client, enrollment, and name."""
         client_key = "127.0.0.1:44444"
         update_or_record_client_request(
             client_key,
@@ -235,10 +239,8 @@ class RunserverCommandLogActionTests(TestCase):
         }
         with self.assertLogs("django.channels.server", level="INFO") as cm:
             self.cmd.log_action("websocket", "connected", details)
-            self.assertTrue(any(
-                "WebSocket CONNECT /ws/ride/1/ [127.0.0.1:44444, 2024BCSE065, Abdus Samad Saiyed]" in msg
-                for msg in cm.output
-            ))
+            logged = cm.output[0]
+            self.assertRegex(logged, r"\[\d{2}/[A-Za-z]{3}/\d{4} \d{2}:\d{2}:\d{2}\] WebSocket CONNECT /ws/ride/1/ \[127.0.0.1:44444, 2024BCSE065, Abdus Samad Saiyed\]")
 
 
 class ClientLoggingASGIWrapperTests(TestCase):
@@ -265,6 +267,7 @@ class ClientLoggingASGIWrapperTests(TestCase):
         self.assertEqual(item["enrollment"], "N.A.")
         self.assertEqual(item["name"], "N.A.")
         self.assertEqual(item["real_client"], "127.0.0.1:23986")
+        self.assertIn("received_at", item)
 
     async def test_asgi_wrapper_seeds_cloudflare_ip(self):
         """ASGI wrapper extracts cf-connecting-ip from raw scope headers."""
@@ -284,3 +287,90 @@ class ClientLoggingASGIWrapperTests(TestCase):
         item = pop_client_request("127.0.0.1:37548")
         self.assertEqual(item["real_client"], "103.21.244.2:37548")
 
+
+class ProtectedMediaAuthorizationTests(TestCase):
+    """Test access control rules for serve_protected_media."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.profiles_dir = os.path.join(self.temp_dir.name, 'profiles')
+        os.makedirs(self.profiles_dir, exist_ok=True)
+
+        # Create dummy photo on disk
+        self.photo_filename = 'f0294f7153af4070a8ba234777339724.jpg'
+        self.photo_path = os.path.join(self.profiles_dir, self.photo_filename)
+        with open(self.photo_path, 'wb') as f:
+            f.write(b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00')
+
+        # Create unverified user (e.g. self-registered / early-launch)
+        self.unverified_user = User.objects.create_user(
+            username="2026BMEC086",
+            enrollment_number="2026BMEC086",
+            first_name="Mohammad",
+            last_name="Rehan",
+            email="2026bmec086@nitsri.ac.in",
+            password="TestPassword123!",
+            is_active=True,
+            verified=False,
+            profile_photo=f'profiles/{self.photo_filename}',
+        )
+
+        # Create other verified user
+        self.verified_user = User.objects.create_user(
+            username="2024BCSE065",
+            enrollment_number="2024BCSE065",
+            first_name="Abdus Samad",
+            last_name="Saiyed",
+            email="2024bcse065@nitsri.ac.in",
+            password="TestPassword123!",
+            is_active=True,
+            verified=True,
+        )
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_unverified_user_can_view_own_profile_photo(self):
+        """Unverified student can access and view their own uploaded profile photo."""
+        with override_settings(MEDIA_ROOT=self.temp_dir.name):
+            request = self.factory.get(f'/media/profiles/{self.photo_filename}')
+            request.user = self.unverified_user
+
+            response = serve_protected_media(request, f'profiles/{self.photo_filename}')
+            self.assertEqual(response.status_code, 200)
+            if hasattr(response, 'close'):
+                response.close()
+
+    def test_unverified_user_in_early_launch_can_view_public_profile_photo(self):
+        """In Early Launch Mode, untrusted users can view public profile photos."""
+        with override_settings(MEDIA_ROOT=self.temp_dir.name, EARLY_LAUNCH_MODE=True):
+            request = self.factory.get(f'/media/profiles/{self.photo_filename}')
+            request.user = self.verified_user
+
+            response = serve_protected_media(request, f'profiles/{self.photo_filename}')
+            self.assertEqual(response.status_code, 200)
+            if hasattr(response, 'close'):
+                response.close()
+
+    def test_unverified_user_cannot_view_hidden_profile_photo_of_others(self):
+        """If owner hid photo from search/public, other unverified users are denied with 403."""
+        self.unverified_user.hide_profile_photo = True
+        self.unverified_user.save()
+
+        other_unverified = User.objects.create_user(
+            username="2026BMEC099",
+            enrollment_number="2026BMEC099",
+            email="2026bmec099@nitsri.ac.in",
+            password="TestPassword123!",
+            verified=False,
+        )
+
+        with override_settings(MEDIA_ROOT=self.temp_dir.name):
+            request = self.factory.get(f'/media/profiles/{self.photo_filename}')
+            request.user = other_unverified
+
+            response = serve_protected_media(request, f'profiles/{self.photo_filename}')
+            self.assertEqual(response.status_code, 403)
+            if hasattr(response, 'close'):
+                response.close()

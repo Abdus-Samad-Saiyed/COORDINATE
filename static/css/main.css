@@ -780,16 +780,76 @@ h1, h2, h3, h4, h5, h6, .hero-title, .navbar-brand {
   border: 1px solid var(--green-glow);
 }
 .navbar-toggler {
-  border: 1px solid var(--border);
-  padding: 4px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-hover);
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
+  color: var(--green);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 10px var(--green-dim);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+.navbar-toggler:hover {
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--green);
+  box-shadow: 0 0 16px var(--green-glow);
+  transform: translateY(-1px);
+}
+.navbar-toggler:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-glow), 0 0 16px var(--green-glow);
+}
+.navbar-toggler[aria-expanded="true"] {
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--green);
+  box-shadow: 0 0 16px var(--green-glow);
+}
+.navbar-toggler .navbar-toggler-icon-open {
+  display: block;
+  font-size: 1.45rem;
+  line-height: 1;
+  color: var(--green);
+  transition: transform 0.2s ease;
+}
+.navbar-toggler .navbar-toggler-icon-close {
+  display: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--green);
+  transition: transform 0.2s ease;
+}
+.navbar-toggler[aria-expanded="true"] .navbar-toggler-icon-open {
+  display: none;
+}
+.navbar-toggler[aria-expanded="true"] .navbar-toggler-icon-close {
+  display: block;
 }
 .navbar-toggler-icon {
-  filter: invert(1);
+  width: 1.4rem;
+  height: 1.4rem;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='%2308B74F' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2.6' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
+  filter: none !important;
 }
-[data-bs-theme="light"] .navbar-toggler-icon,
-[data-theme="light"] .navbar-toggler-icon {
-  filter: invert(0);
+[data-bs-theme="light"] .navbar-toggler,
+[data-theme="light"] .navbar-toggler {
+  background: #ffffff;
+  border-color: var(--border-hover);
+  color: var(--green);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+[data-bs-theme="light"] .navbar-toggler:hover,
+[data-theme="light"] .navbar-toggler:hover,
+[data-bs-theme="light"] .navbar-toggler[aria-expanded="true"],
+[data-theme="light"] .navbar-toggler[aria-expanded="true"] {
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--green);
 }
 
 /* Dedicated Icon Button in Nav (Theme Toggle, Visual Controls) */

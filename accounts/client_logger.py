@@ -3,11 +3,12 @@ Client request identity tracking and console log enrichment for Daphne and Djang
 
 Maintains a thread-safe registry of in-flight client requests keyed by client connection address
 (host:port). Enriches HTTP and WebSocket request logs with:
-  [duration, client_ip:port, enrollment_number, full_name]
+  [timestamp] HTTP %(method)s %(path)s %(status)s [%(time_taken).2f, %(client)s, %(enrollment)s, %(name)s]
 where unauthenticated requests display N.A. for enrollment and name.
 """
 
 import collections
+import datetime
 import logging
 import threading
 import time
@@ -60,18 +61,21 @@ def seed_client_request(
     enrollment: str = "N.A.",
     name: str = "N.A.",
     real_client: str | None = None,
+    received_at: float | None = None,
 ):
     """Pre-seed client metadata when an ASGI connection or request scope is initialized."""
     if not client_key:
         client_key = "DEFAULT"
 
     now = time.time()
+    rec = received_at or now
     with _REGISTRY_LOCK:
         _clean_expired_entries_locked(now)
         _CLIENT_REGISTRY[client_key].append({
             "enrollment": enrollment or "N.A.",
             "name": name or "N.A.",
             "real_client": real_client or client_key,
+            "received_at": rec,
             "ts": now,
         })
 
@@ -81,6 +85,7 @@ def update_or_record_client_request(
     enrollment: str = "N.A.",
     name: str = "N.A.",
     real_client: str | None = None,
+    received_at: float | None = None,
 ):
     """Update the in-flight request entry with authenticated user details from Django middleware."""
     if not client_key:
@@ -104,12 +109,15 @@ def update_or_record_client_request(
 
             if real_client:
                 latest["real_client"] = real_client
+            if received_at and not latest.get("received_at"):
+                latest["received_at"] = received_at
             latest["ts"] = now
         else:
             queue.append({
                 "enrollment": enrollment or "N.A.",
                 "name": name or "N.A.",
                 "real_client": real_client or client_key,
+                "received_at": received_at or now,
                 "ts": now,
             })
 
@@ -133,6 +141,7 @@ def pop_client_request(client_key: str | None) -> dict:
         "enrollment": "N.A.",
         "name": "N.A.",
         "real_client": client_key if client_key != "DEFAULT" else "127.0.0.1",
+        "received_at": now,
         "ts": now,
     }
 
@@ -147,6 +156,7 @@ class ClientLoggingASGIWrapper:
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") in ("http", "websocket"):
+            received_at = time.time()
             client = scope.get("client")
             if client:
                 client_key = f"{client[0]}:{client[1]}"
@@ -168,6 +178,12 @@ class ClientLoggingASGIWrapper:
                     if not name:
                         name = "N.A."
 
-                seed_client_request(client_key, enrollment=enrollment, name=name, real_client=real_client)
+                seed_client_request(
+                    client_key,
+                    enrollment=enrollment,
+                    name=name,
+                    real_client=real_client,
+                    received_at=received_at,
+                )
 
         return await self.inner(scope, receive, send)

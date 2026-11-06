@@ -81,9 +81,6 @@ class CustomPasswordChangeView(PasswordChangeView):
 
 @login_required
 def serve_protected_media(request, path):
-    if not (request.user.is_staff or getattr(request.user, 'verified', False)):
-        return HttpResponseForbidden("Verified student authentication required.")
-
     safe_path = os.path.normpath(path).lstrip('/\\')
     if safe_path.startswith('..') or os.path.isabs(safe_path):
         raise Http404("Invalid media path.")
@@ -101,8 +98,20 @@ def serve_protected_media(request, path):
         owner = User.objects.filter(profile_photo=normalized_rel).first()
         if not owner:
             raise Http404("Media file not found.")
-        if not can_view_profile_field(request.user, owner, 'profile_photo'):
-            return HttpResponseForbidden("Access to this profile media is restricted.")
+        # Self or staff can always view own profile photo
+        if request.user == owner or request.user.is_staff or request.user.is_superuser:
+            return FileResponse(open(full_path, 'rb'))
+        # In Early Launch Mode (temporary database), permit profile photo viewing unless hidden by owner
+        if getattr(settings, 'EARLY_LAUNCH_MODE', False) and not getattr(owner, 'hide_profile_photo', False):
+            return FileResponse(open(full_path, 'rb'))
+        # Standard privacy policy check
+        if can_view_profile_field(request.user, owner, 'profile_photo'):
+            return FileResponse(open(full_path, 'rb'))
+        return HttpResponseForbidden("Access to this profile media is restricted.")
+
+    # Sensitive non-profile media (e.g. ID verification cards) requires verified student or staff
+    if not (request.user.is_staff or getattr(request.user, 'verified', False) or getattr(settings, 'EARLY_LAUNCH_MODE', False)):
+        return HttpResponseForbidden("Verified student authentication required.")
 
     return FileResponse(open(full_path, 'rb'))
 

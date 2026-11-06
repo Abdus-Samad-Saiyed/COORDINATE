@@ -1,14 +1,16 @@
 """Extended Daphne runserver management command with --early-launch support
-and client identity console logging (enrollment number, name, and IP address).
+and client identity console logging (receival timestamp, enrollment number, name, and IP address).
 
 Runs server against an isolated temporary database (temp_early_access.sqlite3) when --early-launch is specified.
 Enriches Daphne console request logs with client connection details:
-  HTTP %(method)s %(path)s %(status)s [%(time_taken).2f, %(client)s, %(enrollment)s, %(name)s]
+  [%(server_time)s] HTTP %(method)s %(path)s %(status)s [%(time_taken).2f, %(client)s, %(enrollment)s, %(name)s]
 where unauthenticated requests display N.A. for enrollment and name.
 """
 
+import datetime
 import logging
 import os
+import time
 from django.conf import settings
 from django.core.management import call_command
 from django.db import connections
@@ -82,7 +84,7 @@ class Command(DaphneRunserverCommand):
         return ClientLoggingASGIWrapper(app)
 
     def log_action(self, protocol, action, details):
-        """Log requests to the console enriched with client IP, enrollment number, and name."""
+        """Log requests to the console enriched with server receival timestamp, client IP, enrollment number, and name."""
         if protocol == "http" and action == "complete":
             client_key = details.get("client")
             meta = pop_client_request(client_key)
@@ -95,7 +97,12 @@ class Command(DaphneRunserverCommand):
             elif not details.get("client"):
                 details["client"] = "127.0.0.1"
 
-            msg = "HTTP %(method)s %(path)s %(status)s [%(time_taken).2f, %(client)s, %(enrollment)s, %(name)s]"
+            # Determine timestamp at the exact moment the request was received
+            time_taken = details.get("time_taken", 0.0) or 0.0
+            received_ts = meta.get("received_at") or (time.time() - time_taken)
+            details["server_time"] = datetime.datetime.fromtimestamp(received_ts).strftime("%d/%b/%Y %H:%M:%S")
+
+            msg = "[%(server_time)s] HTTP %(method)s %(path)s %(status)s [%(time_taken).2f, %(client)s, %(enrollment)s, %(name)s]"
 
             # Utilize terminal colors matching Daphne's standard styling
             status = details.get("status", 200)
@@ -126,13 +133,16 @@ class Command(DaphneRunserverCommand):
             elif not details.get("client"):
                 details["client"] = "127.0.0.1"
 
+            received_ts = meta.get("received_at") or time.time()
+            details["server_time"] = datetime.datetime.fromtimestamp(received_ts).strftime("%d/%b/%Y %H:%M:%S")
+
             action_name = {
                 "connected": "CONNECT",
                 "disconnected": "DISCONNECT",
                 "connecting": "HANDSHAKING",
                 "rejected": "REJECT",
             }.get(action, action.upper())
-            logger.info(f"WebSocket {action_name} %(path)s [%(client)s, %(enrollment)s, %(name)s]", details)
+            logger.info(f"[%(server_time)s] WebSocket {action_name} %(path)s [%(client)s, %(enrollment)s, %(name)s]", details)
         else:
             super().log_action(protocol, action, details)
 
