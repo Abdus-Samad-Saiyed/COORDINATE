@@ -44,6 +44,12 @@ class PwaInstallabilityTests(TestCase):
         # Shortcuts validation
         shortcuts = data.get('shortcuts', [])
         self.assertGreaterEqual(len(shortcuts), 1)
+        for shortcut in shortcuts:
+            url = shortcut.get('url')
+            self.assertTrue(url, "Shortcut must have a url")
+            # Ensure shortcut URLs resolve without 404
+            res = self.client.get(url)
+            self.assertIn(res.status_code, [200, 302], f"Shortcut URL {url} returned unexpected status {res.status_code}")
 
     def test_pwa_icon_files_exist_on_disk(self):
         """Ensure all required PWA icon assets exist in static/img/pwa/."""
@@ -75,7 +81,7 @@ class PwaInstallabilityTests(TestCase):
 
         content = b"".join(response.streaming_content) if response.streaming else response.content
         sw_text = content.decode('utf-8')
-        self.assertIn('campus-nexus-v2', sw_text)
+        self.assertIn('campus-nexus-', sw_text)
         self.assertIn('/offline/', sw_text)
         self.assertIn('navigate', sw_text)
         self.assertIn("url.pathname === '/manifest.json'", sw_text)
@@ -108,7 +114,7 @@ class PwaInstallabilityTests(TestCase):
         self.assertIn('window.isNexusRunningStandalone', content)
         self.assertEqual(content.count("serviceWorker.register('/sw.js'"), 1)
         self.assertIn("updateViaCache: 'none'", content)
-        self.assertIn('v=3.2.2', content)
+        self.assertIn('v=3.2.', content)
 
     def test_dashboard_post_login_pwa_prompt_elements(self):
         """Dashboard renders #postLoginPwaPrompt with install & dismiss CTAs, feature badges, and standalone check."""

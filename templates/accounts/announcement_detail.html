@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ announcement.title }} — Campus Announcements{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Breadcrumb & Top Bar -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div class="d-flex align-items-center gap-2 small text-secondary overflow-hidden">
+            <a href="{% url 'dashboard' %}" class="text-secondary text-decoration-none">Dashboard</a>
+            <span>&rsaquo;</span>
+            <a href="{% url 'announcement_list' %}" class="text-secondary text-decoration-none">Announcements</a>
+            <span>&rsaquo;</span>
+            <span class="text-white fw-semibold text-truncate" style="max-width: 260px;">{{ announcement.title }}</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{% url 'announcement_list' %}" class="btn btn-sm btn-dark-custom">
+                <i class="bi bi-list-ul me-1"></i> All Announcements
+            </a>
+            <a href="{% url 'dashboard' %}" class="btn btn-sm btn-dark-custom">
+                <i class="bi bi-house-door me-1"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Announcement Detail Card -->
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <div class="glass p-4 p-md-5 position-relative"
+                 style="background: rgba(15, 23, 42, 0.7); border: 1.5px solid rgba(14, 165, 233, 0.35); box-shadow: 0 0 32px rgba(14, 165, 233, 0.1); border-left: 6px solid {% if announcement.priority == 'CRITICAL' %}#ef4444{% elif announcement.priority == 'WARNING' %}#f59e0b{% elif announcement.priority == 'SUCCESS' %}var(--green,#08B74F){% else %}#0ea5e9{% endif %} !important;">
+
+                <!-- Header Meta -->
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 pb-3 border-bottom border-secondary border-opacity-25">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="badge {% if announcement.priority == 'CRITICAL' %}bg-danger{% elif announcement.priority == 'WARNING' %}bg-warning text-dark{% elif announcement.priority == 'SUCCESS' %}bg-success{% else %}bg-info text-dark{% endif %} px-3 py-1.5 rounded-pill fw-semibold small">
+                            <i class="bi {% if announcement.priority == 'CRITICAL' %}bi-exclamation-octagon-fill{% elif announcement.priority == 'WARNING' %}bi-exclamation-triangle-fill{% elif announcement.priority == 'SUCCESS' %}bi-check-circle-fill{% else %}bi-info-circle-fill{% endif %} me-1"></i>
+                            {{ announcement.get_priority_display }}
+                        </span>
+                        {% if announcement.target_type != 'ALL' %}
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary rounded-pill px-2.5 py-1 small">
+                                Targeted Audience
+                            </span>
+                        {% endif %}
+                    </div>
+                    <div class="text-secondary small">
+                        <i class="bi bi-calendar3 me-1"></i>{{ announcement.created_at|date:"F d, Y · H:i" }}
+                    </div>
+                </div>
+
+                <!-- Title -->
+                <h2 class="fw-bold text-white mb-3" style="line-height: 1.35; letter-spacing: -0.01em;">
+                    {{ announcement.title }}
+                </h2>
+
+                <!-- Issuer Info -->
+                <div class="d-flex align-items-center gap-2 text-secondary small mb-4 pb-3 border-bottom border-secondary border-opacity-25">
+                    <i class="bi bi-person-badge text-info"></i>
+                    <span>Broadcast by <strong class="text-white">{{ announcement.created_by.enrollment_number|default:"Campus Administration" }}</strong></span>
+                    {% if announcement.expires_at %}
+                        <span class="ms-2 text-warning">&middot; <i class="bi bi-clock-history me-1"></i>Expires {{ announcement.expires_at|date:"M d, Y · H:i" }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Content Body -->
+                <div class="text-light mb-4" style="white-space: pre-line; line-height: 1.85; font-size: 1.05rem; word-break: break-word;">
+                    {{ announcement.content }}
+                </div>
+
+                <!-- Action Button & Acknowledgment Footer -->
+                <div class="pt-4 border-top border-secondary border-opacity-25 d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center justify-content-between gap-3">
+                    <div>
+                        {% if announcement.action_url %}
+                            <a href="{{ announcement.action_url }}"
+                               class="btn {% if announcement.priority == 'CRITICAL' %}btn-danger{% elif announcement.priority == 'WARNING' %}btn-warning text-dark{% elif announcement.priority == 'SUCCESS' %}btn-green{% else %}btn-info text-dark{% endif %} fw-bold px-4 py-2"
+                               {% if "://" in announcement.action_url and request.get_host not in announcement.action_url %}target="_blank" rel="noopener noreferrer"{% endif %}>
+                                {% if "settings" in announcement.action_url %}
+                                    <i class="bi bi-gear-fill me-1"></i>
+                                {% elif "://" in announcement.action_url and request.get_host not in announcement.action_url %}
+                                    <i class="bi bi-box-arrow-up-right me-1"></i>
+                                {% else %}
+                                    <i class="bi bi-arrow-right-circle me-1"></i>
+                                {% endif %}
+                                {{ announcement.action_label|default:"View Details" }}
+                            </a>
+                        {% endif %}
+                    </div>
+
+                    <div id="announcementDetailAck">
+                        {% if not is_acknowledged %}
+                            <form action="{% url 'acknowledge_announcement' announcement.id %}" method="POST" class="m-0" id="formAckDetail">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.path }}">
+                                <button type="submit" class="btn btn-green fw-bold px-4 py-2 shadow-sm w-100" id="btnAckDetail">
+                                    <i class="bi bi-check-lg me-1"></i> Acknowledge Notice
+                                </button>
+                            </form>
+                        {% else %}
+                            <span class="badge bg-success-subtle text-success border border-success-subtle py-2 px-3 fs-6 d-inline-flex align-items-center gap-1.5">
+                                <i class="bi bi-check2-circle fs-5"></i> Notice Acknowledged
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const formAck = document.getElementById('formAckDetail');
+    if (formAck) {
+        formAck.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnAckDetail');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Acknowledging...';
+            }
+            fetch(formAck.action, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': formAck.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                const container = document.getElementById('announcementDetailAck');
+                if (container) {
+                    container.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle py-2 px-3 fs-6 d-inline-flex align-items-center gap-1.5"><i class="bi bi-check2-circle fs-5"></i> Notice Acknowledged</span>';
+                }
+            })
+            .catch(err => {
+                formAck.submit();
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

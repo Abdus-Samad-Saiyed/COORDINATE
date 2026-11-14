@@ -18,6 +18,7 @@
     <link rel="manifest" href="/manifest.json">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- PWA standalone status bar: black-translucent pairs with safe-area padding for notch & Dynamic Island compatibility -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Campus Nexus">
     <meta name="application-name" content="Campus Nexus">
@@ -271,6 +272,10 @@
         }
 
         @media (max-width: 991.98px) {
+            .navbar-custom {
+                padding-top: max(8px, calc(env(safe-area-inset-top, 0px) + 4px)) !important;
+            }
+
             .navbar-custom > .container-fluid {
                 display: flex !important;
                 flex-wrap: wrap !important;
@@ -475,8 +480,8 @@
 
     </style>
     <!-- Custom Theme & Watermark Styles -->
-    <link rel="stylesheet" href="{% static 'css/main.min.css' %}?v=3.2.2">
-    <link rel="stylesheet" href="{% static 'css/watermark.min.css' %}?v=3.2.2" data-asset="watermark.css">
+    <link rel="stylesheet" href="{% static 'css/main.min.css' %}?v=3.2.4">
+    <link rel="stylesheet" href="{% static 'css/watermark.min.css' %}?v=3.2.4" data-asset="watermark.css">
 
     <!-- PWA Installation Button Dynamic Accent Styles -->
     <script>
@@ -689,7 +694,7 @@
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
     <!-- Clockwork Watermark Background (Pointer-inert, System Time Driven Center Clock, Industrial Gear Shadows) -->
-    <div id="clockwork-watermark" class="clockwork-watermark-container" aria-hidden="true">
+    <div id="clockwork-watermark" class="clockwork-watermark-container" aria-hidden="true" style="display: none;">
         <svg viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice" class="clockwork-svg" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <pattern id="nexus-grid" width="50" height="50" patternUnits="userSpaceOnUse">
@@ -1129,10 +1134,10 @@
                                     <span>Watermark Canvas</span>
                                 </label>
                                 <select id="fx-watermark-mode" class="form-select form-select-sm" onchange="window.setNexusWatermarkMode(this.value)">
-                                    <option value="both">Gears & Clockwork (Default)</option>
-                                    <option value="gears">Corner & Edge Gears Only</option>
+                                    <option value="off">Off / Hidden (Default)</option>
+                                    <option value="both">Gears &amp; Clockwork</option>
+                                    <option value="gears">Corner &amp; Edge Gears Only</option>
                                     <option value="clock">Center Clockwork Only</option>
-                                    <option value="off">Off / Hidden</option>
                                 </select>
                             </div>
 
@@ -1650,7 +1655,7 @@
     <!-- Bootstrap Bundle JS with Subresource Integrity (SRI) -->
     <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <!-- Clockwork Watermark & Theme Customization Engine (All Viewports) -->
-    <script defer src="{% static 'js/watermark.min.js' %}?v=3.2.2" data-asset="watermark.js"></script>
+    <script defer src="{% static 'js/watermark.min.js' %}?v=3.2.4" data-asset="watermark.js"></script>
 
     <!-- Universal Password Visibility Engine -->
     <script>
@@ -3291,10 +3296,10 @@
                         <div class="mb-3">
                             <label class="form-label small text-secondary mb-1">Watermark Mode</label>
                             <select id="modal-fx-watermark-mode" class="form-select form-select-sm bg-dark border-secondary text-light" onchange="window.setNexusWatermarkMode(this.value)">
-                                <option value="both">Gears &amp; Clockwork (Default)</option>
+                                <option value="off">Off / Hidden (Default)</option>
+                                <option value="both">Gears &amp; Clockwork</option>
                                 <option value="gears">Corner &amp; Edge Gears Only</option>
                                 <option value="clock">Center Clockwork Only</option>
-                                <option value="off">Off / Hidden</option>
                             </select>
                         </div>
 
@@ -3393,10 +3398,11 @@
             localStorage.setItem('nexus_standalone_app', '1');
         }
 
-        const isMobileViewport = (window.innerWidth <= 768) || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
-        const wmMode = localStorage.getItem('nexus_watermark_mode') || (isMobileViewport ? 'off' : 'both');
+        const wmMode = localStorage.getItem('nexus_watermark_mode') || 'off';
         const wmSelect = document.getElementById('modal-fx-watermark-mode');
         if (wmSelect) wmSelect.value = wmMode;
+        const fxSelect = document.getElementById('fx-watermark-mode');
+        if (fxSelect) fxSelect.value = wmMode;
 
         const rawOpacity = parseFloat(localStorage.getItem('nexus_watermark_opacity'));
         const opacityPct = isNaN(rawOpacity) ? 22 : (rawOpacity <= 1 ? Math.round(rawOpacity * 100) : Math.round(rawOpacity));

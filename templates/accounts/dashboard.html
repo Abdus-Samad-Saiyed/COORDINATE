@@ -95,8 +95,17 @@
 
                     <div class="col-lg-3 d-flex flex-column gap-2 justify-content-center align-items-stretch">
                         {% if proclaiming_announcement.action_url %}
-                            <a href="{{ proclaiming_announcement.action_url }}" class="btn btn-outline-light py-2 fw-semibold text-center" target="_blank">
-                                <i class="bi bi-box-arrow-up-right me-1"></i> {{ proclaiming_announcement.action_label|default:"View Details" }}
+                            <a href="{{ proclaiming_announcement.action_url }}"
+                               class="btn {% if proclaiming_announcement.priority == 'CRITICAL' %}btn-light text-danger{% elif proclaiming_announcement.priority == 'WARNING' %}btn-dark text-warning border-warning{% elif proclaiming_announcement.priority == 'SUCCESS' %}btn-dark text-success border-success{% else %}btn-info text-dark{% endif %} py-2 fw-bold text-center shadow-sm"
+                               {% if "://" in proclaiming_announcement.action_url and request.get_host not in proclaiming_announcement.action_url %}target="_blank" rel="noopener noreferrer"{% endif %}>
+                                {% if "settings" in proclaiming_announcement.action_url %}
+                                    <i class="bi bi-gear-fill me-1"></i>
+                                {% elif "://" in proclaiming_announcement.action_url and request.get_host not in proclaiming_announcement.action_url %}
+                                    <i class="bi bi-box-arrow-up-right me-1"></i>
+                                {% else %}
+                                    <i class="bi bi-arrow-right-circle me-1"></i>
+                                {% endif %}
+                                {{ proclaiming_announcement.action_label|default:"View Details" }}
                             </a>
                         {% endif %}
 
@@ -253,60 +262,70 @@
     </div>
     {% endif %}
 
-    <!-- Priority Campus Announcements Feed -->
-    {% if active_announcements %}
-        <div class="glass p-4 mb-4 border-primary-subtle position-relative" style="background: rgba(15, 23, 42, 0.65); border: 1.5px solid rgba(14, 165, 233, 0.35); box-shadow: 0 0 24px rgba(14, 165, 233, 0.08);">
+    {% if feed_announcements %}
+        <!-- Priority Campus Announcements Feed (Compact Space-Preserving Directory) -->
+        <div class="glass p-3 p-md-4 mb-4 border-primary-subtle position-relative" style="background: rgba(15, 23, 42, 0.65); border: 1.5px solid rgba(14, 165, 233, 0.35); box-shadow: 0 0 24px rgba(14, 165, 233, 0.08);">
             <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
                 <div class="d-flex align-items-center gap-2">
-                    <span class="feature-icon" style="width: 36px; height: 36px; font-size: 1.1rem; background: rgba(14, 165, 233, 0.2); color: #38bdf8;">
+                    <span class="feature-icon" style="width: 34px; height: 34px; font-size: 1rem; background: rgba(14, 165, 233, 0.2); color: #38bdf8;">
                         <i class="bi bi-megaphone-fill"></i>
                     </span>
                     <div>
-                        <h5 class="fw-bold mb-0 text-white">Priority Campus Announcements</h5>
-                        <span class="text-secondary small">Broadcast notices targeted to your academic profile & status</span>
+                        <h6 class="fw-bold mb-0 text-white">Priority Campus Announcements</h6>
+                        <span class="text-secondary" style="font-size: 0.78rem;">Notices targeted to your academic profile & status</span>
                     </div>
                 </div>
-                <span class="badge bg-dark border border-secondary text-secondary rounded-pill px-2.5 py-1 small">
-                    {{ active_announcements|length }} Active Notice{{ active_announcements|length|pluralize }}
-                </span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-dark border border-secondary text-secondary rounded-pill px-2.5 py-1 small">
+                        {{ total_active_announcements_count|default:feed_announcements|length }} Active Notice{{ total_active_announcements_count|default:feed_announcements|length|pluralize }}
+                    </span>
+                    <a href="{% url 'announcement_list' %}" class="btn btn-sm btn-outline-info text-nowrap py-1 px-2.5" style="font-size: 0.78rem;">
+                        <span>View All</span> <i class="bi bi-arrow-right ms-1"></i>
+                    </a>
+                </div>
             </div>
 
-            <div class="row g-3">
-                {% for ann in active_announcements %}
-                    <div class="col-12">
-                        <div class="p-3 rounded bg-black bg-opacity-40 border border-secondary"
-                             style="border-left: 4px solid {% if ann.priority == 'CRITICAL' %}#ef4444{% elif ann.priority == 'WARNING' %}#f59e0b{% elif ann.priority == 'SUCCESS' %}var(--green,#08B74F){% else %}#0ea5e9{% endif %} !important;">
-                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-2">
-                                <div class="d-flex flex-wrap align-items-center gap-2">
-                                    <h6 class="fw-bold text-white mb-0">{{ ann.title }}</h6>
-                                    <span class="badge {% if ann.priority == 'CRITICAL' %}bg-danger{% elif ann.priority == 'WARNING' %}bg-warning text-dark{% elif ann.priority == 'SUCCESS' %}bg-success{% else %}bg-info text-dark{% endif %} px-2 py-0.5 rounded-pill" style="font-size: 0.68rem;">
-                                        {{ ann.get_priority_display }}
-                                    </span>
-                                    {% if ann.id not in seen_announcement_ids %}
-                                        <span class="badge bg-danger rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
-                                            NEW
-                                        </span>
-                                    {% endif %}
-                                </div>
-                                <span class="text-secondary small">
-                                    {{ ann.created_at|date:"M d, Y H:i" }}
+            <!-- Compact Title Rows -->
+            <div class="d-flex flex-column gap-2">
+                {% for ann in feed_announcements %}
+                    <a href="{% url 'announcement_detail' ann.id %}"
+                       class="d-flex align-items-center justify-content-between p-2.5 px-3 rounded bg-black bg-opacity-40 border border-secondary text-decoration-none announcement-compact-row text-light transition-base"
+                       style="border-left: 4px solid {% if ann.priority == 'CRITICAL' %}#ef4444{% elif ann.priority == 'WARNING' %}#f59e0b{% elif ann.priority == 'SUCCESS' %}var(--green,#08B74F){% else %}#0ea5e9{% endif %} !important;">
+                        <div class="d-flex align-items-center gap-2 overflow-hidden me-2">
+                            <span class="badge {% if ann.priority == 'CRITICAL' %}bg-danger{% elif ann.priority == 'WARNING' %}bg-warning text-dark{% elif ann.priority == 'SUCCESS' %}bg-success{% else %}bg-info text-dark{% endif %} px-2 py-0.5 rounded-pill flex-shrink-0" style="font-size: 0.68rem;">
+                                {{ ann.get_priority_display }}
+                            </span>
+                            <span class="fw-semibold text-white text-truncate" style="font-size: 0.92rem;">
+                                {{ ann.title }}
+                            </span>
+                            {% if ann.id not in seen_announcement_ids %}
+                                <span class="badge bg-danger rounded-pill px-1.5 py-0.5 flex-shrink-0" id="feedNewBadge-{{ ann.id }}" style="font-size: 0.62rem;">
+                                    NEW
                                 </span>
-                            </div>
-                            <div class="text-light small mb-2" style="white-space: pre-line; line-height: 1.55;">
-                                {{ ann.content }}
-                            </div>
-                            {% if ann.action_url %}
-                                <div class="mt-2 pt-2 border-top border-secondary border-opacity-25 d-flex align-items-center justify-content-between">
-                                    <a href="{{ ann.action_url }}" class="btn btn-sm btn-dark-custom" target="_blank">
-                                        <i class="bi bi-box-arrow-up-right me-1"></i> {{ ann.action_label|default:"View Details" }}
-                                    </a>
-                                    <span class="text-secondary small">{{ ann.action_url }}</span>
-                                </div>
                             {% endif %}
                         </div>
-                    </div>
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            {% if ann.id in seen_announcement_ids %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle py-0.5 px-1.5 d-none d-sm-inline-flex align-items-center" style="font-size: 0.68rem;">
+                                    <i class="bi bi-check2 me-1"></i> Acknowledged
+                                </span>
+                            {% endif %}
+                            <span class="text-secondary small d-none d-md-inline" style="font-size: 0.78rem;">
+                                {{ ann.created_at|date:"M d" }}
+                            </span>
+                            <i class="bi bi-chevron-right text-secondary small"></i>
+                        </div>
+                    </a>
                 {% endfor %}
             </div>
+
+            {% if has_more_announcements %}
+                <div class="mt-2.5 pt-2 text-center border-top border-secondary border-opacity-25">
+                    <a href="{% url 'announcement_list' %}" class="btn btn-sm btn-dark-custom w-100 py-1.5 text-secondary text-hover-white fw-semibold small">
+                        View all {{ total_active_announcements_count }} campus announcements &rarr;
+                    </a>
+                </div>
+            {% endif %}
         </div>
     {% endif %}
 
@@ -860,10 +879,18 @@ function acknowledgeAnnouncement(announcementId, btnElem) {
                 banner.remove();
             }, 400);
         }
+        const feedBtnContainer = document.getElementById('feedAckContainer-' + announcementId);
+        if (feedBtnContainer) {
+            feedBtnContainer.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 small"><i class="bi bi-check2-circle me-1"></i> Acknowledged</span>';
+        }
+        const feedNewBadge = document.getElementById('feedNewBadge-' + announcementId);
+        if (feedNewBadge) {
+            feedNewBadge.remove();
+        }
     })
     .catch(err => {
         console.error('Acknowledgment request error, submitting form fallback:', err);
-        const form = document.getElementById('formAckAnnouncement-' + announcementId);
+        const form = document.getElementById('formAckAnnouncement-' + announcementId) || document.getElementById('formAckFeed-' + announcementId);
         if (form) form.submit();
     });
 }

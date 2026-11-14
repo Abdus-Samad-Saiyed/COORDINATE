@@ -1,0 +1,162 @@
+<div id="partial-student-count" class="d-none" data-count="{{ total_count }}"></div>
+{% if year_groups %}
+    {% for yg in year_groups %}
+        <details class="col-12 year-results-group" data-student-year="{{ yg.year }}"{% if yg.is_my_year %} open{% endif %}>
+            <summary class="d-flex align-items-center gap-2 py-3 border-bottom border-secondary" style="cursor: pointer; min-height: 48px;">
+                <i class="bi bi-chevron-down text-secondary year-results-chevron" aria-hidden="true"></i>
+                <span class="fw-bold fs-5 text-white">
+                    <i class="bi bi-calendar3 me-1 text-success"></i>
+                    Batch of {{ yg.year }}
+                </span>
+                {% if yg.is_my_year %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 small fw-semibold">Your Batch</span>
+                {% endif %}
+                <span class="badge bg-dark border border-secondary text-secondary ms-auto small">{{ yg.total_students }} Student{{ yg.total_students|pluralize }}</span>
+            </summary>
+            <div class="row g-3 pt-3">
+
+        {% for bg in yg.branches %}
+            <div class="col-12 mt-3 mb-1">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fw-semibold text-secondary small text-uppercase">
+                        <i class="bi bi-mortarboard-fill me-1"></i> Branch: <strong class="text-white">{{ bg.branch }}</strong>
+                    </span>
+                    {% if bg.is_my_group %}
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-0 px-2 small">Your Batch &amp; Branch</span>
+                    {% elif bg.is_my_branch %}
+                        <span class="badge bg-secondary-subtle text-white border border-secondary py-0 px-2 small">Your Branch</span>
+                    {% endif %}
+                    <span class="text-secondary small">({{ bg.count }} student{{ bg.count|pluralize }})</span>
+                </div>
+            </div>
+
+            {% for item in bg.students %}
+                {% with s=item.student %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="glass p-3 h-100 d-flex flex-column justify-content-between overflow-hidden position-relative student-card {% if s.verified %}border-secondary{% else %}border-warning border-opacity-50{% endif %}">
+                        <div>
+                            <div class="d-flex align-items-start gap-3 mb-3">
+                                <!-- Avatar / Photo -->
+                                <div class="rounded-circle bg-dark border border-secondary d-flex align-items-center justify-content-center flex-shrink-0" style="width: 52px; height: 52px; overflow: hidden;">
+                                    {% if s.profile_photo %}
+                                        <img src="{{ s.profile_photo.url }}" alt="{{ s.enrollment_number }}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.src=''; this.parentElement.innerHTML='<i class=\'bi bi-person-fill text-secondary fs-4\'></i>';">
+                                    {% else %}
+                                        <i class="bi bi-person-fill text-secondary fs-4"></i>
+                                    {% endif %}
+                                </div>
+
+                                <div class="flex-grow-1 min-w-0" style="overflow: hidden;">
+                                    <!-- Line 1: Student Display Name -->
+                                    <div class="mb-1 min-w-0">
+                                        <a href="{% url 'profile' s.enrollment_number %}" class="fw-bold text-white text-truncate text-decoration-none d-block min-w-0" title="{{ s.display_name }}">
+                                            {{ s.display_name }}
+                                        </a>
+                                    </div>
+
+                                    <!-- Line 2: Enrollment Number & Badges -->
+                                    <div class="d-flex align-items-center justify-content-between gap-1 flex-wrap mb-1">
+                                        <div class="font-monospace text-success small fw-semibold text-truncate">
+                                            {{ s.enrollment_number }}
+                                        </div>
+                                        <div class="d-flex align-items-center gap-1 flex-wrap flex-shrink-0">
+                                            {% if s.verified %}
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle py-0 px-1 small" title="Permanent Verified Student">
+                                                    <i class="bi bi-patch-check-fill me-1"></i>Permanent
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle py-0 px-1 small" title="Temporary Self-Declared Early Access Account">
+                                                    <i class="bi bi-clock-history me-1"></i>Temporary
+                                                </span>
+                                            {% endif %}
+                                            {% if s.gender == 'F' %}
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle py-0 px-1 small">Female</span>
+                                            {% elif s.gender == 'M' %}
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-0 px-1 small">Male</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <!-- Line 3: Department & Degree -->
+                                    <div class="text-secondary small text-truncate">
+                                        {{ s.branch|default:'CSE' }} &bull; {{ s.degree|default:'Bachelors' }} &bull; Class of {{ s.joining_year|default:'2024' }}
+                                    </div>
+                                    {% if not s.hide_online_status %}
+                                        <div class="mt-1 small" style="font-size: 0.75rem;">
+                                            {% if s.is_online_now %}
+                                                <span class="text-success fw-semibold"><i class="bi bi-circle-fill me-1 text-success" style="font-size: 0.45rem;"></i>Active now</span>
+                                            {% elif s.last_seen %}
+                                                <span class="text-secondary"><i class="bi bi-clock me-1"></i>Last online: {{ s.last_seen_display }}</span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- Reliability Badge -->
+                            <div class="p-2 rounded bg-black bg-opacity-30 border border-secondary mb-3 d-flex align-items-center justify-content-between small">
+                                <span class="text-secondary">Reliability Rating</span>
+                                <span class="fw-semibold {% if s.on_time_percentage >= 90 %}text-success{% elif s.on_time_percentage >= 75 %}text-warning{% else %}text-danger{% endif %}">
+                                    <i class="bi bi-check-circle-fill me-1"></i>{{ s.on_time_percentage }}% on-time ({{ s.rides_completed }} rides)
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="d-flex gap-2 pt-2 border-top border-secondary align-items-center">
+                            <a href="{% url 'profile' s.enrollment_number %}" class="btn btn-dark-custom btn-sm flex-grow-1">
+                                <i class="bi bi-person me-1"></i> Profile
+                            </a>
+                            <a href="{% url 'direct_chat' s.enrollment_number %}" class="btn btn-green btn-sm flex-grow-1 fw-bold d-inline-flex align-items-center justify-content-center shadow-sm" title="Message">
+                                <i class="bi bi-chat-dots-fill me-1"></i> Message
+                            </a>
+
+                            {% if item.is_friend %}
+                                <span class="badge bg-dark border border-secondary text-secondary py-2 px-2" title="Campus Friend">
+                                    <i class="bi bi-check2 text-success"></i>
+                                </span>
+                            {% elif item.request_sent %}
+                                <button class="btn btn-secondary btn-sm" disabled title="Friend Request Pending">
+                                    <i class="bi bi-hourglass-split"></i>
+                                </button>
+                            {% elif item.incoming_request_id %}
+                                <form method="POST" action="{% url 'accept_friend_request' item.incoming_request_id %}" class="m-0">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-green btn-sm" title="Accept Request">
+                                        <i class="bi bi-person-check-fill"></i>
+                                    </button>
+                                </form>
+                            {% else %}
+                                <form method="POST" action="{% url 'send_friend_request' s.enrollment_number %}" class="m-0">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-secondary btn-sm" title="Add Friend">
+                                        <i class="bi bi-person-plus-fill"></i>
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+            {% endfor %}
+        {% endfor %}
+            </div>
+        </details>
+    {% endfor %}
+{% else %}
+    <div class="col-12">
+        <div class="glass p-5 text-center">
+            <i class="bi bi-people text-secondary" style="font-size: 3rem;"></i>
+            <h3 class="fw-bold fs-5 mt-3 mb-1">No Students Found</h3>
+            <p class="text-secondary small mb-3">
+                {% if query %}
+                    No visible students matched your search for "{{ query }}".
+                {% else %}
+                    Start typing an enrollment number or student name above.
+                {% endif %}
+            </p>
+            {% if query %}
+                <a href="{% url 'user_search' %}" class="btn btn-green btn-sm">Clear Search Filter</a>
+            {% endif %}
+        </div>
+    </div>
+{% endif %}

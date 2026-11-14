@@ -1,0 +1,277 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Edit Announcement #{{ announcement.id }} — Campus Nexus Operations{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Breadcrumb & Navigation -->
+    <div class="d-flex align-items-center gap-2 mb-3 small text-secondary">
+        <a href="{% url 'dashboard' %}" class="text-secondary text-decoration-none">Dashboard</a>
+        <span>&rsaquo;</span>
+        <a href="{% url 'operational_dashboard' %}" class="text-secondary text-decoration-none">Operations</a>
+        <span>&rsaquo;</span>
+        <a href="{% url 'admin_announcements' %}" class="text-secondary text-decoration-none">Announcements</a>
+        <span>&rsaquo;</span>
+        <span class="text-white fw-semibold">Edit Announcement #{{ announcement.id }}</span>
+    </div>
+
+    <!-- Header Section -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-1 rounded-pill small fw-semibold mb-2">
+                <i class="bi bi-pencil-square me-1"></i> Edit Broadcast Notice
+            </span>
+            <h2 class="fw-bold mb-1">Edit Platform <span class="green-accent">Announcement</span></h2>
+            <p class="text-secondary small mb-0">
+                Adjust announcement content, targeting strategy, priority, and link destinations for announcement #{{ announcement.id }}.
+            </p>
+        </div>
+
+        <div>
+            <a href="{% url 'admin_announcements' %}" class="btn btn-dark-custom">
+                <i class="bi bi-arrow-left me-1"></i> Cancel & Return
+            </a>
+        </div>
+    </div>
+
+    <!-- Edit Form Card -->
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <form method="POST" action="{% url 'admin_edit_announcement' announcement.id %}" class="glass p-4 p-md-5">
+                {% csrf_token %}
+
+                <!-- Section 1: Message Core -->
+                <div class="mb-4">
+                    <h5 class="fw-bold text-white border-bottom border-secondary pb-2 mb-3">
+                        <i class="bi bi-chat-left-dots-fill green-accent me-2"></i>1. Announcement Content &amp; Priority
+                    </h5>
+
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label for="id_title" class="form-label text-light small fw-semibold">
+                                Announcement Title <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" name="title" id="id_title" class="form-control bg-dark border-secondary text-light"
+                                   value="{{ announcement.title }}" required maxlength="200">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="id_priority" class="form-label text-light small fw-semibold">
+                                Priority Level <span class="text-danger">*</span>
+                            </label>
+                            <select name="priority" id="id_priority" class="form-select bg-dark border-secondary text-light">
+                                <option value="INFO" {% if announcement.priority == 'INFO' %}selected{% endif %}>ℹ️ Informational Notice</option>
+                                <option value="WARNING" {% if announcement.priority == 'WARNING' %}selected{% endif %}>⚠️ Important Warning</option>
+                                <option value="CRITICAL" {% if announcement.priority == 'CRITICAL' %}selected{% endif %}>🚨 Urgent / Critical Alert</option>
+                                <option value="SUCCESS" {% if announcement.priority == 'SUCCESS' %}selected{% endif %}>🎉 Platform Update / Good News</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="id_content" class="form-label text-light small fw-semibold">
+                                Message Body <span class="text-danger">*</span>
+                            </label>
+                            <textarea name="content" id="id_content" class="form-control bg-dark border-secondary text-light"
+                                      rows="6" required>{{ announcement.content }}</textarea>
+                            <div class="form-text text-secondary small">
+                                Supports multi-paragraph text and formatting.
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_action_label" class="form-label text-light small fw-semibold">
+                                Optional Action Button Text
+                            </label>
+                            <input type="text" name="action_label" id="id_action_label" class="form-control bg-dark border-secondary text-light"
+                                   value="{{ announcement.action_label|default:'' }}" placeholder="e.g. View Guidelines, Setup Passkey" maxlength="60">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_action_url" class="form-label text-light small fw-semibold">
+                                Optional Action Destination Link
+                            </label>
+                            <input type="text" name="action_url" id="id_action_url" class="form-control bg-dark border-secondary text-light"
+                                   value="{{ announcement.action_url|default:'' }}" placeholder="e.g. /settings/ or https://...">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_expires_at" class="form-label text-light small fw-semibold">
+                                Auto-Expiration Timestamp (Optional)
+                            </label>
+                            <input type="datetime-local" name="expires_at" id="id_expires_at" class="form-control bg-dark border-secondary text-light"
+                                   value="{{ expires_at_str }}">
+                            <div class="form-text text-secondary small">
+                                Announcement automatically deactivates after this time. Leave empty for permanent.
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 d-flex align-items-center">
+                            <div class="form-check form-switch pt-3">
+                                <input class="form-check-input" type="checkbox" role="switch" id="id_is_active" name="is_active" {% if announcement.is_active %}checked{% endif %}>
+                                <label class="form-check-label text-light small fw-semibold ms-2" for="id_is_active">
+                                    Active Broadcast (visible to targeted users)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Audience Targeting Engine -->
+                <div class="mb-4">
+                    <h5 class="fw-bold text-white border-bottom border-secondary pb-2 mb-3">
+                        <i class="bi bi-bullseye green-accent me-2"></i>2. Audience Targeting Strategy
+                    </h5>
+
+                    <label class="form-label text-light small fw-semibold mb-2">Choose Targeting Mode:</label>
+                    <div class="row g-3 mb-4">
+                        <div class="col-sm-6 col-lg-3">
+                            <label class="targeting-card glass p-3 rounded h-100 d-block cursor-pointer border-secondary position-relative">
+                                <input type="radio" name="target_type" value="ALL" class="form-check-input position-absolute top-0 end-0 m-3" {% if announcement.target_type == 'ALL' %}checked{% endif %} onchange="handleTargetTypeChange(this.value)">
+                                <div class="feature-icon mb-2" style="width: 36px; height: 36px; font-size: 1.1rem; background: rgba(14, 165, 233, 0.2); color: #0ea5e9;">
+                                    <i class="bi bi-globe"></i>
+                                </div>
+                                <div class="fw-bold text-white mb-1">Universal</div>
+                                <div class="text-secondary small">All platform users across the institute.</div>
+                            </label>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-3">
+                            <label class="targeting-card glass p-3 rounded h-100 d-block cursor-pointer border-secondary position-relative">
+                                <input type="radio" name="target_type" value="SET" class="form-check-input position-absolute top-0 end-0 m-3" {% if announcement.target_type == 'SET' %}checked{% endif %} onchange="handleTargetTypeChange(this.value)">
+                                <div class="feature-icon mb-2" style="width: 36px; height: 36px; font-size: 1.1rem; background: rgba(245, 158, 11, 0.2); color: #f59e0b;">
+                                    <i class="bi bi-people-fill"></i>
+                                </div>
+                                <div class="fw-bold text-white mb-1">Preset Group</div>
+                                <div class="text-secondary small">Target broad cohorts (Students, Staff, Verified).</div>
+                            </label>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-3">
+                            <label class="targeting-card glass p-3 rounded h-100 d-block cursor-pointer border-secondary position-relative">
+                                <input type="radio" name="target_type" value="FILTERED" class="form-check-input position-absolute top-0 end-0 m-3" {% if announcement.target_type == 'FILTERED' %}checked{% endif %} onchange="handleTargetTypeChange(this.value)">
+                                <div class="feature-icon mb-2" style="width: 36px; height: 36px; font-size: 1.1rem; background: rgba(147, 51, 234, 0.2); color: #c084fc;">
+                                    <i class="bi bi-funnel-fill"></i>
+                                </div>
+                                <div class="fw-bold text-white mb-1">Filtered Criteria</div>
+                                <div class="text-secondary small">Filter by branch, joining year, degree, gender.</div>
+                            </label>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-3">
+                            <label class="targeting-card glass p-3 rounded h-100 d-block cursor-pointer border-secondary position-relative">
+                                <input type="radio" name="target_type" value="INDIVIDUAL" class="form-check-input position-absolute top-0 end-0 m-3" {% if announcement.target_type == 'INDIVIDUAL' %}checked{% endif %} onchange="handleTargetTypeChange(this.value)">
+                                <div class="feature-icon mb-2" style="width: 36px; height: 36px; font-size: 1.1rem; background: rgba(8, 183, 79, 0.2); color: var(--green,#08B74F);">
+                                    <i class="bi bi-person-check-fill"></i>
+                                </div>
+                                <div class="fw-bold text-white mb-1">Individual Users</div>
+                                <div class="text-secondary small">Explicitly designated enrollment numbers.</div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Sub-Panel: Preset Group (SET) -->
+                    <div id="target-panel-set" class="glass p-3 mb-3 border-warning {% if announcement.target_type != 'SET' %}d-none{% endif %}" style="background: rgba(245, 158, 11, 0.05);">
+                        <label for="id_target_set" class="form-label text-warning small fw-semibold">
+                            Select Preset User Cohort:
+                        </label>
+                        <select name="target_set" id="id_target_set" class="form-select bg-dark border-secondary text-light">
+                            <option value="STUDENTS" {% if announcement.target_set == 'STUDENTS' %}selected{% endif %}>🎓 All Students (Non-Staff)</option>
+                            <option value="STAFF" {% if announcement.target_set == 'STAFF' %}selected{% endif %}>🛡️ Institute Staff &amp; Superusers</option>
+                            <option value="VERIFIED" {% if announcement.target_set == 'VERIFIED' %}selected{% endif %}>✅ Verified Students Only</option>
+                            <option value="UNVERIFIED" {% if announcement.target_set == 'UNVERIFIED' %}selected{% endif %}>⏳ Pending / Unverified Students Only</option>
+                        </select>
+                    </div>
+
+                    <!-- Sub-Panel: Filtered Criteria (FILTERED) -->
+                    <div id="target-panel-filtered" class="glass p-4 mb-3 border-purple {% if announcement.target_type != 'FILTERED' %}d-none{% endif %}" style="background: rgba(147, 51, 234, 0.05); border: 1.5px solid rgba(147, 51, 234, 0.4);">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="id_target_branches" class="form-label text-light small fw-semibold">
+                                    Target Academic Branches (comma-separated, leave blank for any)
+                                </label>
+                                <input type="text" name="target_branches" id="id_target_branches" class="form-control bg-dark border-secondary text-light"
+                                       value="{{ announcement.target_branches }}" placeholder="e.g. CSE, ECE, MECH">
+                                <div class="form-text text-secondary small">
+                                    Available: {{ available_branches|join:", " }}
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="id_target_years" class="form-label text-light small fw-semibold">
+                                    Target Joining / Batch Years (comma-separated, leave blank for any)
+                                </label>
+                                <input type="text" name="target_years" id="id_target_years" class="form-control bg-dark border-secondary text-light"
+                                       value="{{ announcement.target_years }}" placeholder="e.g. 2024, 2023">
+                                <div class="form-text text-secondary small">
+                                    Available: {{ available_years|join:", " }}
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="id_target_degrees" class="form-label text-light small fw-semibold">
+                                    Target Degree Programs (comma-separated, leave blank for any)
+                                </label>
+                                <input type="text" name="target_degrees" id="id_target_degrees" class="form-control bg-dark border-secondary text-light"
+                                       value="{{ announcement.target_degrees }}" placeholder="e.g. B.Tech, M.Tech">
+                                <div class="form-text text-secondary small">
+                                    Available: {{ available_degrees|join:", " }}
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="id_target_gender" class="form-label text-light small fw-semibold">
+                                    Target Gender (Optional)
+                                </label>
+                                <select name="target_gender" id="id_target_gender" class="form-select bg-dark border-secondary text-light">
+                                    <option value="" {% if not announcement.target_gender %}selected{% endif %}>Any Gender (All Students)</option>
+                                    <option value="M" {% if announcement.target_gender == 'M' %}selected{% endif %}>Male (M)</option>
+                                    <option value="F" {% if announcement.target_gender == 'F' %}selected{% endif %}>Female (F)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sub-Panel: Individual Users (INDIVIDUAL) -->
+                    <div id="target-panel-individual" class="glass p-4 mb-3 border-success {% if announcement.target_type != 'INDIVIDUAL' %}d-none{% endif %}" style="background: rgba(8, 183, 79, 0.05); border: 1.5px solid rgba(8, 183, 79, 0.4);">
+                        <label for="id_target_users" class="form-label text-success small fw-semibold">
+                            Enter Target Enrollment Numbers / IDs (comma, space, or newline separated)
+                        </label>
+                        <textarea name="target_users" id="id_target_users" class="form-control bg-dark border-secondary text-light font-monospace"
+                                  rows="3" placeholder="e.g. 2024BCSE001, 2024BCSE002, 2023BECE015">{{ target_users_str }}</textarea>
+                        <div class="form-text text-secondary small">
+                            Only the specified user accounts will receive this announcement.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit / Actions -->
+                <div class="d-flex justify-content-between align-items-center pt-3 border-top border-secondary">
+                    <a href="{% url 'admin_announcements' %}" class="btn btn-outline-secondary">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-green px-4 py-2 fw-semibold">
+                        <i class="bi bi-check-circle me-1"></i> Save Announcement Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function handleTargetTypeChange(val) {
+    document.getElementById('target-panel-set').classList.add('d-none');
+    document.getElementById('target-panel-filtered').classList.add('d-none');
+    document.getElementById('target-panel-individual').classList.add('d-none');
+
+    if (val === 'SET') {
+        document.getElementById('target-panel-set').classList.remove('d-none');
+    } else if (val === 'FILTERED') {
+        document.getElementById('target-panel-filtered').classList.remove('d-none');
+    } else if (val === 'INDIVIDUAL') {
+        document.getElementById('target-panel-individual').classList.remove('d-none');
+    }
+}
+</script>
+{% endblock %}

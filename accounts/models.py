@@ -648,6 +648,7 @@ class AuditEvent(models.Model):
         ('FEEDBACK_SUBMITTED', 'Platform Feedback Submitted'),
         ('EXPORT_GENERATED', 'Export Generated'),
         ('ANNOUNCEMENT_CREATED', 'Admin Issued Announcement'),
+        ('ANNOUNCEMENT_UPDATED', 'Admin Updated Announcement'),
         ('ANNOUNCEMENT_DELETED', 'Admin Deleted Announcement'),
     ]
 

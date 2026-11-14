@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Campus Announcements — Campus Nexus{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Breadcrumb & Top Navigation -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div class="d-flex align-items-center gap-2 small text-secondary">
+            <a href="{% url 'dashboard' %}" class="text-secondary text-decoration-none">Dashboard</a>
+            <span>&rsaquo;</span>
+            <span class="text-white fw-semibold">Campus Announcements</span>
+        </div>
+        <a href="{% url 'dashboard' %}" class="btn btn-sm btn-dark-custom">
+            <i class="bi bi-arrow-left me-1"></i> Return to Dashboard
+        </a>
+    </div>
+
+    <!-- Header Banner -->
+    <div class="glass p-4 mb-4 position-relative overflow-hidden" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(14, 165, 233, 0.3); box-shadow: 0 0 24px rgba(14, 165, 233, 0.08);">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="feature-icon" style="width: 48px; height: 48px; font-size: 1.35rem; background: rgba(14, 165, 233, 0.2); color: #38bdf8;">
+                    <i class="bi bi-megaphone-fill"></i>
+                </div>
+                <div>
+                    <h3 class="fw-bold mb-1 text-white">Campus <span class="green-accent">Announcements</span></h3>
+                    <p class="text-secondary small mb-0">
+                        Official broadcasts, updates, and notices tailored to your academic batch and profile.
+                    </p>
+                </div>
+            </div>
+            <span class="badge bg-dark border border-secondary text-secondary rounded-pill px-3 py-1.5 small">
+                {{ total_count }} Active Broadcast{{ total_count|pluralize }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Announcements Directory -->
+    {% if announcements %}
+        <div class="row g-3">
+            {% for ann in announcements %}
+                <div class="col-12">
+                    <div class="glass p-3 p-md-4 position-relative transition-base"
+                         style="background: rgba(15, 23, 42, 0.55); border-left: 4px solid {% if ann.priority == 'CRITICAL' %}#ef4444{% elif ann.priority == 'WARNING' %}#f59e0b{% elif ann.priority == 'SUCCESS' %}var(--green,#08B74F){% else %}#0ea5e9{% endif %} !important;">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-2">
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <span class="badge {% if ann.priority == 'CRITICAL' %}bg-danger{% elif ann.priority == 'WARNING' %}bg-warning text-dark{% elif ann.priority == 'SUCCESS' %}bg-success{% else %}bg-info text-dark{% endif %} px-2.5 py-1 rounded-pill small">
+                                    {{ ann.get_priority_display }}
+                                </span>
+                                <h5 class="fw-bold text-white mb-0">{{ ann.title }}</h5>
+                                {% if ann.id not in seen_announcement_ids %}
+                                    <span class="badge bg-danger rounded-pill px-2 py-0.5 small">NEW</span>
+                                {% else %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5 small">
+                                        <i class="bi bi-check2-circle me-1"></i> Acknowledged
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <span class="text-secondary small">
+                                <i class="bi bi-calendar3 me-1"></i>{{ ann.created_at|date:"M d, Y · H:i" }}
+                            </span>
+                        </div>
+
+                        <p class="text-secondary small mb-3" style="line-height: 1.6; white-space: pre-line;">
+                            {{ ann.content|truncatewords:45 }}
+                        </p>
+
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 pt-2 border-top border-secondary border-opacity-25">
+                            <span class="text-secondary small">
+                                Issued by <span class="text-light">{{ ann.created_by.enrollment_number|default:"Campus Nexus Administration" }}</span>
+                                {% if ann.expires_at %}
+                                    &middot; <span class="text-warning"><i class="bi bi-clock-history me-1"></i>Expires {{ ann.expires_at|date:"M d, Y" }}</span>
+                                {% endif %}
+                            </span>
+                            <a href="{% url 'announcement_detail' ann.id %}" class="btn btn-sm btn-outline-info fw-semibold">
+                                <span>Read Full Notice</span> <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="glass p-5 text-center">
+            <i class="bi bi-bell-slash text-secondary display-4 d-block mb-3"></i>
+            <h5 class="fw-bold text-white mb-1">No Active Announcements</h5>
+            <p class="text-secondary small mb-4">You are all caught up! There are no broadcast notices active for your account right now.</p>
+            <a href="{% url 'dashboard' %}" class="btn btn-primary-custom">
+                <i class="bi bi-house-door me-1"></i> Return to Dashboard
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

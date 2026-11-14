@@ -1087,6 +1087,114 @@ def admin_create_announcement(request: HttpRequest) -> HttpResponse:
 
 @login_required
 @user_passes_test(_is_staff_or_superuser)
+def admin_edit_announcement(request: HttpRequest, announcement_id: int) -> HttpResponse:
+    """Edit an existing platform announcement and log audit trail."""
+    announcement = get_object_or_404(Announcement, id=announcement_id)
+
+    if request.method == 'POST':
+        title = request.POST.get('title', '').strip()
+        content = request.POST.get('content', '').strip()
+        priority = request.POST.get('priority', 'INFO').strip()
+        target_type = request.POST.get('target_type', 'ALL').strip()
+        target_set = request.POST.get('target_set', '').strip() or None
+        target_branches = request.POST.get('target_branches', '').strip()
+        target_years = request.POST.get('target_years', '').strip()
+        target_degrees = request.POST.get('target_degrees', '').strip()
+        target_gender = request.POST.get('target_gender', '').strip()
+        target_users_raw = request.POST.get('target_users', '').strip()
+        action_url = request.POST.get('action_url', '').strip()
+        action_label = request.POST.get('action_label', '').strip()
+        expires_at_raw = request.POST.get('expires_at', '').strip()
+        is_active = request.POST.get('is_active') in ['on', 'true', 'True', '1']
+
+        if not title:
+            messages.error(request, 'Announcement title cannot be empty.')
+            return redirect('admin_edit_announcement', announcement_id=announcement.id)
+
+        if not content:
+            messages.error(request, 'Announcement content cannot be empty.')
+            return redirect('admin_edit_announcement', announcement_id=announcement.id)
+
+        if priority not in dict(Announcement.PRIORITY_CHOICES):
+            priority = 'INFO'
+
+        if target_type not in dict(Announcement.TARGET_TYPE_CHOICES):
+            target_type = 'ALL'
+
+        expires_at = None
+        if expires_at_raw:
+            try:
+                dt = datetime.datetime.fromisoformat(expires_at_raw)
+                expires_at = timezone.make_aware(dt) if timezone.is_naive(dt) else dt
+            except Exception:
+                expires_at = None
+
+        announcement.title = title
+        announcement.content = content
+        announcement.priority = priority
+        announcement.target_type = target_type
+        announcement.target_set = target_set if target_type == 'SET' else None
+        announcement.target_branches = target_branches if target_type == 'FILTERED' else ''
+        announcement.target_years = target_years if target_type == 'FILTERED' else ''
+        announcement.target_degrees = target_degrees if target_type == 'FILTERED' else ''
+        announcement.target_gender = target_gender if target_type == 'FILTERED' else ''
+        announcement.action_url = action_url
+        announcement.action_label = action_label
+        announcement.expires_at = expires_at
+        announcement.is_active = is_active
+        announcement.save()
+
+        if target_type == 'INDIVIDUAL':
+            import re
+            tokens = [t.strip().upper() for t in re.split(r'[\s,]+', target_users_raw) if t.strip()]
+            matched_users = User.objects.filter(
+                Q(enrollment_number__in=tokens) | Q(id__in=[t for t in tokens if t.isdigit()])
+            )
+            announcement.target_users.set(matched_users)
+        else:
+            announcement.target_users.clear()
+
+        log_audit_event(
+            event_type='ANNOUNCEMENT_UPDATED',
+            actor_enrollment=request.user.enrollment_number,
+            description=f"Admin updated announcement #{announcement.id}: '{announcement.title}'",
+            target_id=str(announcement.id),
+        )
+
+        messages.success(request, f"Announcement '{announcement.title}' updated successfully.")
+        return redirect('admin_announcements')
+
+    # GET: Metadata choices
+    existing_branches = list(User.objects.exclude(branch='').values_list('branch', flat=True).distinct()[:15])
+    existing_years = list(User.objects.exclude(joining_year__isnull=True).values_list('joining_year', flat=True).distinct().order_by('-joining_year')[:10])
+    existing_degrees = list(User.objects.exclude(degree='').values_list('degree', flat=True).distinct()[:10])
+
+    default_branches = ['CSE', 'ECE', 'MECH', 'CIVIL', 'ELEC', 'IT', 'CHEM']
+    default_years = [2021, 2022, 2023, 2024, 2025, 2026]
+    default_degrees = ['B.Tech', 'M.Tech', 'Ph.D', 'MBA', 'M.Sc']
+
+    branches = sorted(list(set(existing_branches + default_branches)))
+    years = sorted(list(set([str(y) for y in existing_years] + [str(y) for y in default_years])), reverse=True)
+    degrees = sorted(list(set(existing_degrees + default_degrees)))
+
+    target_users_str = ', '.join(announcement.target_users.values_list('enrollment_number', flat=True))
+    expires_at_str = announcement.expires_at.strftime('%Y-%m-%dT%H:%M') if announcement.expires_at else ''
+
+    return render(request, 'nexus/operations_announcement_edit.html', {
+        'announcement': announcement,
+        'target_users_str': target_users_str,
+        'expires_at_str': expires_at_str,
+        'priority_choices': Announcement.PRIORITY_CHOICES,
+        'target_type_choices': Announcement.TARGET_TYPE_CHOICES,
+        'target_set_choices': Announcement.TARGET_SET_CHOICES,
+        'available_branches': branches,
+        'available_years': years,
+        'available_degrees': degrees,
+    })
+
+
+@login_required
+@user_passes_test(_is_staff_or_superuser)
 @require_POST
 def admin_toggle_announcement(request: HttpRequest, announcement_id: int) -> HttpResponse:
     """Toggle announcement active/inactive status."""

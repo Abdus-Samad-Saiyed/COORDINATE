@@ -69,11 +69,16 @@
     body, html {
         -webkit-overflow-scrolling: touch;
     }
-    .density-chart-container,
-    .chat-messages,
-    .table-responsive {
+    .chat-messages {
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
+    }
+    .density-chart-container,
+    .table-responsive {
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        overscroll-behavior-y: auto;
+        touch-action: pan-x pan-y;
     }
 
     /* Mobile Buttons & Touch Target Ergonomics */
@@ -552,6 +557,13 @@ p, span, h1, h2, h3, h4, h5, h6, a, label, div {
 
 /* Mobile navigation and rendering refinements */
 @media (max-width: 991.98px) {
+    /* Safe-area insets for iPhone notch, Dynamic Island, and curved displays */
+    .navbar-custom {
+        padding-top: max(8px, calc(env(safe-area-inset-top, 0px) + 4px)) !important;
+        padding-left: max(10px, env(safe-area-inset-left, 0px)) !important;
+        padding-right: max(10px, env(safe-area-inset-right, 0px)) !important;
+    }
+
     /* Keep the top bar focused on alerts and the navigation drawer. */
     .navbar-mobile-actions .pwa-install-pinned-btn,
     .navbar-mobile-actions .theme-toggle-btn,
@@ -563,6 +575,12 @@ p, span, h1, h2, h3, h4, h5, h6, a, label, div {
         backdrop-filter: none !important;
     }
     .glass-glow, .glass:hover { box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.4)) !important; }
+
+    /* Visual scroll affordance for horizontal date strip */
+    .date-strip {
+        -webkit-mask-image: linear-gradient(to right, black calc(100% - 40px), transparent 100%);
+        mask-image: linear-gradient(to right, black calc(100% - 40px), transparent 100%);
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -573,4 +591,27 @@ p, span, h1, h2, h3, h4, h5, h6, a, label, div {
         transition-duration: 0.01ms !important;
     }
 }
+
+/* Announcement Compact Rows */
+.announcement-compact-row {
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.announcement-compact-row:hover {
+    background: rgba(30, 41, 59, 0.75) !important;
+    border-color: rgba(14, 165, 233, 0.5) !important;
+    transform: translateX(3px);
+}
+[data-bs-theme="light"] .announcement-compact-row {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+}
+[data-bs-theme="light"] .announcement-compact-row:hover {
+    background: #f8fafc !important;
+    border-color: #94a3b8 !important;
+}
+[data-bs-theme="light"] .announcement-compact-row .text-white {
+    color: #0f172a !important;
+}
+
 

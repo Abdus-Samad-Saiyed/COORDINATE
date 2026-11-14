@@ -1,7 +1,7 @@
 // Campus Nexus - Progressive Web App Service Worker
 // Provides Network-First navigation with offline fallback, asset caching, and Web Push notifications
 
-const CACHE_NAME = 'campus-nexus-v2';
+const CACHE_NAME = 'campus-nexus-v3';
 const PRECACHE_URLS = [
     '/offline/',
     '/static/img/pwa/icon-192x192.png',

@@ -1593,6 +1593,7 @@ def dashboard(request):
         active_participation = demo_participations[0] if demo_participations else None
         other_participations = demo_participations[1:] if len(demo_participations) > 1 else []
         just_signed_in = request.session.pop('just_signed_in', False)
+        all_feed_announcements = active_announcements[1:] if len(active_announcements) > 1 else []
         return render(request, 'accounts/dashboard.html', {
             'active_participation': active_participation,
             'other_participations': other_participations,
@@ -1605,6 +1606,9 @@ def dashboard(request):
             'recent_conversations': [],
             'total_unread_messages': 0,
             'active_announcements': active_announcements,
+            'feed_announcements': all_feed_announcements[:3],
+            'has_more_announcements': len(all_feed_announcements) > 3,
+            'total_active_announcements_count': len(active_announcements),
             'proclaiming_announcement': active_announcements[0] if active_announcements else None,
             'seen_announcement_ids': set(),
             'just_signed_in': just_signed_in,
@@ -1647,6 +1651,10 @@ def dashboard(request):
     )
     unseen_announcements = [ann for ann in active_announcements if ann.id not in seen_announcement_ids]
     proclaiming_announcement = unseen_announcements[0] if unseen_announcements else None
+    all_feed_announcements = [ann for ann in active_announcements if not proclaiming_announcement or ann.id != proclaiming_announcement.id]
+    DASHBOARD_ANNOUNCEMENT_LIMIT = 3
+    feed_announcements = all_feed_announcements[:DASHBOARD_ANNOUNCEMENT_LIMIT]
+    has_more_announcements = len(all_feed_announcements) > DASHBOARD_ANNOUNCEMENT_LIMIT
 
     just_signed_in = request.session.pop('just_signed_in', False)
 
@@ -1662,6 +1670,9 @@ def dashboard(request):
         'recent_conversations': recent_conversations,
         'total_unread_messages': total_unread_messages,
         'active_announcements': active_announcements,
+        'feed_announcements': feed_announcements,
+        'has_more_announcements': has_more_announcements,
+        'total_active_announcements_count': len(active_announcements),
         'proclaiming_announcement': proclaiming_announcement,
         'seen_announcement_ids': seen_announcement_ids,
         'just_signed_in': just_signed_in,
@@ -2254,14 +2265,17 @@ def user_search(request):
             'total_students': sum(len(b['students']) for b in branch_list),
         })
 
-    return render(request, 'accounts/user_search.html', {
+    context = {
         'query': query,
         'student_list': flattened_ordered_list,
         'year_groups': year_groups,
         'total_count': len(flattened_ordered_list),
         'my_year': my_year,
         'my_branch': my_branch,
-    })
+    }
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return render(request, 'accounts/partials/user_search_results.html', context)
+    return render(request, 'accounts/user_search.html', context)
 
 
 @login_required
@@ -3265,6 +3279,50 @@ def acknowledge_announcement(request, announcement_id):
 
     next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or '/dashboard/'
     return redirect(next_url)
+
+
+@login_required
+def announcement_list_view(request):
+    """View all active announcements targeted to the current student or user."""
+    from accounts.demo import is_guest_demo
+    if is_guest_demo(request):
+        active_announcements = list(Announcement.objects.filter(is_active=True).order_by('-created_at'))
+        seen_announcement_ids = set()
+    else:
+        active_announcements = Announcement.get_active_for_user(request.user)
+        seen_announcement_ids = set(
+            AnnouncementReceipt.objects.filter(user=request.user, dismissed=True).values_list('announcement_id', flat=True)
+        )
+
+    return render(request, 'accounts/announcements_list.html', {
+        'announcements': active_announcements,
+        'seen_announcement_ids': seen_announcement_ids,
+        'total_count': len(active_announcements),
+    })
+
+
+@login_required
+def announcement_detail_view(request, announcement_id):
+    """Full detail view of an individual campus announcement."""
+    from accounts.demo import is_guest_demo
+    announcement = get_object_or_404(Announcement, id=announcement_id, is_active=True)
+
+    if not is_guest_demo(request) and not announcement.is_user_targeted(request.user):
+        messages.error(request, "This announcement is not available for your account profile.")
+        return redirect('dashboard')
+
+    is_acknowledged = False
+    if not is_guest_demo(request):
+        is_acknowledged = AnnouncementReceipt.objects.filter(
+            announcement=announcement,
+            user=request.user,
+            dismissed=True
+        ).exists()
+
+    return render(request, 'accounts/announcement_detail.html', {
+        'announcement': announcement,
+        'is_acknowledged': is_acknowledged,
+    })
 
 
 @require_POST

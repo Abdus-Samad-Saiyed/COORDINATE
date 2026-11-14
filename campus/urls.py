@@ -24,11 +24,14 @@ from accounts.views import (
     service_catalogue,
     two_factor_verify,
     acknowledge_announcement,
+    announcement_list_view,
+    announcement_detail_view,
     forget_app_remembered_user,
 )
 from campus.operations import (
     admin_announcements_view,
     admin_create_announcement,
+    admin_edit_announcement,
     admin_toggle_announcement,
     admin_delete_announcement,
     admin_delete_account,
@@ -102,6 +105,11 @@ class CustomPasswordChangeView(PasswordChangeView):
 
 @login_required
 def serve_protected_media(request, path):
+    # Keep the synthetic demo account quarantined even from nonexistent paths,
+    # while allowing a real account's own photo through a stale demo session.
+    if is_guest_demo(request.user):
+        return HttpResponseForbidden("Access to student media is strictly prohibited in Guest Demo Mode.")
+
     safe_path = os.path.normpath(path).lstrip('/\\')
     if safe_path.startswith('..') or os.path.isabs(safe_path):
         raise Http404("Invalid media path.")
@@ -182,8 +190,11 @@ urlpatterns = [
     path('operations/superusers/', manage_superusers, name='manage_superusers'),
     path('operations/announcements/', admin_announcements_view, name='admin_announcements'),
     path('operations/announcements/create/', admin_create_announcement, name='admin_create_announcement'),
+    path('operations/announcements/<int:announcement_id>/edit/', admin_edit_announcement, name='admin_edit_announcement'),
     path('operations/announcements/<int:announcement_id>/toggle/', admin_toggle_announcement, name='admin_toggle_announcement'),
     path('operations/announcements/<int:announcement_id>/delete/', admin_delete_announcement, name='admin_delete_announcement'),
+    path('announcements/', announcement_list_view, name='announcement_list'),
+    path('announcements/<int:announcement_id>/', announcement_detail_view, name='announcement_detail'),
     path('announcements/<int:announcement_id>/acknowledge/', acknowledge_announcement, name='acknowledge_announcement'),
     path('operations/users/<int:user_id>/update-phone/', admin_update_phone, name='admin_update_phone'),
     path('operations/users/<int:user_id>/delete/', admin_delete_account, name='admin_delete_account'),
@@ -263,6 +274,7 @@ urlpatterns = [
     path('', include('accounts.urls')),
 
     # Coordinate app (rides) & clean alias
+    path('rides/my/', RedirectView.as_view(url='/coordinate/my-rides/', permanent=False), name='rides_my_redirect'),
     path('rides/', RedirectView.as_view(url='/coordinate/', permanent=False), name='rides_redirect'),
     path('coordinate/', include('coordinate.urls')),
 ]

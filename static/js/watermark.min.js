@@ -19,8 +19,10 @@ function isMobileDevice() {
 }
 let isWatermarkLoopRunning = false;
 let watermarkAnimFrameId = null;
-let startWatermarkAnimation = function() {};
-let stopWatermarkAnimation = function() {};
+let cachedGears = [];
+let gearImpulse = 0;
+let ambientGearAngle = 0;
+
 function calculateClockAngles(date) {
 const hours = date.getHours() % 12;
 const minutes = date.getMinutes();
@@ -45,8 +47,50 @@ if (secondHand) {
 secondHand.setAttribute('transform', `rotate(${secondAngle.toFixed(2)} 500 500)`);
 }
 }
-let gearImpulse = 0;
-let ambientGearAngle = 0;
+function animateLoop() {
+if (!isWatermarkLoopRunning) return;
+const now = new Date();
+const angles = calculateClockAngles(now);
+applyHandRotations(angles.hourAngle, angles.minuteAngle, angles.secondAngle);
+gearImpulse *= 0.95;
+ambientGearAngle += 0.035 + (gearImpulse * 0.04);
+if (!cachedGears || cachedGears.length === 0) {
+cachedGears = Array.from(document.querySelectorAll('.gear-edge'));
+}
+for (let idx = 0; idx < cachedGears.length; idx++) {
+const gear = cachedGears[idx];
+const cx = gear.getAttribute('data-cx');
+const cy = gear.getAttribute('data-cy');
+const speed = parseFloat(gear.getAttribute('data-speed') || ((idx % 2 === 0) ? '1' : '-1'));
+const totalAngle = ambientGearAngle * speed;
+if (cx && cy) {
+gear.setAttribute('transform', `rotate(${totalAngle.toFixed(2)} ${cx} ${cy})`);
+} else {
+gear.style.transform = `rotate(${totalAngle.toFixed(2)}deg)`;
+}
+}
+const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (!reducedMotion && isWatermarkLoopRunning) {
+watermarkAnimFrameId = requestAnimationFrame(animateLoop);
+}
+}
+function startWatermarkAnimation(force) {
+const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (isWatermarkLoopRunning || reducedMotion) return;
+const storedMode = localStorage.getItem('nexus_watermark_mode');
+const defaultMode = 'off';
+const currentMode = storedMode || defaultMode;
+if (!force && currentMode === 'off') return;
+isWatermarkLoopRunning = true;
+watermarkAnimFrameId = requestAnimationFrame(animateLoop);
+}
+function stopWatermarkAnimation() {
+isWatermarkLoopRunning = false;
+if (watermarkAnimFrameId) {
+cancelAnimationFrame(watermarkAnimFrameId);
+watermarkAnimFrameId = null;
+}
+}
 function initEdgeGearInteractivity() {
 document.addEventListener('click', function (e) {
 gearImpulse += 18;
@@ -56,7 +100,7 @@ function applyWatermarkSettings() {
 const container = document.getElementById('clockwork-watermark');
 if (!container) return;
 const storedMode = localStorage.getItem('nexus_watermark_mode');
-const defaultMode = isMobileDevice() ? 'off' : 'both';
+const defaultMode = 'off';
 const mode = storedMode || defaultMode; // On mobile, clock defaults to off for maximum performance
 const opacity = localStorage.getItem('nexus_watermark_opacity') || '0.22';
 const complexity = localStorage.getItem('nexus_gear_complexity') || 'high'; // low, med, high
@@ -171,7 +215,7 @@ localStorage.setItem('nexus_gear_spread', spread);
 applyWatermarkSettings();
 };
 window.toggleClockworkWatermark = function () {
-const current = localStorage.getItem('nexus_watermark_mode') || 'both';
+const current = localStorage.getItem('nexus_watermark_mode') || 'off';
 const next = (current === 'off') ? 'both' : 'off';
 localStorage.setItem('nexus_watermark_mode', next);
 applyWatermarkSettings();
@@ -654,9 +698,11 @@ navbar.style.transform = 'translateY(-92%)';
 navbar.style.opacity = '0.2';
 }
 if (watermark) {
+watermark.style.display = 'block';
 watermark.style.opacity = '0.88';
 watermark.style.filter = 'drop-shadow(0 0 24px var(--green-glow, rgba(8, 183, 79, 0.45)))';
 }
+if (typeof startWatermarkAnimation === 'function') startWatermarkAnimation(true);
 const total = targets.length;
 const startledIndex = total > 2 ? total - 2 : total - 1;
 targets.forEach((el, index) => {
@@ -768,9 +814,11 @@ navbar.style.transform = 'translateY(-92%)';
 navbar.style.opacity = '0.2';
 }
 if (watermark) {
+watermark.style.display = 'block';
 watermark.style.opacity = '0.88';
 watermark.style.filter = 'drop-shadow(0 0 24px var(--green-glow, rgba(8, 183, 79, 0.45)))';
 }
+if (typeof startWatermarkAnimation === 'function') startWatermarkAnimation(true);
 void document.body.offsetHeight;
 document.documentElement.classList.remove('zen-incoming-page');
 setTimeout(() => {
@@ -848,9 +896,11 @@ navbar.style.transform = 'translateY(-92%)';
 navbar.style.opacity = '0.2';
 }
 if (watermark) {
+watermark.style.display = 'block';
 watermark.style.opacity = '0.88';
 watermark.style.filter = 'drop-shadow(0 0 24px var(--green-glow, rgba(8, 183, 79, 0.45)))';
 }
+if (typeof startWatermarkAnimation === 'function') startWatermarkAnimation(true);
 const total = targets.length;
 const hesitantIndex = total > 2 ? total - 2 : total - 1;
 targets.forEach((el, index) => {
@@ -909,59 +959,13 @@ document.documentElement.classList.remove('zen-incoming-page');
 function startEngine() {
 applyNexusTheme();
 applyNexusAccent();
-applyWatermarkSettings();
 initEdgeGearInteractivity();
 initTechnicalCursor();
 handleIncomingZenTransition();
 initZenPageTransitions();
+applyWatermarkSettings();
 const reducedMotionQuery = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
 const prefersReducedMotion = reducedMotionQuery ? reducedMotionQuery.matches : false;
-let cachedGears = Array.from(document.querySelectorAll('.gear-edge'));
-function animateLoop() {
-if (!isWatermarkLoopRunning) return;
-const now = new Date();
-const angles = calculateClockAngles(now);
-applyHandRotations(angles.hourAngle, angles.minuteAngle, angles.secondAngle);
-gearImpulse *= 0.95;
-ambientGearAngle += 0.035 + (gearImpulse * 0.04);
-if (cachedGears.length === 0) {
-cachedGears = Array.from(document.querySelectorAll('.gear-edge'));
-}
-for (let idx = 0; idx < cachedGears.length; idx++) {
-const gear = cachedGears[idx];
-const cx = gear.getAttribute('data-cx');
-const cy = gear.getAttribute('data-cy');
-const speed = parseFloat(gear.getAttribute('data-speed') || ((idx % 2 === 0) ? '1' : '-1'));
-const totalAngle = ambientGearAngle * speed;
-if (cx && cy) {
-gear.setAttribute('transform', `rotate(${totalAngle.toFixed(2)} ${cx} ${cy})`);
-} else {
-gear.style.transform = `rotate(${totalAngle.toFixed(2)}deg)`;
-}
-}
-if (!prefersReducedMotion && isWatermarkLoopRunning) {
-watermarkAnimFrameId = requestAnimationFrame(animateLoop);
-}
-}
-
-startWatermarkAnimation = function() {
-if (isWatermarkLoopRunning || prefersReducedMotion) return;
-const storedMode = localStorage.getItem('nexus_watermark_mode');
-const defaultMode = isMobileDevice() ? 'off' : 'both';
-const currentMode = storedMode || defaultMode;
-if (currentMode === 'off') return;
-isWatermarkLoopRunning = true;
-watermarkAnimFrameId = requestAnimationFrame(animateLoop);
-};
-
-stopWatermarkAnimation = function() {
-isWatermarkLoopRunning = false;
-if (watermarkAnimFrameId) {
-cancelAnimationFrame(watermarkAnimFrameId);
-watermarkAnimFrameId = null;
-}
-};
-
 if (prefersReducedMotion) {
 const now = new Date();
 const angles = calculateClockAngles(now);
@@ -971,12 +975,6 @@ const d = new Date();
 const a = calculateClockAngles(d);
 applyHandRotations(a.hourAngle, a.minuteAngle, a.secondAngle);
 }, 1000);
-} else {
-const storedM = localStorage.getItem('nexus_watermark_mode');
-const defM = isMobileDevice() ? 'off' : 'both';
-if ((storedM || defM) !== 'off') {
-startWatermarkAnimation();
-}
 }
 }
 if (typeof window !== 'undefined') {

@@ -71,7 +71,7 @@
       "name": "My Rides",
       "short_name": "My Rides",
       "description": "Manage scheduled departure times and passenger rosters",
-      "url": "/rides/my/?source=pwa_shortcut",
+      "url": "/coordinate/my-rides/?source=pwa_shortcut",
       "icons": [
         {
           "src": "/static/img/pwa/icon-192x192.png",

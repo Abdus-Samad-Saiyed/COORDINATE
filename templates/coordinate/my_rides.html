@@ -67,7 +67,31 @@
             <i class="bi bi-clock-history text-secondary me-2"></i>Past Ride History
         </h5>
         {% if past_rides %}
-            <div class="glass p-3 p-md-4">
+            <!-- Mobile View: Responsive Cards -->
+            <div class="d-md-none d-flex flex-column gap-3">
+                {% for ride in past_rides %}
+                    <div class="glass p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-secondary small">{{ ride.departure_time|date:"M j, Y — H:i" }}</span>
+                            {% if ride.status == 'COMPLETED' %}
+                                <span class="badge bg-info-subtle text-info">Completed</span>
+                            {% else %}
+                                <span class="badge bg-secondary-subtle text-secondary">{{ ride.get_status_display }}</span>
+                            {% endif %}
+                        </div>
+                        <h6 class="fw-bold mb-1 text-white">{{ ride.route_display }}</h6>
+                        <p class="text-secondary small mb-3">
+                            Host: <strong>{% if ride.creator.get_full_name %}{{ ride.creator.get_full_name }} ({{ ride.creator.enrollment_number }}){% else %}{{ ride.creator.enrollment_number }}{% endif %}</strong>
+                        </p>
+                        <a href="{% url 'ride_detail' ride.id %}" class="btn btn-dark-custom btn-sm w-100">
+                            View Details
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Desktop View: Table Format -->
+            <div class="glass p-3 p-md-4 d-none d-md-block">
                 <div class="table-responsive">
                     <table class="table table-dark table-hover align-middle mb-0" style="background: transparent;">
                         <thead>

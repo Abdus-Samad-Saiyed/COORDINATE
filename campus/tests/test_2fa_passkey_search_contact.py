@@ -284,6 +284,16 @@ class AuthenticationAndSecurityPageTests(TestCase):
         self.assertContains(response, "Never share your password or 2FA codes")
 
     def test_apply_page_lists_designated_application_approvers(self):
+        user = User.objects.create_user(
+            username="2024BCSE102",
+            enrollment_number="2024BCSE102",
+            first_name="Unverified",
+            phone_number="9876543211",
+            password="StrongPassword123!",
+            is_staff=False,
+            verified=False,
+        )
+        self.client.force_login(user)
         response = self.client.get(reverse("apply_account"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Designated Application Approvers")
