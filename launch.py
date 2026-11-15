@@ -391,6 +391,7 @@ def main():
         print("  [P] Switch / Manage Deployment Profiles (Production, Turbo, Dev, Staging, Custom)")
         print("\n  --- INFRASTRUCTURE & VERIFICATION ---")
         print("  [6] Bind & Verify Infrastructure (PostgreSQL, Redis & Cloudflared Daemons)")
+        print("  [W] Cloudflared Watchdog & Tunnel Health (Status, Auto-Recovery & Task)")
         print("  [7] Deep Database Parity & Integrity Check (SQLite vs PostgreSQL)")
         print("  [8] Run Full Test Suite (100% Green Validation)")
         print("  [9] Run Comprehensive Port Probing Matrix (50 E2E Probes)")
@@ -458,6 +459,27 @@ def main():
             p = get_active_profile()["data"]
             ensure_infrastructure(p["pg_host"], p["pg_port"], p["redis_host"], p["redis_port"], p["daphne_port"])
             wait_for_keypress("Infrastructure check completed. Press any key to return to menu...")
+
+        elif choice == "w":
+            ps_script = os.path.join(PROJECT_ROOT, "cloudflared-watchdog.ps1")
+            subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", ps_script, "-Status"])
+            print("Watchdog Controls:")
+            print("  [R] Run Watchdog in this terminal (interactive monitor)")
+            print("  [I] Install as Windows Startup Task (runs as SYSTEM 24/7)")
+            print("  [U] Uninstall Windows Startup Task")
+            print("  [B] Back to Main Menu")
+            try:
+                sub = input("\nEnter selection [R/I/U/B]: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                sub = "b"
+            if sub == "r":
+                subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", ps_script])
+            elif sub == "i":
+                subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", ps_script, "-InstallTask"])
+                wait_for_keypress()
+            elif sub == "u":
+                subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", ps_script, "-UninstallTask"])
+                wait_for_keypress()
 
         elif choice == "7":
             print("\n[AUDIT] Running row-level and sequence parity checks...")

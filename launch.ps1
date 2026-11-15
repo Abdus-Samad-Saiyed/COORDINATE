@@ -371,6 +371,9 @@ function Main-Menu {
         Write-Host "  [6] " -NoNewline -ForegroundColor Cyan
         Write-Host "Bind & Verify Infrastructure (PostgreSQL, Redis & Cloudflared Daemons)" -ForegroundColor Cyan
 
+        Write-Host "  [W] " -NoNewline -ForegroundColor Yellow
+        Write-Host "Cloudflared Watchdog & Tunnel Health (Status, Auto-Recovery & Task)" -ForegroundColor Yellow
+
         Write-Host "  [7] " -NoNewline -ForegroundColor Cyan
         Write-Host "Deep Database Parity & Integrity Check (SQLite vs PostgreSQL)" -ForegroundColor Cyan
 
@@ -450,6 +453,24 @@ function Main-Menu {
                 Ensure-Infrastructure -pgHost $p.pg_host -pgPort $p.pg_port -redisHost $p.redis_host -redisPort $p.redis_port -daphnePort $p.daphne_port
                 Write-Host "`nInfrastructure check completed. Press any key to return to menu..." -ForegroundColor Cyan
                 try { $null = [System.Console]::ReadKey($true) } catch { $null = Read-Host }
+            }
+            "^[wW]$" {
+                & powershell.exe -ExecutionPolicy Bypass -File "cloudflared-watchdog.ps1" -Status
+                Write-Host "Watchdog Controls:" -ForegroundColor Cyan
+                Write-Host "  [R] Run Watchdog in this terminal (interactive monitor)"
+                Write-Host "  [I] Install as Windows Startup Task (runs autonomously in background)"
+                Write-Host "  [U] Uninstall Windows Startup Task"
+                Write-Host "  [B] Back to Main Menu"
+                $wdChoice = Read-Host "`nEnter selection [R/I/U/B]"
+                if ($wdChoice -match "^[rR]") {
+                    & powershell.exe -ExecutionPolicy Bypass -File "cloudflared-watchdog.ps1"
+                } elseif ($wdChoice -match "^[iI]") {
+                    & powershell.exe -ExecutionPolicy Bypass -File "cloudflared-watchdog.ps1" -InstallTask
+                    try { $null = [System.Console]::ReadKey($true) } catch { $null = Read-Host }
+                } elseif ($wdChoice -match "^[uU]") {
+                    & powershell.exe -ExecutionPolicy Bypass -File "cloudflared-watchdog.ps1" -UninstallTask
+                    try { $null = [System.Console]::ReadKey($true) } catch { $null = Read-Host }
+                }
             }
             "^[7]$" {
                 Write-Host "`n[AUDIT] Running deep row-level parity verification..." -ForegroundColor Cyan
